@@ -3,7 +3,7 @@
  */
 import "dotenv/config";
 import { serve } from "@hono/node-server";
-import { app } from "./app.js";
+import { app } from "./honoApp.js";
 import { env } from "./env.js";
 
 const port = Number(env("PORT")) || 3001;
