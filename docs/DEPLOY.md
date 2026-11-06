@@ -31,6 +31,8 @@ Deploy **everything except the Flutter app**: database on **Supabase**, API on *
 
 6. Optional: **Settings → Data API** — default exposes `public` tables; our app uses the **service role** from backend/admin, so you’re fine once migrations ran.
 
+**Same project everywhere:** The host in **`SUPABASE_URL`** / **`NEXT_PUBLIC_SUPABASE_URL`** on Vercel must be **this** Supabase project (e.g. `https://YOUR_REF.supabase.co`). If the API/admin point at a different ref than the project where you ran SQL, you’ll get errors like **“Could not find the table `public.reports`”** — run the migrations on the project that matches those URLs, or update Vercel to match the project that already has the schema.
+
 ---
 
 ## 2. Backend API on Vercel
@@ -91,6 +93,8 @@ Expect: `{"ok":true,"service":"mangalam-api"}`.
 ### Verify
 
 Open `https://YOUR_ADMIN.vercel.app` — enter `ADMIN_DASHBOARD_SECRET`, then Reports / Users should load.
+
+If unlock fails with a message about **`public.reports`** (or another missing table), the database for your **`NEXT_PUBLIC_SUPABASE_URL`** does not have the schema yet — open that project in the Supabase dashboard and run **`0001`** then **`0002`** in the SQL editor (same files as step 1 above).
 
 ---
 

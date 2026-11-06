@@ -40,23 +40,46 @@ export function AdminDashboard() {
   >([]);
 
   const loadReports = useCallback(async () => {
-    const rows = await fetchReports(secret);
-    setReports(rows as typeof reports);
+    const res = await fetchReports(secret);
+    if (!res.ok) {
+      setError(res.error);
+      return false;
+    }
+    setError(null);
+    setReports(res.data);
+    return true;
   }, [secret]);
 
   const loadProfiles = useCallback(async () => {
-    const rows = await fetchProfiles(secret, search);
-    setProfiles(rows as typeof profiles);
+    const res = await fetchProfiles(secret, search);
+    if (!res.ok) {
+      setError(res.error);
+      return false;
+    }
+    setError(null);
+    setProfiles(res.data);
+    return true;
   }, [secret, search]);
 
   const unlock = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await loadReports();
-      await fetchProfiles(secret, "").then((rows) =>
-        setProfiles(rows as typeof profiles)
-      );
+      const rep = await fetchReports(secret);
+      if (!rep.ok) {
+        setError(rep.error);
+        setUnlocked(false);
+        return;
+      }
+      setReports(rep.data);
+
+      const prof = await fetchProfiles(secret, "");
+      if (!prof.ok) {
+        setError(prof.error);
+        setUnlocked(false);
+        return;
+      }
+      setProfiles(prof.data);
       setUnlocked(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
@@ -64,7 +87,7 @@ export function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [secret, loadReports]);
+  }, [secret]);
 
   return (
     <div className="space-y-8">
@@ -181,9 +204,18 @@ export function AdminDashboard() {
                               type="button"
                               className="text-xs font-medium text-zinc-900 underline"
                               onClick={() =>
-                                setReportStatus(secret, r.id, "closed").then(() =>
-                                  loadReports()
-                                )
+                                void (async () => {
+                                  const out = await setReportStatus(
+                                    secret,
+                                    r.id,
+                                    "closed"
+                                  );
+                                  if (!out.ok) {
+                                    setError(out.error);
+                                    return;
+                                  }
+                                  await loadReports();
+                                })()
                               }
                             >
                               Close
@@ -192,9 +224,18 @@ export function AdminDashboard() {
                               type="button"
                               className="text-xs font-medium text-emerald-700 underline"
                               onClick={() =>
-                                setProfileVerified(secret, r.reported_profile_id, true).then(
-                                  () => loadReports()
-                                )
+                                void (async () => {
+                                  const out = await setProfileVerified(
+                                    secret,
+                                    r.reported_profile_id,
+                                    true
+                                  );
+                                  if (!out.ok) {
+                                    setError(out.error);
+                                    return;
+                                  }
+                                  await loadReports();
+                                })()
                               }
                             >
                               Verify profile
@@ -264,18 +305,36 @@ export function AdminDashboard() {
                               type="button"
                               className="text-xs font-medium text-emerald-700 underline"
                               onClick={() =>
-                                setProfileVerified(secret, p.id, !p.is_verified).then(() =>
-                                  loadProfiles()
-                                )
+                                void (async () => {
+                                  const out = await setProfileVerified(
+                                    secret,
+                                    p.id,
+                                    !p.is_verified
+                                  );
+                                  if (!out.ok) {
+                                    setError(out.error);
+                                    return;
+                                  }
+                                  await loadProfiles();
+                                })()
                               }
                             >
                               Toggle verify
                             </button>
                             <CreditsForm
                               profileId={p.id}
-                              onApply={(n) =>
-                                setContactCredits(secret, p.id, n).then(() => loadProfiles())
-                              }
+                              onApply={async (n) => {
+                                const out = await setContactCredits(
+                                  secret,
+                                  p.id,
+                                  n
+                                );
+                                if (!out.ok) {
+                                  setError(out.error);
+                                  return;
+                                }
+                                await loadProfiles();
+                              }}
                             />
                           </td>
                         </tr>

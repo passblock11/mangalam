@@ -1,86 +1,169 @@
 "use server";
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import type { ActionResult } from "@/lib/actionResult";
 import { revalidatePath } from "next/cache";
 
-function requireSecret(secret: string) {
+type SecretOk = { ok: true };
+type SecretFail = { ok: false; error: string };
+
+function requireSecret(secret: string): SecretOk | SecretFail {
   const expected = process.env.ADMIN_DASHBOARD_SECRET;
-  if (!expected || secret !== expected) {
-    throw new Error("Unauthorized");
+  if (!expected) {
+    return {
+      ok: false,
+      error:
+        "ADMIN_DASHBOARD_SECRET is not set on the server (add it in Vercel and redeploy).",
+    };
   }
+  if (secret !== expected) {
+    return { ok: false, error: "Invalid secret." };
+  }
+  return { ok: true };
 }
 
-export async function fetchReports(secret: string) {
-  requireSecret(secret);
-  const sb = supabaseAdmin();
-  const { data, error } = await sb
-    .from("reports")
-    .select("id,reporter_id,reported_profile_id,reason,status,created_at")
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (error) throw new Error(error.message);
-  return data ?? [];
+function mapDbError(message: string): string {
+  if (message.includes("Could not find the table") && message.includes("reports")) {
+    return `${message} Run supabase/migrations/0001_initial_schema.sql then 0002_profile_sections.sql in the Supabase SQL editor for this project (see docs/DEPLOY.md).`;
+  }
+  return message;
+}
+
+export async function fetchReports(secret: string): Promise<
+  ActionResult<
+    {
+      id: string;
+      reporter_id: string;
+      reported_profile_id: string;
+      reason: string;
+      status: string;
+      created_at: string;
+    }[]
+  >
+> {
+  const auth = requireSecret(secret);
+  if (!auth.ok) return auth;
+
+  try {
+    const sb = supabaseAdmin();
+    const { data, error } = await sb
+      .from("reports")
+      .select("id,reporter_id,reported_profile_id,reason,status,created_at")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) {
+      return { ok: false, error: mapDbError(error.message) };
+    }
+    return { ok: true, data: data ?? [] };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: mapDbError(msg) };
+  }
 }
 
 export async function setReportStatus(
   secret: string,
   reportId: string,
   status: "open" | "reviewing" | "closed"
-) {
-  requireSecret(secret);
-  const sb = supabaseAdmin();
-  const { error } = await sb.from("reports").update({ status }).eq("id", reportId);
-  if (error) throw new Error(error.message);
-  revalidatePath("/");
+): Promise<ActionResult<void>> {
+  const auth = requireSecret(secret);
+  if (!auth.ok) return auth;
+
+  try {
+    const sb = supabaseAdmin();
+    const { error } = await sb.from("reports").update({ status }).eq("id", reportId);
+    if (error) {
+      return { ok: false, error: mapDbError(error.message) };
+    }
+    revalidatePath("/");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: mapDbError(msg) };
+  }
 }
 
 export async function setProfileVerified(
   secret: string,
   profileId: string,
   isVerified: boolean
-) {
-  requireSecret(secret);
-  const sb = supabaseAdmin();
-  const { error } = await sb
-    .from("profiles")
-    .update({ is_verified: isVerified, updated_at: new Date().toISOString() })
-    .eq("id", profileId);
-  if (error) throw new Error(error.message);
-  revalidatePath("/");
+): Promise<ActionResult<void>> {
+  const auth = requireSecret(secret);
+  if (!auth.ok) return auth;
+
+  try {
+    const sb = supabaseAdmin();
+    const { error } = await sb
+      .from("profiles")
+      .update({ is_verified: isVerified, updated_at: new Date().toISOString() })
+      .eq("id", profileId);
+    if (error) {
+      return { ok: false, error: mapDbError(error.message) };
+    }
+    revalidatePath("/");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: mapDbError(msg) };
+  }
 }
 
-export async function fetchProfiles(secret: string, query: string) {
-  requireSecret(secret);
-  const sb = supabaseAdmin();
-  let q = sb
-    .from("profiles")
-    .select(
-      "id,display_name,phone,city,state,is_verified,created_at"
-    )
-    .order("created_at", { ascending: false })
-    .limit(80);
-  const t = query.trim();
-  if (t) {
-    q = q.or(`display_name.ilike.%${t}%,phone.ilike.%${t}%,city.ilike.%${t}%`);
+export async function fetchProfiles(
+  secret: string,
+  query: string
+): Promise<
+  ActionResult<
+    {
+      id: string;
+      display_name: string | null;
+      phone: string | null;
+      city: string | null;
+      state: string | null;
+      is_verified: boolean;
+      created_at: string;
+    }[]
+  >
+> {
+  const auth = requireSecret(secret);
+  if (!auth.ok) return auth;
+
+  try {
+    const sb = supabaseAdmin();
+    let q = sb
+      .from("profiles")
+      .select("id,display_name,phone,city,state,is_verified,created_at")
+      .order("created_at", { ascending: false })
+      .limit(80);
+    const t = query.trim();
+    if (t) {
+      q = q.or(`display_name.ilike.%${t}%,phone.ilike.%${t}%,city.ilike.%${t}%`);
+    }
+    const { data, error } = await q;
+    if (error) {
+      return { ok: false, error: mapDbError(error.message) };
+    }
+    return { ok: true, data: data ?? [] };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: mapDbError(msg) };
   }
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  return data ?? [];
 }
 
 export async function setContactCredits(
   secret: string,
   profileId: string,
   contactCredits: number
-) {
-  requireSecret(secret);
+): Promise<ActionResult<void>> {
+  const auth = requireSecret(secret);
+  if (!auth.ok) return auth;
+
   if (contactCredits < 0 || !Number.isFinite(contactCredits)) {
-    throw new Error("Invalid credit amount");
+    return { ok: false, error: "Invalid credit amount" };
   }
-  const sb = supabaseAdmin();
-  const { error } = await sb
-    .from("wallets")
-    .upsert(
+
+  try {
+    const sb = supabaseAdmin();
+    const { error } = await sb.from("wallets").upsert(
       {
         profile_id: profileId,
         contact_credits: Math.floor(contactCredits),
@@ -88,6 +171,13 @@ export async function setContactCredits(
       },
       { onConflict: "profile_id" }
     );
-  if (error) throw new Error(error.message);
-  revalidatePath("/");
+    if (error) {
+      return { ok: false, error: mapDbError(error.message) };
+    }
+    revalidatePath("/");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: mapDbError(msg) };
+  }
 }
