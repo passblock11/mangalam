@@ -17,6 +17,15 @@ Deploy **everything except the Flutter app**: database on **Supabase**, API on *
    - `supabase/migrations/0001_initial_schema.sql`
    - `supabase/migrations/0002_profile_sections.sql`
 
+   **Alternative (local script):** from the repo root, with **Node** and `backend` dependencies installed (`cd backend && npm ci`):
+
+```bash
+export SUPABASE_DB_URL='postgres://postgres.YOUR_PROJECT_REF:YOUR_DB_PASSWORD@aws-0-us-east-1.pooler.supabase.com:5432/postgres'
+node scripts/run-supabase-migrations.mjs
+```
+
+Use the **Session pooler** connection string from Supabase → **Project Settings → Database** (port **5432**, not 6543). **Never commit** the URL or password.
+
 3. **Authentication → Providers** — enable **Email** (required for the admin panel sign-in). Optionally enable **Phone** (SMS) for the mobile app.
 
 4. **Project Settings → API** — copy values into Vercel using the **exact names below** (not generic “Supabase export” names):

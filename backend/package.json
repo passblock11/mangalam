@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx src/dev.ts",
     "build": "tsc --noEmit",
-    "vercel-build": "echo \"Edge bundle uses TypeScript sources\""
+    "vercel-build": "echo \"Edge bundle uses TypeScript sources\"",
+    "db:migrate": "node ../scripts/run-supabase-migrations.mjs"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@vercel/node": "^30.0.0",
+    "pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vercel": "^65.12.1"
