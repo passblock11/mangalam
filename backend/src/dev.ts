@@ -1,5 +1,5 @@
 /**
- * Local development server (Node). Vercel production uses api/[[...path]].ts (Edge).
+ * Local development server (Node). Vercel production uses src/app.ts (Edge + hono/vercel handle).
  */
 import "dotenv/config";
 import { serve } from "@hono/node-server";

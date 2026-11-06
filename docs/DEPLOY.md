@@ -89,7 +89,7 @@ Open `https://YOUR_ADMIN.vercel.app` — enter `ADMIN_DASHBOARD_SECRET`, then Re
 
 ## 4. CORS
 
-The API allows `origin: *`. For production you may restrict origins to your admin URL only (change `cors` in `backend/src/app.ts`).
+The API allows `origin: *`. For production you may restrict origins to your admin URL only (change `cors` in `backend/src/honoApp.ts`).
 
 ---
 
