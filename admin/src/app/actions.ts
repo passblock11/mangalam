@@ -2,24 +2,35 @@
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { ActionResult } from "@/lib/actionResult";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
-type SecretOk = { ok: true };
-type SecretFail = { ok: false; error: string };
+async function requireAdmin(): Promise<
+  ActionResult<{ userId: string }>
+> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error: ue,
+  } = await supabase.auth.getUser();
+  if (ue || !user) {
+    return { ok: false, error: "Sign in to continue." };
+  }
 
-function requireSecret(secret: string): SecretOk | SecretFail {
-  const expected = process.env.ADMIN_DASHBOARD_SECRET;
-  if (!expected) {
-    return {
-      ok: false,
-      error:
-        "ADMIN_DASHBOARD_SECRET is not set on the server (add it in Vercel and redeploy).",
-    };
+  const { data: prof, error: pe } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (pe) {
+    return { ok: false, error: pe.message };
   }
-  if (secret !== expected) {
-    return { ok: false, error: "Invalid secret." };
+  if (!prof?.is_admin) {
+    return { ok: false, error: "Not authorized." };
   }
-  return { ok: true };
+
+  return { ok: true, data: { userId: user.id } };
 }
 
 function mapDbError(message: string): string {
@@ -29,7 +40,7 @@ function mapDbError(message: string): string {
   return message;
 }
 
-export async function fetchReports(secret: string): Promise<
+export async function fetchReports(): Promise<
   ActionResult<
     {
       id: string;
@@ -41,7 +52,7 @@ export async function fetchReports(secret: string): Promise<
     }[]
   >
 > {
-  const auth = requireSecret(secret);
+  const auth = await requireAdmin();
   if (!auth.ok) return auth;
 
   try {
@@ -62,11 +73,10 @@ export async function fetchReports(secret: string): Promise<
 }
 
 export async function setReportStatus(
-  secret: string,
   reportId: string,
   status: "open" | "reviewing" | "closed"
 ): Promise<ActionResult<void>> {
-  const auth = requireSecret(secret);
+  const auth = await requireAdmin();
   if (!auth.ok) return auth;
 
   try {
@@ -84,11 +94,10 @@ export async function setReportStatus(
 }
 
 export async function setProfileVerified(
-  secret: string,
   profileId: string,
   isVerified: boolean
 ): Promise<ActionResult<void>> {
-  const auth = requireSecret(secret);
+  const auth = await requireAdmin();
   if (!auth.ok) return auth;
 
   try {
@@ -108,10 +117,7 @@ export async function setProfileVerified(
   }
 }
 
-export async function fetchProfiles(
-  secret: string,
-  query: string
-): Promise<
+export async function fetchProfiles(query: string): Promise<
   ActionResult<
     {
       id: string;
@@ -124,7 +130,7 @@ export async function fetchProfiles(
     }[]
   >
 > {
-  const auth = requireSecret(secret);
+  const auth = await requireAdmin();
   if (!auth.ok) return auth;
 
   try {
@@ -150,11 +156,10 @@ export async function fetchProfiles(
 }
 
 export async function setContactCredits(
-  secret: string,
   profileId: string,
   contactCredits: number
 ): Promise<ActionResult<void>> {
-  const auth = requireSecret(secret);
+  const auth = await requireAdmin();
   if (!auth.ok) return auth;
 
   if (contactCredits < 0 || !Number.isFinite(contactCredits)) {

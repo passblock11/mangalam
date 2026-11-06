@@ -82,7 +82,7 @@ Summary:
 
 - Deploy **`backend/`** and **`admin/`** as **two separate Vercel projects** (set **Root Directory** to each folder).
 - Backend: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`.
-- Admin: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_DASHBOARD_SECRET`.
+- Admin: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — sign in with Supabase **email/password**; promote the user with `profiles.is_admin = true` (see `docs/DEPLOY.md`).
 
 Point the Flutter app to the deployed API (`API_BASE_URL`).
 

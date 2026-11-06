@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   fetchProfiles,
@@ -11,10 +11,6 @@ import {
 } from "../actions";
 
 export function AdminDashboard() {
-  const [secret, setSecret] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"reports" | "users">("reports");
   const [search, setSearch] = useState("");
   const [reports, setReports] = useState<
@@ -38,9 +34,11 @@ export function AdminDashboard() {
       created_at: string;
     }[]
   >([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const loadReports = useCallback(async () => {
-    const res = await fetchReports(secret);
+    const res = await fetchReports();
     if (!res.ok) {
       setError(res.error);
       return false;
@@ -48,10 +46,10 @@ export function AdminDashboard() {
     setError(null);
     setReports(res.data);
     return true;
-  }, [secret]);
+  }, []);
 
   const loadProfiles = useCallback(async () => {
-    const res = await fetchProfiles(secret, search);
+    const res = await fetchProfiles(search);
     if (!res.ok) {
       setError(res.error);
       return false;
@@ -59,76 +57,47 @@ export function AdminDashboard() {
     setError(null);
     setProfiles(res.data);
     return true;
-  }, [secret, search]);
+  }, [search]);
 
-  const unlock = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const rep = await fetchReports(secret);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      const rep = await fetchReports();
+      if (cancelled) return;
       if (!rep.ok) {
         setError(rep.error);
-        setUnlocked(false);
+        setLoading(false);
         return;
       }
       setReports(rep.data);
-
-      const prof = await fetchProfiles(secret, "");
+      const prof = await fetchProfiles("");
+      if (cancelled) return;
       if (!prof.ok) {
         setError(prof.error);
-        setUnlocked(false);
+        setLoading(false);
         return;
       }
       setProfiles(prof.data);
-      setUnlocked(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed");
-      setUnlocked(false);
-    } finally {
       setLoading(false);
-    }
-  }, [secret]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-8">
-      <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-medium">Access</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Set{" "}
-          <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs">
-            ADMIN_DASHBOARD_SECRET
-          </code>{" "}
-          on Vercel, then enter the same value here. Replace with Supabase Auth
-          for production.
+      {error && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+          {error}
         </p>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="flex-1 text-sm">
-            <span className="mb-1 block font-medium text-zinc-700">Secret</span>
-            <input
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-900"
-              autoComplete="off"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => void unlock()}
-            disabled={loading || !secret}
-            className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {loading ? "Loading…" : "Unlock"}
-          </button>
-        </div>
-        {error && (
-          <p className="mt-3 text-sm text-red-600" role="alert">
-            {error}
-          </p>
-        )}
-      </section>
+      )}
 
-      {unlocked && (
+      {loading ? (
+        <p className="text-sm text-zinc-500">Loading…</p>
+      ) : (
         <>
           <div className="flex gap-2 border-b border-zinc-200">
             <button
@@ -205,11 +174,7 @@ export function AdminDashboard() {
                               className="text-xs font-medium text-zinc-900 underline"
                               onClick={() =>
                                 void (async () => {
-                                  const out = await setReportStatus(
-                                    secret,
-                                    r.id,
-                                    "closed"
-                                  );
+                                  const out = await setReportStatus(r.id, "closed");
                                   if (!out.ok) {
                                     setError(out.error);
                                     return;
@@ -225,11 +190,7 @@ export function AdminDashboard() {
                               className="text-xs font-medium text-emerald-700 underline"
                               onClick={() =>
                                 void (async () => {
-                                  const out = await setProfileVerified(
-                                    secret,
-                                    r.reported_profile_id,
-                                    true
-                                  );
+                                  const out = await setProfileVerified(r.reported_profile_id, true);
                                   if (!out.ok) {
                                     setError(out.error);
                                     return;
@@ -306,11 +267,7 @@ export function AdminDashboard() {
                               className="text-xs font-medium text-emerald-700 underline"
                               onClick={() =>
                                 void (async () => {
-                                  const out = await setProfileVerified(
-                                    secret,
-                                    p.id,
-                                    !p.is_verified
-                                  );
+                                  const out = await setProfileVerified(p.id, !p.is_verified);
                                   if (!out.ok) {
                                     setError(out.error);
                                     return;
@@ -324,11 +281,7 @@ export function AdminDashboard() {
                             <CreditsForm
                               profileId={p.id}
                               onApply={async (n) => {
-                                const out = await setContactCredits(
-                                  secret,
-                                  p.id,
-                                  n
-                                );
+                                const out = await setContactCredits(p.id, n);
                                 if (!out.ok) {
                                   setError(out.error);
                                   return;

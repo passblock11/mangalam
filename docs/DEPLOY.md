@@ -17,7 +17,7 @@ Deploy **everything except the Flutter app**: database on **Supabase**, API on *
    - `supabase/migrations/0001_initial_schema.sql`
    - `supabase/migrations/0002_profile_sections.sql`
 
-3. **Authentication → Providers** — enable **Phone** (SMS) and configure your SMS provider (Twilio, etc.), or use **Email** for testing.
+3. **Authentication → Providers** — enable **Email** (required for the admin panel sign-in). Optionally enable **Phone** (SMS) for the mobile app.
 
 4. **Project Settings → API** — copy values into Vercel using the **exact names below** (not generic “Supabase export” names):
    - **Project URL** → `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`
@@ -86,15 +86,26 @@ Expect: `{"ok":true,"service":"mangalam-api"}`.
 | `NEXT_PUBLIC_SUPABASE_URL` | same as `SUPABASE_URL` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | publishable (anon) key |
 | `SUPABASE_SERVICE_ROLE_KEY` | same service role as backend |
-| `ADMIN_DASHBOARD_SECRET` | long random string (you type this in the admin UI to unlock) |
 
-**Security:** replace `ADMIN_DASHBOARD_SECRET` with real **admin auth** (e.g. Supabase Auth + `is_admin`) before production.
+### Admin sign-in (email + password)
 
-### Verify
+1. In Supabase → **Authentication → Providers** → **Email** — turn it on (you can relax “Confirm email” for a test admin only).
+2. **Create the admin user**: **Authentication → Users** → **Add user** (set email + password).
+3. Promote that user in **SQL**:
 
-Open `https://YOUR_ADMIN.vercel.app` — enter `ADMIN_DASHBOARD_SECRET`, then Reports / Users should load.
+```sql
+update public.profiles
+set is_admin = true
+where id = 'PASTE-THE-USER-UUID-HERE';
+```
 
-If unlock fails with a message about **`public.reports`** (or another missing table), the database for your **`NEXT_PUBLIC_SUPABASE_URL`** does not have the schema yet — open that project in the Supabase dashboard and run **`0001`** then **`0002`** in the SQL editor (same files as step 1 above).
+Use the user id from **Authentication → Users**. A `profiles` row is created when the user is created (`0001` trigger).
+
+4. Open `https://YOUR_ADMIN.vercel.app` — sign in with that email and password.
+
+If the dashboard errors about **`public.reports`** (or another missing table), run **`0001`** then **`0002`** in the SQL editor for this project (step 1 above).
+
+**Legacy:** delete `ADMIN_DASHBOARD_SECRET` from Vercel if it was set — the app no longer uses it.
 
 ---
 
@@ -118,5 +129,5 @@ Point the app at:
 - [ ] Supabase: both SQL migrations applied  
 - [ ] Supabase: Auth provider (phone/email) configured  
 - [ ] Vercel backend: root `backend`, env vars set, `/v1/health` OK  
-- [ ] Vercel admin: root `admin`, env vars set, dashboard unlocks  
-- [ ] `ADMIN_DASHBOARD_SECRET` is strong and stored only in Vercel
+- [ ] Vercel admin: root `admin`, env vars set; admin user has `profiles.is_admin = true`  
+- [ ] Admin can sign in with email/password at `YOUR_ADMIN.vercel.app`
