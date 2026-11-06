@@ -108,4 +108,4 @@ Point the app at:
 - [ ] Supabase: Auth provider (phone/email) configured  
 - [ ] Vercel backend: root `backend`, env vars set, `/v1/health` OK  
 - [ ] Vercel admin: root `admin`, env vars set, dashboard unlocks  
-- [ ] `ADMIN_DASHBOARD_SECRET` is strong and stored only in Vercel  
+- [ ] `ADMIN_DASHBOARD_SECRET` is strong and stored only in Vercel
