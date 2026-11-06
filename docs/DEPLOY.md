@@ -2,6 +2,11 @@
 
 Deploy **everything except the Flutter app**: database on **Supabase**, API on **Vercel**, admin on **Vercel**.
 
+### Security
+
+- **Never commit** API keys, JWT secrets, or database passwords. Keep them in **Vercel** (or local `.env` ignored by git) only.
+- If credentials were pasted into chat, a ticket, or a public channel, **rotate them in Supabase** (Database Settings → reset DB password; Project Settings → API → rotate JWT secret and regenerate service role / anon keys as needed).
+
 ---
 
 ## 1. Supabase (database)
@@ -14,11 +19,13 @@ Deploy **everything except the Flutter app**: database on **Supabase**, API on *
 
 3. **Authentication → Providers** — enable **Phone** (SMS) and configure your SMS provider (Twilio, etc.), or use **Email** for testing.
 
-4. **Project Settings → API** — copy:
-   - **Project URL** → `SUPABASE_URL`
-   - **Publishable key** (anon) → used by admin public env
-   - **`service_role` secret** → **server-only** (never in Flutter)
-   - **JWT Secret** → `SUPABASE_JWT_SECRET` (backend verifies user tokens)
+4. **Project Settings → API** — copy values into Vercel using the **exact names below** (not generic “Supabase export” names):
+   - **Project URL** → `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`
+   - **anon** / **publishable** key → `NEXT_PUBLIC_SUPABASE_ANON_KEY` (admin only; safe to expose to the browser)
+   - **`service_role`** → `SUPABASE_SERVICE_ROLE_KEY` (**server-only** on backend + admin; never in Flutter or public env)
+   - **JWT Secret** → `SUPABASE_JWT_SECRET` (**backend only**; verifies user JWTs)
+
+   This repo does **not** read Prisma-style `POSTGRES_*` or `POSTGRES_URL` variables; use those only if you add your own tooling. The app talks to Supabase via **HTTPS + Supabase keys**, not direct Postgres from the Edge API.
 
 5. **Storage** — ensure bucket `profile-photos` exists (migration `0001` inserts it). If the insert failed, create bucket `profile-photos` as **public** in the dashboard and keep the RLS policies from the migration.
 
