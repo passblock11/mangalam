@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { jwtVerify, type JWTPayload } from "jose";
+import { env } from "./env.js";
 
 export type AuthUser = JWTPayload & { sub?: string };
 
@@ -11,7 +12,7 @@ declare module "hono" {
 }
 
 function getJwtSecret(): Uint8Array {
-  const raw = process.env.SUPABASE_JWT_SECRET;
+  const raw = env("SUPABASE_JWT_SECRET");
   if (!raw) {
     throw new Error("SUPABASE_JWT_SECRET is not set");
   }

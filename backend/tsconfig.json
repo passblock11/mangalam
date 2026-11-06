@@ -10,6 +10,5 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "api/**/*.ts"],
-  "exclude": ["src/dev.ts"]
+  "include": ["src/**/*.ts", "api/**/*.ts"]
 }
