@@ -142,10 +142,8 @@ authRouter.post("/otp/send", async (c) => {
     now + EXPIRY_MIN() * 60 * 1000
   ).toISOString();
 
-  const templateId = env("MSG91_OTP_TEMPLATE_ID");
   const sendResult = await msg91SendOtp(phone, otp, {
     expiryMinutes: EXPIRY_MIN(),
-    templateId,
   });
 
   const devLog = env("MSG91_DEV_LOG_OTP") === "true";

@@ -70,8 +70,8 @@ Use the **Session pooler** connection string from Supabase → **Project Setting
 | `RAZORPAY_KEY_ID` | Razorpay **Key Id** (Dashboard → API Keys) |
 | `RAZORPAY_KEY_SECRET` | Razorpay **Key Secret** (server-only) |
 | `CONTACT_CREDIT_PRICE_PAISE` | *(optional)* Paise per contact credit; default `100` (₹1/credit) |
-| `MSG91_AUTH_KEY` | MSG91 Auth Key (OTP SMS) |
-| `MSG91_OTP_TEMPLATE_ID` | MSG91 OTP template ID (DLT) |
+| `MSG91_AUTH_KEY` | MSG91 Auth Key (required for SMS) |
+| `MSG91_FLOW_TEMPLATE_ID` | *(optional)* Flow template — omit for sendhttp fallback |
 | `MSG91_DEV_LOG_OTP` | `true` on preview/dev to log OTP without SMS |
 | `OTP_*` | *(optional)* Rate limits — see [`docs/MSG91_OTP.md`](MSG91_OTP.md) |
 
