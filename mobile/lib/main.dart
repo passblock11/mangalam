@@ -5,7 +5,6 @@ import 'core/config.dart';
 import 'ui/auth/login_screen.dart';
 import 'ui/home/home_shell.dart';
 
-// 588611AwRljddzkI6af1ffedP1
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 

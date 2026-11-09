@@ -1,52 +1,49 @@
-# MSG91 phone OTP (custom auth)
+# MSG91 phone OTP (Mangalam login)
 
-The mobile app **does not** use Supabase’s built-in phone SMS. OTP is sent via **MSG91** and verified on the **Mangalam API**. After verification the API mints a normal **Supabase session** for `/v1/*` calls.
+Mobile login uses the **official MSG91 OTP API** ([docs](https://docs.msg91.com/llms.txt)):
 
-## App ↔ API flow
+| Step | Our API | MSG91 API |
+|------|---------|-----------|
+| Send / resend | `POST /v1/auth/otp/send` | `POST /api/v5/otp` or `GET /api/v5/otp/retry` |
+| Verify | `POST /v1/auth/otp/verify` | `GET /api/v5/otp/verify` |
+| Session | — | We mint Supabase session after MSG91 returns success |
+
+MSG91 generates, stores, and checks the OTP. We keep **our** hourly/daily/cooldown limits in `phone_otp_send_log`.
+
+## Required Vercel env (`mangalam-api`)
+
+| Variable | Purpose |
+|----------|---------|
+| `MSG91_AUTH_KEY` | Auth key (header `authkey`) |
+| `MSG91_OTP_TEMPLATE_ID` | Template from **OTP** section in MSG91 (must include `##OTP##`) |
+
+OTP tuning: `OTP_LENGTH`, `OTP_EXPIRY_MINUTES`, `OTP_SEND_*`, etc.
+
+## India DLT
+
+Register the OTP template on TRAI DLT and map it in the MSG91 **OTP** section. Use that template id as `MSG91_OTP_TEMPLATE_ID`.
+
+## App flow
 
 1. `POST /v1/auth/otp/send` `{ "phone": "9876543210" }`
-2. API rate-limits, generates OTP, sends SMS via MSG91
-3. `POST /v1/auth/otp/verify` `{ "phone": "...", "otp": "123456" }`
-4. API checks hash, returns Supabase `session`; app calls `setSession(refresh_token)`
+2. User enters SMS code
+3. `POST /v1/auth/otp/verify` `{ "phone", "otp" }`
+4. App `setSession` with returned Supabase tokens
 
-Resend: same endpoint with `{ "resend": true }` (cooldown applies).
+Resend: `{ "resend": true }` → MSG91 Resend OTP (`retrytype=text`).
 
-## MSG91 send path (no dashboard OTP setup)
+## CLI (no MCP in Cursor yet)
 
-Production needs **`MSG91_AUTH_KEY` on Vercel only** (already set). No `MSG91_OTP_TEMPLATE_ID` required.
+```bash
+npx docstar-cli config set msg91 authkey '<key>'
+npx docstar-cli msg91 otp sendotp --mobile 919876543210 --template_id '<id>' --otp_length 6 --otp_expiry 5
+npx docstar-cli msg91 otp verify-otp --mobile 919876543210 --otp 123456
+```
 
-The API tries, in order:
+List modules: `npx docstar-cli list msg91`
 
-1. **`POST https://control.msg91.com/api/v5/flow`** — [Flow / dedicated SMS API](https://docs.msg91.com/sms/send-sms) (optional `MSG91_FLOW_TEMPLATE_ID` if you add a template later)
-2. **`sendhttp.php` transactional** — message text built in the backend (`route=4`, sender default `SMSIND`)
-
-Verification stays on **our** API (not MSG91 Verify), so SMS cost stays controlled by our rate limits.
-
-Optional (only if you create a Flow template later):
-
-| Env | Purpose |
-|-----|---------|
-| `MSG91_FLOW_TEMPLATE_ID` | Force Flow with template |
-| `MSG91_FLOW_OTP_VAR` | Template variable name (default `VAR1`) |
-| `MSG91_SENDER_ID` | Override sender on sendhttp |
-
-## Cost controls
-
-| Variable | Default |
-|----------|---------|
-| `OTP_SEND_COOLDOWN_SEC` | 60 |
-| `OTP_SEND_MAX_PER_HOUR` | 3 |
-| `OTP_SEND_MAX_PER_DAY` | 10 |
-| `OTP_EXPIRY_MINUTES` | 5 |
-| `OTP_MAX_RESENDS_PER_CHALLENGE` | 1 |
-
-## References
-
-- [Configure SMS (help)](https://msg91.com/help/text-sms/step-by-step-process-to-configure-sms) — dedicated SMS / Flow, not Campaign, for this integration
-- [Flow API](https://control.msg91.com/api/v5/flow)
+Optional MCP in Cursor: add server `https://mcp.msg91.com/mcp` in Settings → MCP.
 
 ## Local dev
 
-```bash
-MSG91_DEV_LOG_OTP=true   # logs OTP in terminal; no SMS
-```
+`MSG91_DEV_LOG_OTP=true` — skip real SendOTP/Verify (returns success without SMS).

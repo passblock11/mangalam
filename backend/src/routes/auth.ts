@@ -2,8 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { createSessionForPhone } from "../auth-session.js";
 import { env } from "../env.js";
-import { msg91SendOtp } from "../msg91.js";
-import { generateOtp, hashOtp, timingSafeEqualHex } from "../otp-crypto.js";
+import { msg91OtpResend, msg91OtpSend, msg91OtpVerify } from "../msg91.js";
 import { toE164 } from "../phone.js";
 import { getSupabaseAdmin } from "../supabase.js";
 
@@ -33,8 +32,6 @@ const MAX_PER_HOUR = () => intEnv("OTP_SEND_MAX_PER_HOUR", 3);
 const MAX_PER_DAY = () => intEnv("OTP_SEND_MAX_PER_DAY", 10);
 const OTP_LENGTH = () => intEnv("OTP_LENGTH", 6);
 const EXPIRY_MIN = () => intEnv("OTP_EXPIRY_MINUTES", 5);
-const MAX_VERIFY = () => intEnv("OTP_MAX_VERIFY_ATTEMPTS", 5);
-const MAX_RESENDS_PER_CHALLENGE = () => intEnv("OTP_MAX_RESENDS_PER_CHALLENGE", 1);
 
 export const authRouter = new Hono();
 
@@ -83,24 +80,25 @@ authRouter.post("/otp/send", async (c) => {
     );
   }
 
-  const { data: active } = await sb
-    .from("phone_otp_challenges")
-    .select("*")
+  const { data: lastSend } = await sb
+    .from("phone_otp_send_log")
+    .select("sent_at")
     .eq("phone_e164", phone)
-    .is("consumed_at", null)
-    .gt("expires_at", new Date().toISOString())
-    .lt("attempts", MAX_VERIFY())
-    .order("created_at", { ascending: false })
+    .eq("success", true)
+    .order("sent_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   const wantResend = parsed.data.resend === true;
+  const lastSentAt = lastSend?.sent_at
+    ? new Date(lastSend.sent_at).getTime()
+    : 0;
+  const sinceLastMs = lastSentAt > 0 ? now - lastSentAt : Number.POSITIVE_INFINITY;
 
-  if (active && !wantResend) {
+  if (!wantResend && sinceLastMs < EXPIRY_MIN() * 60 * 1000) {
     const retryMs = Math.max(
       0,
-      COOLDOWN_SEC() * 1000 -
-        (now - new Date(active.last_sent_at).getTime())
+      COOLDOWN_SEC() * 1000 - sinceLastMs
     );
     return c.json({
       ok: true,
@@ -110,46 +108,28 @@ authRouter.post("/otp/send", async (c) => {
           ? "OTP already sent. Check your messages or wait before resending."
           : "OTP already active. Enter the code or resend.",
       retry_after_sec: Math.ceil(retryMs / 1000),
-      expires_at: active.expires_at,
+      expires_in_sec: EXPIRY_MIN() * 60,
     });
   }
 
-  if (active && wantResend) {
-    const sinceLast =
-      now - new Date(active.last_sent_at).getTime();
-    if (sinceLast < COOLDOWN_SEC() * 1000) {
-      return c.json(
-        {
-          error: "Wait before requesting another SMS.",
-          retry_after_sec: Math.ceil(
-            (COOLDOWN_SEC() * 1000 - sinceLast) / 1000
-          ),
-        },
-        429
-      );
-    }
-    if (active.send_count >= 1 + MAX_RESENDS_PER_CHALLENGE()) {
-      return c.json(
-        { error: "Resend limit reached for this OTP. Wait until it expires." },
-        429
-      );
-    }
+  if (wantResend && sinceLastMs < COOLDOWN_SEC() * 1000) {
+    return c.json(
+      {
+        error: "Wait before requesting another SMS.",
+        retry_after_sec: Math.ceil(
+          (COOLDOWN_SEC() * 1000 - sinceLastMs) / 1000
+        ),
+      },
+      429
+    );
   }
 
-  const otp = generateOtp(OTP_LENGTH());
-  const otpHash = await hashOtp(phone, otp);
-  const expiresAt = new Date(
-    now + EXPIRY_MIN() * 60 * 1000
-  ).toISOString();
-
-  const sendResult = await msg91SendOtp(phone, otp, {
-    expiryMinutes: EXPIRY_MIN(),
-  });
-
-  const devLog = env("MSG91_DEV_LOG_OTP") === "true";
-  if (devLog && sendResult.ok) {
-    console.log(`[dev] OTP for ${phone}: ${otp}`);
-  }
+  const sendResult = wantResend
+    ? await msg91OtpResend(phone, "text")
+    : await msg91OtpSend(phone, {
+        otpLength: OTP_LENGTH(),
+        otpExpiryMinutes: EXPIRY_MIN(),
+      });
 
   if (!sendResult.ok) {
     await sb.from("phone_otp_send_log").insert({
@@ -157,26 +137,6 @@ authRouter.post("/otp/send", async (c) => {
       success: false,
     });
     return c.json({ error: sendResult.message }, 502);
-  }
-
-  if (active && wantResend) {
-    await sb
-      .from("phone_otp_challenges")
-      .update({
-        otp_hash: otpHash,
-        expires_at: expiresAt,
-        last_sent_at: new Date().toISOString(),
-        send_count: active.send_count + 1,
-        attempts: 0,
-      })
-      .eq("id", active.id);
-  } else {
-    await sb.from("phone_otp_challenges").insert({
-      phone_e164: phone,
-      otp_hash: otpHash,
-      expires_at: expiresAt,
-      max_attempts: MAX_VERIFY(),
-    });
   }
 
   await sb.from("phone_otp_send_log").insert({
@@ -189,6 +149,8 @@ authRouter.post("/otp/send", async (c) => {
     sms_sent: true,
     expires_in_sec: EXPIRY_MIN() * 60,
     otp_length: OTP_LENGTH(),
+    provider: "msg91_otp",
+    provider_request_id: sendResult.requestId,
   });
 });
 
@@ -204,48 +166,12 @@ authRouter.post("/otp/verify", async (c) => {
     return c.json({ error: "Invalid phone number" }, 400);
   }
 
-  const sb = getSupabaseAdmin();
-  const { data: challenge } = await sb
-    .from("phone_otp_challenges")
-    .select("*")
-    .eq("phone_e164", phone)
-    .is("consumed_at", null)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!challenge) {
-    return c.json({ error: "No active OTP. Request a new code." }, 400);
+  const verifyResult = await msg91OtpVerify(phone, parsed.data.otp);
+  if (!verifyResult.ok) {
+    const msg = verifyResult.message.toLowerCase();
+    const status = msg.includes("expired") ? 400 : 401;
+    return c.json({ error: verifyResult.message }, status);
   }
-
-  if (new Date(challenge.expires_at).getTime() < Date.now()) {
-    return c.json({ error: "OTP expired. Request a new code." }, 400);
-  }
-
-  if (challenge.attempts >= challenge.max_attempts) {
-    return c.json({ error: "Too many wrong attempts. Request a new code." }, 429);
-  }
-
-  const expectedHash = await hashOtp(phone, parsed.data.otp);
-  const match = timingSafeEqualHex(expectedHash, challenge.otp_hash);
-
-  await sb
-    .from("phone_otp_challenges")
-    .update({ attempts: challenge.attempts + 1 })
-    .eq("id", challenge.id);
-
-  if (!match) {
-    const remaining = challenge.max_attempts - challenge.attempts - 1;
-    return c.json(
-      { error: "Invalid OTP.", attempts_remaining: Math.max(0, remaining) },
-      401
-    );
-  }
-
-  await sb
-    .from("phone_otp_challenges")
-    .update({ consumed_at: new Date().toISOString() })
-    .eq("id", challenge.id);
 
   try {
     const session = await createSessionForPhone(phone);

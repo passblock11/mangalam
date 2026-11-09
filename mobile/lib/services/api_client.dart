@@ -25,27 +25,39 @@ class ApiClient {
     return Uri.parse('$base$path').replace(queryParameters: query);
   }
 
-  Future<Map<String, String>> _headers() async {
+  static const _jsonHeaders = {'Content-Type': 'application/json'};
+
+  Future<Map<String, String>> _authHeaders() async {
     final session = Supabase.instance.client.auth.currentSession;
     final token = session?.accessToken;
     if (token == null || token.isEmpty) {
       throw ApiException(401, 'Not signed in');
     }
     return {
+      ..._jsonHeaders,
       'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
     };
   }
 
+  /// Unauthenticated POST (e.g. login OTP send/verify).
+  Future<dynamic> postPublic(String path, Map<String, dynamic> body) async {
+    final res = await http.post(
+      _uri(path),
+      headers: _jsonHeaders,
+      body: jsonEncode(body),
+    );
+    return _decode(res);
+  }
+
   Future<dynamic> get(String path, [Map<String, String>? query]) async {
-    final res = await http.get(_uri(path, query), headers: await _headers());
+    final res = await http.get(_uri(path, query), headers: await _authHeaders());
     return _decode(res);
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     final res = await http.post(
       _uri(path),
-      headers: await _headers(),
+      headers: await _authHeaders(),
       body: jsonEncode(body),
     );
     return _decode(res);
@@ -54,7 +66,7 @@ class ApiClient {
   Future<dynamic> patch(String path, Map<String, dynamic> body) async {
     final res = await http.patch(
       _uri(path),
-      headers: await _headers(),
+      headers: await _authHeaders(),
       body: jsonEncode(body),
     );
     return _decode(res);

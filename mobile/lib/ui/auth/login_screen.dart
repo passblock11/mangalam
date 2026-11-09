@@ -36,7 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final json = await _api.post('/v1/auth/otp/send', {
+      final json = await _api.postPublic('/v1/auth/otp/send', {
         'phone': _normalizePhoneInput(),
         if (resend) 'resend': true,
       }) as Map<String, dynamic>;
@@ -59,7 +59,9 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() {
+        _error = _friendlyError(e);
+      });
     } finally {
       setState(() => _busy = false);
     }
@@ -71,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final json = await _api.post('/v1/auth/otp/verify', {
+      final json = await _api.postPublic('/v1/auth/otp/verify', {
         'phone': _normalizePhoneInput(),
         'otp': _otpController.text.trim(),
       }) as Map<String, dynamic>;
@@ -81,12 +83,26 @@ class _LoginScreenState extends State<LoginScreen> {
         throw Exception('No session in response');
       }
       final refreshToken = session['refresh_token'] as String;
-      await Supabase.instance.client.auth.setSession(refreshToken);
+      final accessToken = session['access_token'] as String?;
+      await Supabase.instance.client.auth.setSession(
+        refreshToken,
+        accessToken: accessToken,
+      );
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() {
+        _error = _friendlyError(e);
+      });
     } finally {
       setState(() => _busy = false);
     }
+  }
+
+  String _friendlyError(Object e) {
+    final raw = e.toString();
+    if (raw.contains('DLT') || raw.contains('MSG91')) {
+      return 'SMS could not be sent. Add your MSG91 DLT-approved sender and template on the API (Vercel env).';
+    }
+    return raw.replaceFirst('ApiException(', '').replaceAll('): ', ': ');
   }
 
   @override
