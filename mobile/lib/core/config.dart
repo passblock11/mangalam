@@ -40,6 +40,16 @@ class AppConfig {
 
   static bool get hasGoogleOAuth => googleWebClientId.isNotEmpty;
 
+  /// iOS native Google Sign-In needs the iOS OAuth client from Google Cloud.
+  static bool get hasGoogleIosClient => googleIosClientId.isNotEmpty;
+
+  /// `Info.plist` URL scheme: `com.googleusercontent.apps.<prefix>` (see Supabase Google Flutter docs).
+  static String get googleIosReversedClientId {
+    if (googleIosClientId.isEmpty) return '';
+    final prefix = googleIosClientId.replaceAll('.apps.googleusercontent.com', '');
+    return 'com.googleusercontent.apps.$prefix';
+  }
+
   /// Deep link for Supabase OAuth (Google/Apple via browser). Add in Supabase → Auth → URL config.
   static const oauthRedirectUrl =
       'com.mangalam.mangalamapp://login-callback';

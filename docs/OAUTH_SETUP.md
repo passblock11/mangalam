@@ -1,53 +1,82 @@
 # Google & Apple sign-in (Mangalam mobile)
 
-Login uses **Supabase Auth** native OAuth (no SMS / DLT).
+Official reference for Google on Flutter:  
+[Supabase — Login with Google (Flutter)](https://supabase.com/docs/guides/auth/social-sign-in/auth-google?queryGroups=platform&platform=flutter-mobile)
+
+Login uses **Supabase Auth** (`signInWithIdToken` for native Google/Apple; browser OAuth fallback).
 
 ## 1. Supabase Dashboard (behlrsqilhzhniglhgqh)
 
-**Authentication → Providers**
+**Authentication → Providers → Google**
 
-| Provider | Action |
-|----------|--------|
-| **Google** | Enable; copy **Client ID** and **Client Secret** from Google Cloud |
-| **Apple** | Enable; follow Supabase Apple setup (Service ID, key `.p8`, Team ID, Key ID) |
+| Setting | Value |
+|---------|--------|
+| Enabled | On |
+| Client ID (secret) | Web client ID + secret from Google Cloud |
+| **Client IDs** | Comma-separated: **Web client ID first**, then iOS client ID, then Android client ID (all OAuth clients from Google Cloud) |
+| **Skip nonce check** | **On** (required for iOS native `google_sign_in`) |
 
-**Authentication → URL configuration** — add redirect URL (required for mobile):
+**Authentication → Providers → Apple** — enable per [Supabase Apple docs](https://supabase.com/docs/guides/auth/social-login/auth-apple).
+
+**Authentication → URL configuration** — redirect URL:
 
 `com.mangalam.mangalamapp://login-callback`
 
-Use project **behlrsqilhzhniglhgqh** (same as production API + mobile defaults).
-
 ## 2. Google Cloud Console
 
-1. Create OAuth clients:
-   - **Web client** → use as `GOOGLE_WEB_CLIENT_ID` in Flutter **and** in Supabase Google provider (client id; secret only in Supabase).
-   - **iOS** → bundle `com.mangalam.mangalamApp`; use as `GOOGLE_IOS_CLIENT_ID` in `dart_defines.json`.
-   - **Android** → package `com.mangalam.mangalam_app`; add **SHA-1** from your keystore (`keytool -list -v -keystore ~/.android/debug.keystore` for debug).
+Create OAuth clients (Google Auth Platform → Clients):
 
-2. Flutter `dart_defines.json` (from `dart_defines.example.json`):
+| Type | App details |
+|------|-------------|
+| **Web** | Authorized redirect URI = Supabase callback (Dashboard → Google provider). Used as `GOOGLE_WEB_CLIENT_ID` and Supabase web client. |
+| **iOS** | Bundle ID `com.mangalam.mangalamApp` → `GOOGLE_IOS_CLIENT_ID` |
+| **Android** | Package `com.mangalam.mangalam_app` + **SHA-1** (debug + release keystores) |
+
+Add **both** debug and release SHA-1 on Android. Register **every** client ID in Supabase **Client IDs** (web first).
+
+Scopes (Google Cloud → Data access): `openid`, `userinfo.email`, `userinfo.profile` (defaults).
+
+## 3. Flutter app config
+
+`mobile/dart_defines.json` (from `dart_defines.example.json`):
 
 ```json
 "GOOGLE_WEB_CLIENT_ID": "xxxx.apps.googleusercontent.com",
 "GOOGLE_IOS_CLIENT_ID": "yyyy.apps.googleusercontent.com"
 ```
 
-3. **iOS only:** In Xcode → Runner → Info → URL Types, add reversed iOS client id: `com.googleusercontent.apps.YYYY`.
+- **Android:** `GOOGLE_WEB_CLIENT_ID` only (server client ID for `google_sign_in`).
+- **iOS:** both IDs; native sign-in is used when `GOOGLE_IOS_CLIENT_ID` is set.
 
-## 3. Apple Developer
+### iOS: reversed client ID in Info.plist
 
-1. App ID `com.mangalam.mangalamApp` → enable **Sign in with Apple**.
-2. Create **Services ID** + key for Supabase (per [Supabase Apple docs](https://supabase.com/docs/guides/auth/social-login/auth-apple)).
-3. Xcode → Runner → **Signing & Capabilities** → **Sign in with Apple** (entitlements file `Runner.entitlements` in repo).
+Supabase requires a **CFBundleURLSchemes** entry with the reversed iOS client ID.
 
-## 4. Run app
+1. From `GOOGLE_IOS_CLIENT_ID` `123-abc.apps.googleusercontent.com` → reversed scheme  
+   `com.googleusercontent.apps.123-abc`
+2. Copy `mobile/ios/Flutter/GoogleSignIn.xcconfig.example` → `GoogleSignIn.xcconfig`
+3. Set `GOOGLE_REVERSED_CLIENT_ID` to that string (already wired in `Runner/Info.plist`).
+
+Or compute via `AppConfig.googleIosReversedClientId` when filling the xcconfig.
+
+## 4. Apple Developer
+
+1. App ID `com.mangalam.mangalamApp` → **Sign in with Apple**
+2. Services ID + key for Supabase
+3. Xcode → **Sign in with Apple** (`Runner.entitlements` in repo)
+
+## 5. Run app
 
 ```bash
 cd mobile
 cp dart_defines.example.json dart_defines.json
 # fill SUPABASE_*, GOOGLE_*, API_BASE_URL
+cp ios/Flutter/GoogleSignIn.xcconfig.example ios/Flutter/GoogleSignIn.xcconfig  # iOS only
 flutter run --dart-define-from-file=dart_defines.json
 ```
 
-## 5. Phone OTP (optional)
+Native Google flow (in app): `google_sign_in` → `authorizationForScopes` / `authorizeScopes` (`email`, `profile`) → `supabase.auth.signInWithIdToken` with **id token + access token**. If client IDs are missing, the app falls back to browser OAuth + deep link.
 
-Still available via **Continue with phone OTP**; requires MSG91 DLT (`docs/MSG91_OTP.md`).
+## 6. Phone OTP (optional)
+
+**Continue with phone OTP**; requires MSG91 DLT — `docs/MSG91_OTP.md`.

@@ -1,0 +1,6 @@
+// Copy to GoogleSignIn.xcconfig (same folder) before iOS Google Sign-In.
+// Reversed client ID = com.googleusercontent.apps.<prefix>
+// where <prefix> is the part before .apps.googleusercontent.com in GOOGLE_IOS_CLIENT_ID.
+// See docs/OAUTH_SETUP.md and:
+// https://supabase.com/docs/guides/auth/social-sign-in/auth-google?platform=flutter-mobile
+GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.REPLACE_IOS_CLIENT_PREFIX

@@ -11,38 +11,78 @@ import '../core/config.dart';
 import 'api_client.dart';
 
 /// Google & Apple native sign-in → Supabase session (no SMS / DLT).
+///
+/// Google flow follows:
+/// https://supabase.com/docs/guides/auth/social-sign-in/auth-google?platform=flutter-mobile
 class OAuthSignIn {
+  static const _googleScopes = ['email', 'profile'];
+
   static bool _googleReady = false;
 
   static Future<void> ensureGoogleInitialized() async {
     if (_googleReady || !AppConfig.hasGoogleOAuth) return;
     await GoogleSignIn.instance.initialize(
+      serverClientId: AppConfig.googleWebClientId,
       clientId: AppConfig.googleIosClientId.isEmpty
           ? null
           : AppConfig.googleIosClientId,
-      serverClientId: AppConfig.googleWebClientId,
     );
     _googleReady = true;
   }
 
   static Future<void> signInWithGoogle() async {
-    if (AppConfig.hasGoogleOAuth) {
+    if (_canTryGoogleNative()) {
       await ensureGoogleInitialized();
       if (GoogleSignIn.instance.supportsAuthenticate()) {
-        final account = await GoogleSignIn.instance.authenticate();
-        final idToken = account.authentication.idToken;
-        if (idToken == null || idToken.isEmpty) {
-          throw const OAuthConfigException('Google did not return an ID token.');
+        try {
+          await _nativeGoogleSignIn();
+          return;
+        } on GoogleSignInException catch (e) {
+          if (e.code == GoogleSignInExceptionCode.canceled ||
+              e.code == GoogleSignInExceptionCode.interrupted) {
+            return;
+          }
+          rethrow;
         }
-        await Supabase.instance.client.auth.signInWithIdToken(
-          provider: OAuthProvider.google,
-          idToken: idToken,
-        );
-        await _syncProfileName(account.displayName);
-        return;
       }
     }
     await _signInWithOAuthBrowser(OAuthProvider.google);
+  }
+
+  static bool _canTryGoogleNative() {
+    if (!AppConfig.hasGoogleOAuth || kIsWeb) return false;
+    if (defaultTargetPlatform == TargetPlatform.iOS &&
+        !AppConfig.hasGoogleIosClient) {
+      return false;
+    }
+    return true;
+  }
+
+  static Future<void> _nativeGoogleSignIn() async {
+    final googleSignIn = GoogleSignIn.instance;
+
+    final GoogleSignInAccount? existing =
+        await googleSignIn.attemptLightweightAuthentication();
+    final GoogleSignInAccount googleUser =
+        existing ?? await googleSignIn.authenticate();
+
+    final authorization =
+        await googleUser.authorizationClient.authorizationForScopes(
+              _googleScopes,
+            ) ??
+            await googleUser.authorizationClient.authorizeScopes(_googleScopes);
+
+    final idToken = googleUser.authentication.idToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw const OAuthConfigException('Google did not return an ID token.');
+    }
+
+    await Supabase.instance.client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: authorization.accessToken,
+    );
+    await _syncProfileName(googleUser.displayName);
   }
 
   static Future<void> signInWithApple() async {
@@ -69,7 +109,7 @@ class OAuthSignIn {
     );
     if (!launched) {
       throw OAuthConfigException(
-        'Could not open ${provider.name} sign-in. Enable the provider in Supabase and add redirect URL $AppConfig.oauthRedirectUrl',
+        'Could not open ${provider.name} sign-in. Enable the provider in Supabase and add redirect URL ${AppConfig.oauthRedirectUrl}',
       );
     }
   }
