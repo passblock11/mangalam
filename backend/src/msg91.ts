@@ -64,6 +64,14 @@ export async function msg91OtpSend(
   }
 
   const templateId = otpTemplateId();
+  if (phoneE164.startsWith("+91") && !templateId) {
+    return {
+      ok: false,
+      message:
+        "India DLT: set MSG91_OTP_TEMPLATE_ID on the API. In MSG91 → OTP, map your DLT template + sender on that OTP template (pause code 211 = DLT not linked).",
+    };
+  }
+
   const mobile = toMsg91Mobile(phoneE164);
   const params = new URLSearchParams({
     mobile,

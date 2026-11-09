@@ -99,8 +99,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _friendlyError(Object e) {
     final raw = e.toString();
-    if (raw.contains('DLT') || raw.contains('MSG91')) {
-      return 'SMS could not be sent. Add your MSG91 DLT-approved sender and template on the API (Vercel env).';
+    if (raw.contains('DLT') || raw.contains('MSG91') || raw.contains('211')) {
+      return 'SMS blocked by India DLT. In MSG91 → OTP, link DLT template + sender, then set MSG91_OTP_TEMPLATE_ID on Vercel.';
     }
     return raw.replaceFirst('ApiException(', '').replaceAll('): ', ': ');
   }

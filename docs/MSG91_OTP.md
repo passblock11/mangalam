@@ -15,13 +15,27 @@ MSG91 generates, stores, and checks the OTP. We keep **our** hourly/daily/cooldo
 | Variable | Purpose |
 |----------|---------|
 | `MSG91_AUTH_KEY` | Auth key (header `authkey`) |
-| `MSG91_OTP_TEMPLATE_ID` | *(optional)* OTP template with `##OTP##` — omit if your MSG91 account uses the default template |
+| `MSG91_OTP_TEMPLATE_ID` | **Required for +91** — MSG91 OTP template id (not the TRAI DLT id) |
 
 OTP tuning: `OTP_LENGTH`, `OTP_EXPIRY_MINUTES`, `OTP_SEND_*`, etc.
 
-## India DLT
+## India DLT (why API “success” but no SMS)
 
-Register the OTP template on TRAI DLT and map it in the MSG91 **OTP** section. Use that template id as `MSG91_OTP_TEMPLATE_ID`.
+MSG91 can return `type: success` while the carrier **blocks** delivery. In **Advanced Logs**, pause **211** means:
+
+- **DLT template ID not found** on the OTP template, or  
+- SMS text does not **exactly** match the DLT-approved template.
+
+### Fix in MSG91 (one-time)
+
+1. **TRAI DLT portal** — approve content like:  
+   `Your Mangalam login code is {#var#}. Valid for 5 minutes. Do not share.`  
+   (wording must match what you use in MSG91.)
+2. **MSG91 → OTP** — template body must include `##OTP##` (MSG91 replaces this with the code).
+3. On that OTP template, set **DLT template id** and **approved sender id** (Edit template / `updateOtpTemplate`: `dltTemplateId`, `senderId`).
+4. Copy the **MSG91 template id** → Vercel `MSG91_OTP_TEMPLATE_ID` (production + preview) → redeploy API.
+
+Until step 3–4 are done, login OTP to Indian numbers will not deliver.
 
 ## App flow
 
