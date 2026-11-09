@@ -15,7 +15,7 @@ MSG91 generates, stores, and checks the OTP. We keep **our** hourly/daily/cooldo
 | Variable | Purpose |
 |----------|---------|
 | `MSG91_AUTH_KEY` | Auth key (header `authkey`) |
-| `MSG91_OTP_TEMPLATE_ID` | Template from **OTP** section in MSG91 (must include `##OTP##`) |
+| `MSG91_OTP_TEMPLATE_ID` | *(optional)* OTP template with `##OTP##` — omit if your MSG91 account uses the default template |
 
 OTP tuning: `OTP_LENGTH`, `OTP_EXPIRY_MINUTES`, `OTP_SEND_*`, etc.
 

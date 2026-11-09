@@ -64,21 +64,15 @@ export async function msg91OtpSend(
   }
 
   const templateId = otpTemplateId();
-  if (!templateId) {
-    return {
-      ok: false,
-      message:
-        "Set MSG91_OTP_TEMPLATE_ID (OTP section template with ##OTP##) on the server.",
-    };
-  }
-
   const mobile = toMsg91Mobile(phoneE164);
   const params = new URLSearchParams({
     mobile,
-    template_id: templateId,
     otp_length: String(Math.min(9, Math.max(4, opts.otpLength))),
     otp_expiry: String(Math.min(10080, Math.max(1, opts.otpExpiryMinutes))),
   });
+  if (templateId) {
+    params.set("template_id", templateId);
+  }
 
   const res = await fetch(`${OTP_SEND_URL}?${params.toString()}`, {
     method: "POST",
