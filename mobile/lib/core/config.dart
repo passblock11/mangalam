@@ -1,22 +1,26 @@
-/// Compile-time configuration. Pass via:
-/// `flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=... --dart-define=API_BASE_URL=...`
+/// Compile-time configuration.
+///
+/// Defaults match this repo’s Supabase project so `flutter run` works from the IDE
+/// without extra flags. Override per environment with `--dart-define` or
+/// `--dart-define-from-file=dart_defines.json` (see `dart_defines.example.json`).
 class AppConfig {
   AppConfig._();
 
   static const supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: '',
+    defaultValue: 'https://behlrsqilhzhniglhgqh.supabase.co',
   );
-  /// Supabase publishable (anon) key from Project Settings → API.
+  /// Supabase publishable (anon) key — safe in client apps; not the service role key.
   static const supabasePublishableKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: '',
+    defaultValue: 'sb_publishable_G8YGou0J7alwZirbjuCQdQ_YCiyk0LD',
   );
 
-  /// REST API (Vercel backend), e.g. https://api.yourdomain.com  (no trailing slash)
+  /// REST API (Vercel backend), e.g. https://mangalam-api.vercel.app (no trailing slash).
+  /// Override with `--dart-define=API_BASE_URL=...` for local API.
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:3001',
+    defaultValue: 'https://mangalam-api.vercel.app',
   );
 
   static bool get hasSupabase =>

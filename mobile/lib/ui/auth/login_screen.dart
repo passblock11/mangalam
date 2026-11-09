@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/config.dart';
+import '../../services/api_client.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,11 +11,13 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _api = ApiClient();
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
   bool _otpSent = false;
   bool _busy = false;
   String? _error;
+  int _retryAfterSec = 0;
 
   @override
   void dispose() {
@@ -24,23 +26,36 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _sendOtp() async {
-    if (!AppConfig.hasSupabase) {
-      setState(() => _error = 'Configure SUPABASE_URL and SUPABASE_ANON_KEY');
-      return;
-    }
+  String _normalizePhoneInput() {
+    return _phoneController.text.trim().replaceAll(RegExp(r'\s'), '');
+  }
+
+  Future<void> _sendOtp({bool resend = false}) async {
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final raw = _phoneController.text.trim().replaceAll(RegExp(r'\s'), '');
-      final e164 = raw.startsWith('+') ? raw : '+91$raw';
-      await Supabase.instance.client.auth.signInWithOtp(phone: e164);
-      setState(() => _otpSent = true);
+      final json = await _api.post('/v1/auth/otp/send', {
+        'phone': _normalizePhoneInput(),
+        if (resend) 'resend': true,
+      }) as Map<String, dynamic>;
+
+      final smsSent = json['sms_sent'] == true;
+      setState(() {
+        _otpSent = true;
+        _retryAfterSec = (json['retry_after_sec'] as num?)?.toInt() ?? 0;
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('OTP sent. Check your phone.')),
+          SnackBar(
+            content: Text(
+              smsSent
+                  ? 'OTP sent via SMS.'
+                  : (json['message'] as String? ??
+                      'OTP already sent. Check your messages.'),
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -56,13 +71,17 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final raw = _phoneController.text.trim().replaceAll(RegExp(r'\s'), '');
-      final e164 = raw.startsWith('+') ? raw : '+91$raw';
-      await Supabase.instance.client.auth.verifyOTP(
-        phone: e164,
-        token: _otpController.text.trim(),
-        type: OtpType.sms,
-      );
+      final json = await _api.post('/v1/auth/otp/verify', {
+        'phone': _normalizePhoneInput(),
+        'otp': _otpController.text.trim(),
+      }) as Map<String, dynamic>;
+
+      final session = json['session'] as Map<String, dynamic>?;
+      if (session == null) {
+        throw Exception('No session in response');
+      }
+      final refreshToken = session['refresh_token'] as String;
+      await Supabase.instance.client.auth.setSession(refreshToken);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -100,6 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
+                enabled: !_otpSent,
                 decoration: const InputDecoration(
                   labelText: 'Phone number',
                   hintText: '9876543210 or +919876543210',
@@ -116,7 +136,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed:
+                        _busy || _retryAfterSec > 0 ? null : () => _sendOtp(resend: true),
+                    child: Text(
+                      _retryAfterSec > 0
+                          ? 'Resend SMS (${_retryAfterSec}s)'
+                          : 'Resend SMS',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
               ],
               if (_error != null)
                 Text(
@@ -127,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
               FilledButton(
                 onPressed: _busy
                     ? null
-                    : (_otpSent ? _verifyOtp : _sendOtp),
+                    : (_otpSent ? _verifyOtp : () => _sendOtp()),
                 child: _busy
                     ? const SizedBox(
                         height: 22,

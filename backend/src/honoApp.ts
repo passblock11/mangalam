@@ -11,6 +11,8 @@ import { reportsRouter } from "./routes/reports.js";
 import { viewsRouter } from "./routes/views.js";
 import { profilesRouter } from "./routes/profiles.js";
 import { blocksRouter } from "./routes/blocks.js";
+import { paymentsRouter } from "./routes/payments.js";
+import { authRouter } from "./routes/auth.js";
 
 export const app = new Hono();
 
@@ -25,6 +27,7 @@ app.use(
 
 const v1 = new Hono()
   .route("/health", healthRouter)
+  .route("/auth", authRouter)
   .route("/me", meRouter)
   .route("/matches", matchesRouter)
   .route("/interactions", interactionsRouter)
@@ -33,7 +36,8 @@ const v1 = new Hono()
   .route("/reports", reportsRouter)
   .route("/views", viewsRouter)
   .route("/profiles", profilesRouter)
-  .route("/blocks", blocksRouter);
+  .route("/blocks", blocksRouter)
+  .route("/payments", paymentsRouter);
 
 // Vercel: vercel.json rewrites /v1/* → /api/v1/*
 app.route("/api/v1", v1);

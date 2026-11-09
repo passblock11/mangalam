@@ -41,7 +41,7 @@ flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
 
 ## Database
 
-1. Open Supabase SQL editor and run `supabase/migrations/0001_initial_schema.sql`, then `supabase/migrations/0002_profile_sections.sql` (adds occupation, astrology, `partner_preferences`, `last_active_at`).
+1. Open Supabase SQL editor and run, in order: `supabase/migrations/0001_initial_schema.sql`, `supabase/migrations/0002_profile_sections.sql` (adds occupation, astrology, `partner_preferences`, `last_active_at`), and `supabase/migrations/0003_razorpay_payment_credits.sql` if you use Razorpay recharge.
 2. Enable **Phone** auth (or Email) in Supabase Auth as you prefer.
 3. Create a **public** Storage bucket `profile-photos` (or adjust migration policies).
 
@@ -71,8 +71,13 @@ npm run dev
 ```bash
 cd mobile
 flutter pub get
-flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+flutter run \
+  --dart-define=SUPABASE_URL=... \
+  --dart-define=SUPABASE_ANON_KEY=... \
+  --dart-define=API_BASE_URL=https://mangalam-api.vercel.app
 ```
+
+`API_BASE_URL` defaults to `https://mangalam-api.vercel.app` in code; pass `--dart-define=API_BASE_URL=http://localhost:3001` when pointing at a local API.
 
 ## Deploying to Vercel
 
@@ -84,7 +89,7 @@ Summary:
 - Backend: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`.
 - Admin: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — sign in with Supabase **email/password**; promote the user with `profiles.is_admin = true` (see `docs/DEPLOY.md`).
 
-Point the Flutter app to the deployed API (`API_BASE_URL`).
+The Flutter app defaults to the deployed API URL; override with `--dart-define=API_BASE_URL=...` if needed.
 
 ## API overview (`/v1`)
 
@@ -105,6 +110,10 @@ Point the Flutter app to the deployed API (`API_BASE_URL`).
 | POST | `/v1/conversations/:id/reveal-phone` | User JWT | Spend contact credit, reveal phone |
 | POST | `/v1/reports` | User JWT | Report a profile |
 | POST | `/v1/views` | User JWT | Record a profile view (for “Views” tab) |
+| POST | `/v1/payments/razorpay/order` | User JWT | Create Razorpay order for contact-credit purchase (`{ credits }`) |
+| POST | `/v1/payments/razorpay/verify` | User JWT | Verify payment signature and credit wallet |
+| POST | `/v1/auth/otp/send` | — | Send login OTP via MSG91 (rate-limited) |
+| POST | `/v1/auth/otp/verify` | — | Verify OTP; returns Supabase `session` |
 
 Admin moderation uses the admin Next app (service role) — replace the shared secret with **Supabase Auth** + `profiles.is_admin` before production.
 
@@ -119,9 +128,12 @@ Admin moderation uses the admin Next app (service role) — replace the shared s
 | Likes: Matches / Views / Contacts | Yes | Yes | — |
 | Messages Primary / Sent + chat | Yes | Yes | — |
 | Reveal phone (wallet credits) | Yes | Yes | Set credits + verify |
+| Razorpay recharge (contact credits) | Yes | Yes | — |
 | Edit profile | Yes | Yes | User search |
 
-**Not implemented in code (add when you need them):** in-app payments (Razorpay/Play Billing), push notifications, biodata PDF export, photo upload UI to Storage, real admin sign-in (use `is_admin` + Supabase Auth).
+**Still to add when you need them:** push notifications, biodata PDF export, photo upload UI to Storage, Play Billing (Razorpay is wired for contact-credit recharge on mobile + API).
+
+**Razorpay (backend):** set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` on Vercel (see `backend/.env.example`). Optional `CONTACT_CREDIT_PRICE_PAISE` (default `100` paise per credit). Run migration `0003_razorpay_payment_credits.sql` on Supabase for idempotent crediting.
 
 ---
 

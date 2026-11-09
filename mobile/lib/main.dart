@@ -5,6 +5,7 @@ import 'core/config.dart';
 import 'ui/auth/login_screen.dart';
 import 'ui/home/home_shell.dart';
 
+// 588611AwRljddzkI6af1ffedP1
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -30,10 +31,7 @@ class MangalamApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'Mangalam',
-      theme: ThemeData(
-        colorScheme: colorScheme,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(colorScheme: colorScheme, useMaterial3: true),
       home: const _Root(),
     );
   }
@@ -50,12 +48,12 @@ class _Root extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              'Missing dart-define: SUPABASE_URL and SUPABASE_ANON_KEY.\n\n'
-              'Example:\n'
-              'flutter run '
-              '--dart-define=SUPABASE_URL=... '
-              '--dart-define=SUPABASE_ANON_KEY=... '
-              '--dart-define=API_BASE_URL=http://localhost:3001',
+              'Missing compile-time Supabase config.\n\n'
+              'Copy mobile/dart_defines.example.json to dart_defines.json '
+              '(fill URL + anon/publishable key from Supabase → Project Settings → API), '
+              'then run:\n\n'
+              'flutter run --dart-define-from-file=dart_defines.json\n\n'
+              'Or use the "Mangalam (mobile)" launch config in VS Code/Cursor.',
               textAlign: TextAlign.center,
             ),
           ),

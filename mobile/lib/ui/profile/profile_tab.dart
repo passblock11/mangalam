@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/api_client.dart';
+import '../../services/razorpay_checkout.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -18,6 +19,7 @@ String _initial(String? name) {
 
 class _ProfileTabState extends State<ProfileTab> {
   final _api = ApiClient();
+  final _razorpay = RazorpayCheckout();
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _wallet;
   String? _error;
@@ -26,6 +28,12 @@ class _ProfileTabState extends State<ProfileTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _razorpay.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -214,7 +222,10 @@ class _ProfileTabState extends State<ProfileTab> {
                         ),
                         const SizedBox(height: 12),
                         FilledButton(
-                          onPressed: () {},
+                          onPressed: () async {
+                            final ok = await _razorpay.rechargeContactCredits(context);
+                            if (ok && mounted) await _load();
+                          },
                           child: const Text('Recharge now'),
                         ),
                         if (_wallet?['premium_until'] != null) ...[

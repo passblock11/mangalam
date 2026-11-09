@@ -16,6 +16,8 @@ Deploy **everything except the Flutter app**: database on **Supabase**, API on *
 2. **SQL → New query** — run these files **in order**:
    - `supabase/migrations/0001_initial_schema.sql`
    - `supabase/migrations/0002_profile_sections.sql`
+   - `supabase/migrations/0003_razorpay_payment_credits.sql` (Razorpay wallet top-ups — idempotency ledger)
+   - `supabase/migrations/0004_phone_otp_challenges.sql` (MSG91 OTP rate limits)
 
    **Alternative (local script):** from the repo root, with **Node** and `backend` dependencies installed (`cd backend && npm ci`):
 
@@ -26,7 +28,9 @@ node scripts/run-supabase-migrations.mjs
 
 Use the **Session pooler** connection string from Supabase → **Project Settings → Database** (port **5432**, not 6543). **Never commit** the URL or password.
 
-3. **Authentication → Providers** — enable **Email** (required for the admin panel sign-in). Optionally enable **Phone** (SMS) for the mobile app.
+3. **Authentication → Providers**
+   - **Email** — enable (required for the admin panel).
+   - **Phone** — optional; the **Flutter app uses custom MSG91 OTP** via the API (`/v1/auth/otp/*`), not Supabase SMS. You can leave Supabase Phone **disabled** to avoid double billing.
 
 4. **Project Settings → API** — copy values into Vercel using the **exact names below** (not generic “Supabase export” names):
    - **Project URL** → `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`
@@ -63,6 +67,13 @@ Use the **Session pooler** connection string from Supabase → **Project Setting
 | `SUPABASE_URL` | `https://xxxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role key (secret) |
 | `SUPABASE_JWT_SECRET` | JWT Secret from Supabase API settings |
+| `RAZORPAY_KEY_ID` | Razorpay **Key Id** (Dashboard → API Keys) |
+| `RAZORPAY_KEY_SECRET` | Razorpay **Key Secret** (server-only) |
+| `CONTACT_CREDIT_PRICE_PAISE` | *(optional)* Paise per contact credit; default `100` (₹1/credit) |
+| `MSG91_AUTH_KEY` | MSG91 Auth Key (OTP SMS) |
+| `MSG91_OTP_TEMPLATE_ID` | MSG91 OTP template ID (DLT) |
+| `MSG91_DEV_LOG_OTP` | `true` on preview/dev to log OTP without SMS |
+| `OTP_*` | *(optional)* Rate limits — see [`docs/MSG91_OTP.md`](MSG91_OTP.md) |
 
 ### How routing works
 
