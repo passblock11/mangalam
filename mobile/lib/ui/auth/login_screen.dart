@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
-import '../../services/api_client.dart';
+import '../../core/config.dart';
+import '../../services/oauth_sign_in.dart';
+import 'phone_otp_sheet.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,184 +13,246 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _api = ApiClient();
-  final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
-  bool _otpSent = false;
   bool _busy = false;
   String? _error;
-  int _retryAfterSec = 0;
+  bool _appleAvailable = false;
 
   @override
-  void dispose() {
-    _phoneController.dispose();
-    _otpController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadAppleAvailability();
+    if (AppConfig.hasGoogleOAuth) {
+      OAuthSignIn.ensureGoogleInitialized();
+    }
   }
 
-  String _normalizePhoneInput() {
-    return _phoneController.text.trim().replaceAll(RegExp(r'\s'), '');
+  Future<void> _loadAppleAvailability() async {
+    final ok = await OAuthSignIn.isAppleSignInAvailable;
+    if (mounted) setState(() => _appleAvailable = ok);
   }
 
-  Future<void> _sendOtp({bool resend = false}) async {
+  Future<void> _run(Future<void> Function() action) async {
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final json = await _api.postPublic('/v1/auth/otp/send', {
-        'phone': _normalizePhoneInput(),
-        if (resend) 'resend': true,
-      }) as Map<String, dynamic>;
-
-      final smsSent = json['sms_sent'] == true;
-      setState(() {
-        _otpSent = true;
-        _retryAfterSec = (json['retry_after_sec'] as num?)?.toInt() ?? 0;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              smsSent
-                  ? 'OTP sent via SMS.'
-                  : (json['message'] as String? ??
-                      'OTP already sent. Check your messages.'),
-            ),
-          ),
-        );
-      }
+      await action();
+    } on OAuthConfigException catch (e) {
+      setState(() => _error = e.message);
     } catch (e) {
-      setState(() {
-        _error = _friendlyError(e);
-      });
+      setState(() => _error = _friendlyError(e));
     } finally {
-      setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _verifyOtp() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final json = await _api.postPublic('/v1/auth/otp/verify', {
-        'phone': _normalizePhoneInput(),
-        'otp': _otpController.text.trim(),
-      }) as Map<String, dynamic>;
-
-      final session = json['session'] as Map<String, dynamic>?;
-      if (session == null) {
-        throw Exception('No session in response');
-      }
-      final refreshToken = session['refresh_token'] as String;
-      final accessToken = session['access_token'] as String?;
-      await Supabase.instance.client.auth.setSession(
-        refreshToken,
-        accessToken: accessToken,
-      );
-    } catch (e) {
-      setState(() {
-        _error = _friendlyError(e);
-      });
-    } finally {
-      setState(() => _busy = false);
-    }
+  void _openPhoneOtp() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (context) => const PhoneOtpSheet(),
+    );
   }
 
   String _friendlyError(Object e) {
     final raw = e.toString();
-    if (raw.contains('DLT') || raw.contains('MSG91') || raw.contains('211')) {
-      return 'SMS blocked by India DLT. In MSG91 → OTP, link DLT template + sender, then set MSG91_OTP_TEMPLATE_ID on Vercel.';
+    if (raw.contains('canceled') || raw.contains('Cancelled')) {
+      return 'Sign-in was cancelled.';
+    }
+    if (raw.contains('DLT') || raw.contains('MSG91')) {
+      return 'Phone SMS needs DLT setup. Prefer Google or Apple above.';
     }
     return raw.replaceFirst('ApiException(', '').replaceAll('): ', ': ');
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 32),
-              Text(
-                'Mangalam',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 12),
+                  Icon(Icons.favorite, size: 48, color: cs.primary),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Mangalam',
+                    style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
+                      letterSpacing: -0.6,
                     ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Sign in with your phone number',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 40),
-              TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                enabled: !_otpSent,
-                decoration: const InputDecoration(
-                  labelText: 'Phone number',
-                  hintText: '9876543210 or +919876543210',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (_otpSent) ...[
-                TextField(
-                  controller: _otpController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'OTP',
-                    border: OutlineInputBorder(),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed:
-                        _busy || _retryAfterSec > 0 ? null : () => _sendOtp(resend: true),
-                    child: Text(
-                      _retryAfterSec > 0
-                          ? 'Resend SMS (${_retryAfterSec}s)'
-                          : 'Resend SMS',
+                  const SizedBox(height: 8),
+                  Text(
+                    'Find your match. Sign in in seconds.',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.35,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 40),
+                  _SocialButton(
+                    label: 'Continue with Google',
+                    icon: Icons.g_mobiledata_rounded,
+                    onPressed: _busy
+                        ? null
+                        : () => _run(OAuthSignIn.signInWithGoogle),
+                    outlined: true,
+                  ),
+                  const SizedBox(height: 12),
+                  if (_appleAvailable)
+                    SignInWithAppleButton(
+                      height: 52,
+                      borderRadius: BorderRadius.circular(12),
+                      onPressed: _busy
+                          ? null
+                          : () => _run(OAuthSignIn.signInWithApple),
+                    )
+                  else
+                    _SocialButton(
+                      label: 'Continue with Apple',
+                      icon: Icons.apple,
+                      onPressed: _busy
+                          ? null
+                          : () => _run(OAuthSignIn.signInWithApple),
+                      outlined: true,
+                    ),
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: cs.outlineVariant)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'or',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: Divider(color: cs.outlineVariant)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _openPhoneOtp,
+                    icon: const Icon(Icons.sms_outlined, size: 20),
+                    label: const Text('Continue with phone OTP'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-              ],
-              if (_error != null)
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              const Spacer(),
-              FilledButton(
-                onPressed: _busy
-                    ? null
-                    : (_otpSent ? _verifyOtp : () => _sendOtp()),
-                child: _busy
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(_otpSent ? 'Verify & continue' : 'Send OTP'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Phone OTP needs India DLT on MSG91. Google & Apple work without SMS.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.outline,
+                      height: 1.3,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 20),
+                    Material(
+                      color: cs.errorContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                            color: cs.onErrorContainer,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_busy) ...[
+                    const SizedBox(height: 24),
+                    const Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Text(
+                    'By continuing you agree to our Terms and Privacy Policy.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.outline,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  const _SocialButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.outlined = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool outlined;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 26),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      ],
+    );
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
+    if (outlined) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          shape: shape,
+        ),
+        child: child,
+      );
+    }
+    return FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
+        shape: shape,
+      ),
+      child: child,
     );
   }
 }

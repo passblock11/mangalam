@@ -25,4 +25,22 @@ class AppConfig {
 
   static bool get hasSupabase =>
       supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
+
+  /// Google OAuth **Web client ID** (Supabase → Auth → Google). Required on Android.
+  static const googleWebClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+    defaultValue: '',
+  );
+
+  /// Google **iOS** client ID (Google Cloud → iOS OAuth client). Optional on Android.
+  static const googleIosClientId = String.fromEnvironment(
+    'GOOGLE_IOS_CLIENT_ID',
+    defaultValue: '',
+  );
+
+  static bool get hasGoogleOAuth => googleWebClientId.isNotEmpty;
+
+  /// Deep link for Supabase OAuth (Google/Apple via browser). Add in Supabase → Auth → URL config.
+  static const oauthRedirectUrl =
+      'com.mangalam.mangalamapp://login-callback';
 }

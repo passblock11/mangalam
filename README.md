@@ -42,7 +42,7 @@ flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
 ## Database
 
 1. Open Supabase SQL editor and run, in order: `supabase/migrations/0001_initial_schema.sql`, `supabase/migrations/0002_profile_sections.sql` (adds occupation, astrology, `partner_preferences`, `last_active_at`), and `supabase/migrations/0003_razorpay_payment_credits.sql` if you use Razorpay recharge.
-2. Enable **Phone** auth (or Email) in Supabase Auth as you prefer.
+2. Enable **Google** and **Apple** in Supabase Auth (see `docs/OAUTH_SETUP.md`). Phone OTP is optional via MSG91 (`docs/MSG91_OTP.md`).
 3. Create a **public** Storage bucket `profile-photos` (or adjust migration policies).
 
 Row Level Security (RLS) is enabled on all public tables. The **backend** uses the service role for cross-user operations (e.g. match feed) so business rules stay consistent.
