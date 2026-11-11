@@ -377,6 +377,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             initialValue: _pAgeMin,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Age min',
                               prefixIcon: Icon(Iconsax.arrow_up),
@@ -396,6 +397,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             initialValue: _pAgeMax,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Age max',
                               prefixIcon: Icon(Iconsax.arrow_down),

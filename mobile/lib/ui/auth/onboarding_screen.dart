@@ -626,6 +626,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Expanded(
               child: DropdownButtonFormField<int>(
                 initialValue: _pAgeMin,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Min age',
                   prefixIcon: Icon(Iconsax.arrow_up),
@@ -643,6 +644,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Expanded(
               child: DropdownButtonFormField<int>(
                 initialValue: _pAgeMax,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Max age',
                   prefixIcon: Icon(Iconsax.arrow_down),
@@ -689,6 +691,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }) {
     return DropdownButtonFormField<String>(
       initialValue: value,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: icon != null ? Icon(icon) : null,
@@ -697,7 +700,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           .map(
             (e) => DropdownMenuItem(
               value: e,
-              child: Text(labelFor != null ? labelFor(e) : e),
+              child: Text(
+                labelFor != null ? labelFor(e) : e,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           )
           .toList(),
