@@ -222,15 +222,20 @@ export function VerificationsSection() {
       >
         <div className="space-y-4">
           <p className="text-sm text-[var(--muted)]">
-            The member will see this note and can re-submit with corrected documents.
+            The member will see this reason and can re-submit with corrected documents.
+            <span className="font-semibold text-[var(--maroon)]"> A reason is required.</span>
           </p>
           <textarea
             value={rejectNote}
             onChange={(e) => setRejectNote(e.target.value)}
             placeholder="e.g. ID photo is blurry. Please re-upload a clear photo."
             rows={4}
+            maxLength={500}
             className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)]"
           />
+          <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+            <span>{rejectNote.trim().length === 0 ? "Enter a reason to enable Reject." : `${rejectNote.trim().length}/500`}</span>
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setRejectFor(null)}>
               Cancel
@@ -238,8 +243,8 @@ export function VerificationsSection() {
             <Button
               variant="danger"
               size="sm"
-              disabled={busy === rejectFor}
-              onClick={() => rejectFor && void reject(rejectFor, rejectNote.trim() || undefined)}
+              disabled={busy === rejectFor || rejectNote.trim().length === 0}
+              onClick={() => rejectFor && void reject(rejectFor, rejectNote.trim())}
             >
               Reject
             </Button>

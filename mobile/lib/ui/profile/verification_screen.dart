@@ -230,7 +230,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
       case 'rejected':
         tint = MangalamTheme.maroon;
         title = 'Rejected';
-        subtitle = _note?.isNotEmpty == true
+        subtitle = _note != null && _note!.isNotEmpty
             ? _note!
             : 'Please re-submit clear, valid documents.';
         icon = Iconsax.warning_2;
@@ -273,14 +273,50 @@ class _VerificationScreenState extends State<VerificationScreen> {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: MangalamTheme.muted,
-                    height: 1.35,
+                if (_status == 'rejected' &&
+                    _note != null &&
+                    _note!.isNotEmpty) ...[
+                  const Text(
+                    'Reason from our review team',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: MangalamTheme.maroon,
+                      letterSpacing: 0.3,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: MangalamTheme.maroon.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: MangalamTheme.maroon.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Text(
+                      _note!,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: MangalamTheme.ink,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ] else
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: MangalamTheme.muted,
+                      height: 1.35,
+                    ),
+                  ),
               ],
             ),
           ),

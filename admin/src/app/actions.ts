@@ -236,6 +236,12 @@ export async function reviewVerification(
   const auth = await requireAdmin("verifications");
   if (!auth.ok) return auth;
 
+  // Rejections MUST include a reason — the member sees it in the app.
+  const trimmedNote = note?.trim();
+  if (!approved && (!trimmedNote || trimmedNote.length === 0)) {
+    return { ok: false, error: "A rejection reason is required." };
+  }
+
   try {
     const sb = supabaseAdmin();
     const { error } = await sb
@@ -244,7 +250,7 @@ export async function reviewVerification(
         verification_status: approved ? "approved" : "rejected",
         is_verified: approved,
         verification_reviewed_at: new Date().toISOString(),
-        verification_note: note ?? null,
+        verification_note: approved ? null : (trimmedNote ?? null),
         updated_at: new Date().toISOString(),
       })
       .eq("id", profileId);
