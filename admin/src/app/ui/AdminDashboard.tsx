@@ -8,10 +8,12 @@ import {
   setContactCredits,
   setReportStatus,
   setProfileVerified,
+  fetchPendingVerifications,
+  reviewVerification,
 } from "../actions";
 
 export function AdminDashboard() {
-  const [tab, setTab] = useState<"reports" | "users">("reports");
+  const [tab, setTab] = useState<"reports" | "users" | "verifications">("reports");
   const [search, setSearch] = useState("");
   const [reports, setReports] = useState<
     {
@@ -32,6 +34,19 @@ export function AdminDashboard() {
       state: string | null;
       is_verified: boolean;
       created_at: string;
+    }[]
+  >([]);
+  const [verifications, setVerifications] = useState<
+    {
+      id: string;
+      display_name: string | null;
+      phone: string | null;
+      whatsapp_number: string | null;
+      selfie_url: string | null;
+      govt_id_url: string | null;
+      verification_status: string;
+      verification_submitted_at: string | null;
+      verification_note: string | null;
     }[]
   >([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +73,17 @@ export function AdminDashboard() {
     setProfiles(res.data);
     return true;
   }, [search]);
+
+  const loadVerifications = useCallback(async () => {
+    const res = await fetchPendingVerifications();
+    if (!res.ok) {
+      setError(res.error);
+      return false;
+    }
+    setError(null);
+    setVerifications(res.data);
+    return true;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +150,20 @@ export function AdminDashboard() {
               }}
             >
               Users
+            </button>
+            <button
+              type="button"
+              className={`border-b-2 px-3 py-2 text-sm font-medium ${
+                tab === "verifications"
+                  ? "border-zinc-900 text-zinc-900"
+                  : "border-transparent text-zinc-500"
+              }`}
+              onClick={() => {
+                setTab("verifications");
+                void loadVerifications();
+              }}
+            >
+              Verifications
             </button>
           </div>
 
@@ -299,6 +339,147 @@ export function AdminDashboard() {
               <p className="text-xs text-zinc-500">
                 Sets wallet contact credits (creates wallet row if missing).
               </p>
+            </section>
+          )}
+
+          {tab === "verifications" && (
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-base font-medium">Verification queue</h2>
+                <button
+                  type="button"
+                  className="text-sm text-zinc-600 underline"
+                  onClick={() => void loadVerifications()}
+                >
+                  Refresh
+                </button>
+              </div>
+              {verifications.length === 0 ? (
+                <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
+                  No verification submissions yet.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {verifications.map((v) => (
+                    <div
+                      key={v.id}
+                      className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
+                    >
+                      <div className="flex flex-wrap items-start gap-4 border-b border-zinc-100 p-4">
+                        <div className="flex-1 min-w-[200px]">
+                          <p className="font-medium text-zinc-900">
+                            {v.display_name ?? "—"}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-500">
+                            ID: <span className="font-mono">{v.id}</span>
+                          </p>
+                          <p className="text-xs text-zinc-600">
+                            Phone: {v.phone ?? "—"}
+                          </p>
+                          <p className="text-xs text-zinc-600">
+                            WhatsApp: {v.whatsapp_number ?? "—"}
+                          </p>
+                          <p className="text-xs text-zinc-600">
+                            Submitted:{" "}
+                            {v.verification_submitted_at
+                              ? new Date(v.verification_submitted_at).toLocaleString()
+                              : "—"}
+                          </p>
+                          <p className="mt-1">
+                            <span
+                              className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                                v.verification_status === "pending"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : v.verification_status === "approved"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {v.verification_status}
+                            </span>
+                          </p>
+                          {v.verification_note && (
+                            <p className="mt-1 text-xs text-zinc-500">
+                              Note: {v.verification_note}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-3">
+                          <div>
+                            <p className="mb-1 text-xs font-medium text-zinc-600">
+                              Selfie
+                            </p>
+                            {v.selfie_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={v.selfie_url}
+                                alt="selfie"
+                                className="h-32 w-32 rounded-lg border border-zinc-200 object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-32 w-32 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-xs text-zinc-400">
+                                No selfie
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="mb-1 text-xs font-medium text-zinc-600">
+                              Govt ID
+                            </p>
+                            {v.govt_id_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={v.govt_id_url}
+                                alt="govt id"
+                                className="h-32 w-32 rounded-lg border border-zinc-200 object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-32 w-32 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-xs text-zinc-400">
+                                No ID
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 bg-zinc-50 px-4 py-3">
+                        <button
+                          type="button"
+                          className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white"
+                          onClick={() =>
+                            void (async () => {
+                              const out = await reviewVerification(v.id, true);
+                              if (!out.ok) {
+                                setError(out.error);
+                                return;
+                              }
+                              await loadVerifications();
+                            })()
+                          }
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg bg-red-600 px-4 py-2 text-xs font-medium text-white"
+                          onClick={() =>
+                            void (async () => {
+                              const note = window.prompt("Reason for rejection (optional):") ?? undefined;
+                              const out = await reviewVerification(v.id, false, note);
+                              if (!out.ok) {
+                                setError(out.error);
+                                return;
+                              }
+                              await loadVerifications();
+                            })()
+                          }
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
         </>

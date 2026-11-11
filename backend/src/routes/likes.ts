@@ -27,6 +27,13 @@ function ageFromDob(dob: string | null): number | null {
   return Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000));
 }
 
+// Strip direct contact fields from list responses — contact is only exposed
+// via the gated /v1/profiles/:id endpoint (verified + paid + owner opt-in).
+function stripContact<T extends Record<string, unknown>>(p: T): T {
+  const { phone: _ph, whatsapp_number: _wa, phone_visible: _pv, ...rest } = p;
+  return rest as T;
+}
+
 type ProfileRow = {
   id: string;
   date_of_birth?: string | null;
@@ -63,7 +70,7 @@ likesRouter.get("/", async (c) => {
     return c.json({
       items: list.map((p) => ({
         profile: {
-          ...p,
+          ...stripContact(p),
           age: ageFromDob(p.date_of_birth ?? null),
         },
         viewed_at: (data ?? []).find((d) => d.viewer_id === p.id)?.viewed_at,
@@ -111,7 +118,7 @@ likesRouter.get("/", async (c) => {
     return c.json({
       items: contactList.map((p) => ({
         profile: {
-          ...p,
+          ...stripContact(p),
           age: ageFromDob(p.date_of_birth ?? null),
         },
         contacted_at: latestByOther.get(p.id),
@@ -146,7 +153,7 @@ likesRouter.get("/", async (c) => {
   const mutualList = (profiles ?? []) as unknown as ProfileRow[];
   const items = mutualList.map((p) => ({
     profile: {
-      ...p,
+      ...stripContact(p),
       age: ageFromDob(p.date_of_birth ?? null),
     },
     matched_at: (mutualRows ?? []).find(

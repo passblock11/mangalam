@@ -8,6 +8,7 @@ import '../../services/razorpay_checkout.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_picker_section.dart';
 import 'edit_profile_screen.dart';
+import 'verification_screen.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -219,6 +220,12 @@ class _ProfileTabState extends State<ProfileTab> {
                   icon: const Icon(Iconsax.edit),
                   label: const Text('Edit profile'),
                 ),
+                const SizedBox(height: 12),
+                _VerificationCard(
+                  status: _profile?['verification_status']?.toString(),
+                  note: _profile?['verification_note']?.toString(),
+                  onChanged: _load,
+                ),
                 const SizedBox(height: 24),
 
                 // ── Photos section ──
@@ -410,6 +417,91 @@ class _MenuTile extends StatelessWidget {
           : null,
       trailing: trailing ?? const Icon(Iconsax.arrow_right, color: MangalamTheme.muted),
       onTap: onTap,
+    );
+  }
+}
+
+class _VerificationCard extends StatelessWidget {
+  const _VerificationCard({required this.status, required this.note, required this.onChanged});
+
+  final String? status;
+  final String? note;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = (status ?? 'none').toLowerCase();
+    final isVerified = s == 'approved';
+    final isPending = s == 'pending';
+    final isRejected = s == 'rejected';
+
+    final Color tint;
+    final String title;
+    final String subtitle;
+    final IconData icon;
+    if (isVerified) {
+      tint = const Color(0xFF2E7D32);
+      title = 'Verified';
+      subtitle = 'Your identity has been confirmed.';
+      icon = Iconsax.verify;
+    } else if (isPending) {
+      tint = MangalamTheme.gold;
+      title = 'Verification in review';
+      subtitle = 'Our team is checking your documents.';
+      icon = Iconsax.clock;
+    } else if (isRejected) {
+      tint = MangalamTheme.maroon;
+      title = 'Verification rejected';
+      subtitle = note?.isNotEmpty == true ? note! : 'Please re-submit clear photos.';
+      icon = Iconsax.warning_2;
+    } else {
+      tint = MangalamTheme.maroon;
+      title = 'Get verified';
+      subtitle = 'Required to view other members\' contact details.';
+      icon = Iconsax.shield;
+    }
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const VerificationScreen()),
+        );
+        onChanged();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: tint.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: tint, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: tint)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: const TextStyle(fontSize: 12.5, color: MangalamTheme.muted, height: 1.35)),
+                ],
+              ),
+            ),
+            const Icon(Iconsax.arrow_right, color: MangalamTheme.muted, size: 20),
+          ],
+        ),
+      ),
     );
   }
 }

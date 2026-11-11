@@ -186,3 +186,99 @@ export async function setContactCredits(
     return { ok: false, error: mapDbError(msg) };
   }
 }
+
+export async function fetchPendingVerifications(): Promise<
+  ActionResult<
+    {
+      id: string;
+      display_name: string | null;
+      phone: string | null;
+      whatsapp_number: string | null;
+      selfie_url: string | null;
+      govt_id_url: string | null;
+      verification_status: string;
+      verification_submitted_at: string | null;
+      verification_note: string | null;
+    }[]
+  >
+> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  try {
+    const sb = supabaseAdmin();
+    const { data, error } = await sb
+      .from("profiles")
+      .select(
+        "id,display_name,phone,whatsapp_number,selfie_url,govt_id_url,verification_status,verification_submitted_at,verification_note"
+      )
+      .in("verification_status", ["pending", "approved", "rejected"])
+      .order("verification_submitted_at", { ascending: false })
+      .limit(100);
+    if (error) {
+      return { ok: false, error: mapDbError(error.message) };
+    }
+    // selfie_url / govt_id_url are stored as storage paths in the private
+    // `verification-docs` bucket. Generate short-lived signed URLs so the
+    // admin can preview them.
+    const rows = data ?? [];
+    const paths = rows.flatMap((r) =>
+      [r.selfie_url, r.govt_id_url].filter((p): p is string => !!p && !p.startsWith("http"))
+    );
+    let signed: Record<string, string> = {};
+    if (paths.length > 0) {
+      const { data: signedData, error: signedErr } = await sb
+        .storage.from("verification-docs")
+        .createSignedUrls(paths, 60 * 60);
+      if (!signedErr && signedData) {
+        for (const item of signedData) {
+          if (item.path && item.signedURL) signed[item.path] = item.signedURL;
+        }
+      }
+    }
+    const withUrls = rows.map((r) => ({
+      ...r,
+      selfie_url: r.selfie_url
+        ? (r.selfie_url.startsWith("http") ? r.selfie_url : signed[r.selfie_url] ?? null)
+        : null,
+      govt_id_url: r.govt_id_url
+        ? (r.govt_id_url.startsWith("http") ? r.govt_id_url : signed[r.govt_id_url] ?? null)
+        : null,
+    }));
+    return { ok: true, data: withUrls };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: mapDbError(msg) };
+  }
+}
+
+export async function reviewVerification(
+  profileId: string,
+  approved: boolean,
+  note?: string
+): Promise<ActionResult<void>> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  try {
+    const sb = supabaseAdmin();
+    const { error } = await sb
+      .from("profiles")
+      .update({
+        verification_status: approved ? "approved" : "rejected",
+        is_verified: approved,
+        verification_reviewed_at: new Date().toISOString(),
+        verification_note: note ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profileId);
+    if (error) {
+      return { ok: false, error: mapDbError(error.message) };
+    }
+    revalidatePath("/");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: mapDbError(msg) };
+  }
+}

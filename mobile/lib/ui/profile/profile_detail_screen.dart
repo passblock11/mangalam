@@ -155,16 +155,18 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   }
 
   Future<void> _launchWa() async {
+    final wa = _data?['whatsapp_number'] as String?;
     final phone = _data?['phone'] as String?;
-    if (phone == null || phone.length < 8) {
+    final num = (wa != null && wa.isNotEmpty) ? wa : phone;
+    if (num == null || num.length < 8) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('WhatsApp: reveal or match first')),
+          const SnackBar(content: Text('WhatsApp number not available.')),
         );
       }
       return;
     }
-    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    final digits = num.replaceAll(RegExp(r'\D'), '');
     final uri = Uri.parse('https://wa.me/$digits');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -176,7 +178,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
     if (phone == null || phone.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Use Reveal phone in chat or connect when available')),
+          const SnackBar(content: Text('Phone number not available.')),
         );
       }
       return;
@@ -227,7 +229,12 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               : _buildScroll(context),
       bottomNavigationBar: _data == null
           ? null
-          : _ContactBar(onPhone: _launchTel, onChat: _openChat, onWhatsApp: _launchWa),
+          : _ContactBar(
+              profile: _data!,
+              onPhone: _launchTel,
+              onChat: _openChat,
+              onWhatsApp: _launchWa,
+            ),
     );
   }
 
@@ -516,12 +523,22 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
 }
 
 class _ContactBar extends StatelessWidget {
-  const _ContactBar({required this.onPhone, required this.onChat, required this.onWhatsApp});
+  const _ContactBar({
+    required this.profile,
+    required this.onPhone,
+    required this.onChat,
+    required this.onWhatsApp,
+  });
 
+  final Map<String, dynamic> profile;
   final VoidCallback onPhone, onChat, onWhatsApp;
 
   @override
   Widget build(BuildContext context) {
+    final contactVisible = profile['contact_visible'] == true;
+    final locked = profile['contact_locked'] == true;
+    final ownerDisabled = profile['contact_owner_disabled'] == true;
+
     return Material(
       elevation: 12,
       color: Colors.white,
@@ -529,33 +546,72 @@ class _ContactBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onWhatsApp,
-                  icon: const Icon(Iconsax.message),
-                  label: const Text('WhatsApp'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              IconButton.outlined(
-                onPressed: onChat,
-                icon: const Icon(Iconsax.message),
-                color: MangalamTheme.maroon,
-                tooltip: 'Message',
-              ),
-              const SizedBox(width: 8),
-              IconButton.outlined(
-                onPressed: onPhone,
-                icon: const Icon(Iconsax.call),
-                color: MangalamTheme.maroon,
-                tooltip: 'Call',
-              ),
-            ],
-          ),
+          child: contactVisible
+              ? Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: onWhatsApp,
+                        icon: const Icon(Iconsax.message),
+                        label: const Text('WhatsApp'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton.outlined(
+                      onPressed: onChat,
+                      icon: const Icon(Iconsax.message),
+                      color: MangalamTheme.maroon,
+                      tooltip: 'Message',
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.outlined(
+                      onPressed: onPhone,
+                      icon: const Icon(Iconsax.call),
+                      color: MangalamTheme.maroon,
+                      tooltip: 'Call',
+                    ),
+                  ],
+                )
+              : _lockedRow(context, locked: locked, ownerDisabled: ownerDisabled),
         ),
       ),
+    );
+  }
+
+  Widget _lockedRow(BuildContext context, {required bool locked, required bool ownerDisabled}) {
+    final String message;
+    final IconData icon;
+    final Color tint;
+    if (ownerDisabled) {
+      message = 'This member hasn\'t shared contact details. Chat to request.';
+      icon = Iconsax.message_question;
+      tint = MangalamTheme.muted;
+    } else if (locked) {
+      message = 'Verify your identity & upgrade to Premium to view contact details.';
+      icon = Iconsax.lock;
+      tint = MangalamTheme.maroon;
+    } else {
+      message = 'Contact details are not available right now.';
+      icon = Iconsax.info_circle;
+      tint = MangalamTheme.muted;
+    }
+    return Row(
+      children: [
+        Icon(icon, color: tint, size: 22),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(fontSize: 12.5, color: tint, height: 1.35, fontWeight: FontWeight.w600),
+          ),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.tonalIcon(
+          onPressed: onChat,
+          icon: const Icon(Iconsax.message, size: 18),
+          label: const Text('Chat'),
+        ),
+      ],
     );
   }
 }

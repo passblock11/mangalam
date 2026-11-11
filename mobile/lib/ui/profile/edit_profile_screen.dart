@@ -27,6 +27,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _occupation = TextEditingController();
   final _education = TextEditingController();
   final _salary = TextEditingController();
+  final _phone = TextEditingController();
+  final _whatsapp = TextEditingController();
   final _mangal = TextEditingController();
   final _birthTime = TextEditingController();
   final _birthPlace = TextEditingController();
@@ -71,6 +73,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _occupation.dispose();
     _education.dispose();
     _salary.dispose();
+    _phone.dispose();
+    _whatsapp.dispose();
     _mangal.dispose();
     _birthTime.dispose();
     _birthPlace.dispose();
@@ -110,6 +114,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _occupation.text = p['occupation']?.toString() ?? '';
       _education.text = p['education_level']?.toString() ?? '';
       _salary.text = p['monthly_salary']?.toString() ?? '';
+      _phone.text = p['phone']?.toString() ?? '';
+      _whatsapp.text = p['whatsapp_number']?.toString() ?? '';
       _mangal.text = p['mangal_dosh']?.toString() ?? '';
       _birthTime.text = p['birth_time']?.toString() ?? '';
       _birthPlace.text = p['birth_place']?.toString() ?? '';
@@ -165,6 +171,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (bio.isNotEmpty) body['bio'] = bio;
       if (_gender != null) body['gender'] = _gender;
       body['phone_visible'] = _phoneVisible;
+      final phone = _phone.text.trim();
+      final whatsapp = _whatsapp.text.trim();
+      if (phone.isNotEmpty) body['phone'] = phone;
+      if (whatsapp.isNotEmpty) body['whatsapp_number'] = whatsapp;
       if (_photoUrls.isNotEmpty) body['photo_urls'] = _photoUrls;
 
       final occ = _occupation.text.trim();
@@ -345,8 +355,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                _section(
+                  icon: Iconsax.call,
+                  title: 'Contact details',
+                  children: [
+                    _field(_phone, 'Phone number', icon: Iconsax.call),
+                    const SizedBox(height: 12),
+                    _field(_whatsapp, 'WhatsApp number (optional)', icon: Iconsax.message),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Sharing is off by default. Only verified + Premium members can view these when you opt in.',
+                      style: TextStyle(fontSize: 12, color: MangalamTheme.muted, height: 1.35),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 SwitchListTile(
-                  title: const Text('Show phone on profile (after trust)'),
+                  title: const Text('Share my contact with verified, paid members'),
+                  subtitle: const Text(
+                    'Only verified & Premium members will see your phone / WhatsApp.',
+                    style: TextStyle(fontSize: 12, color: MangalamTheme.muted),
+                  ),
                   value: _phoneVisible,
                   onChanged: (v) => setState(() => _phoneVisible = v),
                 ),

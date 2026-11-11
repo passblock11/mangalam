@@ -11,6 +11,7 @@ class PhotoService {
   PhotoService._();
 
   static const _bucket = 'profile-photos';
+  static const _verifBucket = 'verification-docs';
 
   static SupabaseClient get _sb => Supabase.instance.client;
 
@@ -91,4 +92,26 @@ class PhotoService {
       await _sb.storage.from(_bucket).remove(['$uid/$index.jpg']);
     } catch (_) {}
   }
+
+  // ---- Verification documents (private bucket) ----
+
+  /// Upload a verification image (selfie or govt id) to the private
+  /// `verification-docs` bucket. Returns the storage path used.
+  static Future<String> uploadVerificationDoc(XFile file, String kind) async {
+    final uid = _uid;
+    if (uid.isEmpty) throw StateError('Not signed in');
+    final path = '$uid/$kind.jpg';
+    final bytes = await file.readAsBytes();
+    await _sb.storage.from(_verifBucket).uploadBinary(
+      path,
+      bytes,
+      fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+    );
+    // Private bucket — return the path; backend reads via signed URL.
+    return path;
+  }
+
+  /// Create a short-lived signed URL for a verification doc (admin preview).
+  static String publicUrlFor(String path) =>
+      _sb.storage.from(_verifBucket).getPublicUrl(path);
 }

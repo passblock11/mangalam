@@ -52,6 +52,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _occupation;
   String? _salary;
 
+  // Step 2b: Contact (phone + whatsapp)
+  final _phone = TextEditingController();
+  final _whatsapp = TextEditingController();
+  bool _phoneVisible = false; // owner opt-in to share contact with verified paid members
+
   // Step 6: Astrology
   String? _mangalDosh;
   final _birthTime = TextEditingController();
@@ -70,6 +75,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _city.dispose();
     _birthTime.dispose();
     _birthPlace.dispose();
+    _phone.dispose();
+    _whatsapp.dispose();
     _pAgeMin.dispose();
     _pAgeMax.dispose();
     _controller.dispose();
@@ -83,7 +90,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       case 1:
         return _profileFor != null;
       case 2:
-        return _gender != null && _dob != null && _name.text.trim().isNotEmpty;
+        return _gender != null &&
+            _dob != null &&
+            _name.text.trim().isNotEmpty &&
+            _phone.text.trim().isNotEmpty;
       case 3:
         return _religion != null && _motherTongue != null && _diet != null;
       case 4:
@@ -152,6 +162,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'birth_time': _birthTime.text.trim(),
         'birth_place': _birthPlace.text.trim(),
         'photo_urls': _photoUrls,
+        'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+        'whatsapp_number': _whatsapp.text.trim().isEmpty ? null : _whatsapp.text.trim(),
+        'phone_visible': _phoneVisible,
       };
       final pp = <String, dynamic>{};
       final amin = int.tryParse(_pAgeMin.text.trim());
@@ -364,6 +377,42 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
           ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _phone,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(
+            labelText: 'Phone number',
+            prefixText: '+91 ',
+            prefixIcon: Icon(Iconsax.call),
+            helperText: 'Visible only to verified, paid members if you opt in.',
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _whatsapp,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(
+            labelText: 'WhatsApp number (optional)',
+            prefixText: '+91 ',
+            prefixIcon: Icon(Iconsax.message),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SwitchListTile(
+          value: _phoneVisible,
+          onChanged: (v) => setState(() => _phoneVisible = v),
+          contentPadding: EdgeInsets.zero,
+          title: const Text(
+            'Share my contact with verified, paid members',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          subtitle: const Text(
+            'Only verified & Premium members can see your phone / WhatsApp. Off by default.',
+            style: TextStyle(fontSize: 12, color: MangalamTheme.muted, height: 1.35),
+          ),
+          activeColor: MangalamTheme.maroon,
         ),
       ],
     );
