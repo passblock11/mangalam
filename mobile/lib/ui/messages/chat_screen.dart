@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../core/mangalam_theme.dart';
@@ -26,18 +29,60 @@ class _ChatScreenState extends State<ChatScreen> {
   List<dynamic> _messages = [];
   String? _error;
   bool _loading = true;
+  RealtimeChannel? _channel;
+  final _seenIds = <String>{};
 
   @override
   void initState() {
     super.initState();
     _refresh();
+    _subscribeRealtime();
   }
 
   @override
   void dispose() {
+    _unsubscribeRealtime();
     _text.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Subscribe to live INSERTs on the messages table for this conversation.
+  /// New messages from the other person appear instantly without polling.
+  void _subscribeRealtime() {
+    _channel = Supabase.instance.client.channel('chat:${widget.conversationId}');
+    _channel!
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'conversation_id',
+            value: widget.conversationId,
+          ),
+          callback: (payload) {
+            final row = payload.newRecord;
+            final id = row['id']?.toString();
+            if (id == null || _seenIds.contains(id)) return;
+            _seenIds.add(id);
+            if (!mounted) return;
+            setState(() {
+              _messages.add(row);
+            });
+            _scrollToBottom();
+          },
+        )
+        .subscribe();
+  }
+
+  void _unsubscribeRealtime() {
+    if (_channel != null) {
+      try {
+        Supabase.instance.client.removeChannel(_channel!);
+      } catch (_) {}
+      _channel = null;
+    }
   }
 
   Future<void> _refresh() async {
@@ -53,8 +98,12 @@ class _ChatScreenState extends State<ChatScreen> {
               )
               as Map<String, dynamic>;
       if (!mounted) return;
+      final list = json['messages'] as List<dynamic>? ?? [];
+      _seenIds
+        ..clear()
+        ..addAll(list.map((m) => (m as Map)['id'].toString()));
       setState(() {
-        _messages = json['messages'] as List<dynamic>? ?? [];
+        _messages = list;
         _loading = false;
       });
       _scrollToBottom();
@@ -84,11 +133,22 @@ class _ChatScreenState extends State<ChatScreen> {
     if (body.isEmpty) return;
     _text.clear();
     try {
-      await _apiChat.post(
+      final json = await _apiChat.post(
         '/v1/conversations/${widget.conversationId}/messages',
         {'body': body},
-      );
-      await _refresh();
+      ) as Map<String, dynamic>;
+      final msg = json['message'] as Map<String, dynamic>?;
+      if (msg != null) {
+        final id = msg['id']?.toString();
+        if (id != null && !_seenIds.contains(id)) {
+          _seenIds.add(id);
+          if (mounted) {
+            setState(() => _messages.add(msg));
+            _scrollToBottom();
+          }
+        }
+      }
+      // Realtime will also deliver this INSERT; _seenIds dedup prevents a double.
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

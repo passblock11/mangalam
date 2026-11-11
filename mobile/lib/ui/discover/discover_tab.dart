@@ -4,6 +4,7 @@ import 'package:iconsax_flutter/iconsax_flutter.dart';
 import '../../services/api_client.dart';
 import '../../services/oauth_sign_in.dart';
 import '../core/mangalam_theme.dart';
+import '../core/notifications_bell.dart';
 import '../profile/profile_detail_screen.dart';
 
 class DiscoverTab extends StatefulWidget {
@@ -106,6 +107,7 @@ class _DiscoverTabState extends State<DiscoverTab>
         title: const Text('Discover'),
         centerTitle: false,
         actions: [
+          const NotificationsBell(),
           IconButton(
             onPressed: () => OAuthSignIn.signOutCompletely(),
             icon: const Icon(Iconsax.logout),

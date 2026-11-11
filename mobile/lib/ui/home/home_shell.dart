@@ -3,14 +3,41 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
+import '../../services/notification_service.dart';
 import '../core/mangalam_theme.dart';
 import '../discover/discover_tab.dart';
 import '../likes/likes_tab.dart';
 import '../messages/messages_tab.dart';
 import '../profile/profile_tab.dart';
 
-class HomeShell extends StatelessWidget {
+class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
+
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Refresh the unread badge when the home shell first mounts.
+    NotificationService.instance.onAppResumed();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      NotificationService.instance.onAppResumed();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

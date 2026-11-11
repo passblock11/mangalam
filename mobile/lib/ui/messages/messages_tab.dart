@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../utils/formatting.dart';
 import '../core/mangalam_theme.dart';
+import '../core/notifications_bell.dart';
 import 'chat_screen.dart';
 
 class MessagesTab extends StatefulWidget {
@@ -18,12 +22,15 @@ class _MessagesTabState extends State<MessagesTab>
   final _api = ApiClient();
   late TabController _tab;
   int _key = 0;
+  RealtimeChannel? _channel;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
     _tab.addListener(_onTab);
+    _subscribeRealtime();
   }
 
   void _onTab() {
@@ -32,10 +39,35 @@ class _MessagesTabState extends State<MessagesTab>
     setState(() => _key++);
   }
 
+  /// Live-refresh conversation previews when any message is inserted.
+  void _subscribeRealtime() {
+    _channel = Supabase.instance.client.channel('messages_list');
+    _channel!
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          callback: (_) {
+            // Debounce bursts so a fast conversation doesn't spam refetches.
+            _debounce?.cancel();
+            _debounce = Timer(const Duration(milliseconds: 400), () {
+              if (mounted) setState(() => _key++);
+            });
+          },
+        )
+        .subscribe();
+  }
+
   @override
   void dispose() {
     _tab.removeListener(_onTab);
     _tab.dispose();
+    _debounce?.cancel();
+    if (_channel != null) {
+      try {
+        Supabase.instance.client.removeChannel(_channel!);
+      } catch (_) {}
+    }
     super.dispose();
   }
 
@@ -53,6 +85,7 @@ class _MessagesTabState extends State<MessagesTab>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Messages'),
+        actions: const [NotificationsBell()],
         bottom: TabBar(
           controller: _tab,
           isScrollable: true,

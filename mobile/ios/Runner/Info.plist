@@ -91,6 +91,12 @@
 		<string>Mangalam needs camera access to let you take a profile picture.</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
 		<string>Mangalam would like to save profile photos to your library.</string>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>remote-notification</string>
+		</array>
+		<key>FirebaseAppDelegateProxyEnabled</key>
+		<false/>
 		<key>UIStatusBarHidden</key>
 		<false/>
 	</dict>

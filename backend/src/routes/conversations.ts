@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { getSupabaseAdmin } from "../supabase.js";
+import { notify, getProfileName } from "../notify.js";
 
 const createSchema = z
   .object({
@@ -227,6 +228,29 @@ conversationsRouter.post("/:id/messages", async (c) => {
     .select()
     .single();
   if (error) return c.json({ error: error.message }, 500);
+
+  // ── Notify the other conversation member (non-blocking) ─────────────────────
+  const { data: members } = await sb
+    .from("conversation_members")
+    .select("profile_id")
+    .eq("conversation_id", id);
+  const recipientId = (members ?? [])
+    .map((m) => m.profile_id)
+    .find((pid) => pid !== uid);
+  if (recipientId) {
+    const senderName = await getProfileName(uid);
+    await notify({
+      profile_id: recipientId,
+      type: "message",
+      title: senderName,
+      body: parsed.data.body,
+      data: {
+        conversation_id: id,
+        from_profile_id: uid,
+      },
+    });
+  }
+
   return c.json({ message: data });
 });
 
