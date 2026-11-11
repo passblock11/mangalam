@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/api_client.dart' show ApiClient, ApiException;
+import '../core/mangalam_theme.dart';
 import '../home/home_shell.dart';
 import 'login_screen.dart';
 import 'onboarding_screen.dart';
@@ -66,15 +67,24 @@ class _AuthGateState extends State<AuthGate> {
     final profileFor = p['profile_for'] as String?;
     final photos = p['photo_urls'];
     final hasPhotos = photos is List && photos.isNotEmpty;
-    return name != null && name.isNotEmpty &&
-        gender != null && gender.isNotEmpty &&
-        dob != null && dob.isNotEmpty &&
-        city != null && city.isNotEmpty &&
-        religion != null && religion.isNotEmpty &&
-        tongue != null && tongue.isNotEmpty &&
-        diet != null && diet.isNotEmpty &&
-        marital != null && marital.isNotEmpty &&
-        profileFor != null && profileFor.isNotEmpty &&
+    return name != null &&
+        name.isNotEmpty &&
+        gender != null &&
+        gender.isNotEmpty &&
+        dob != null &&
+        dob.isNotEmpty &&
+        city != null &&
+        city.isNotEmpty &&
+        religion != null &&
+        religion.isNotEmpty &&
+        tongue != null &&
+        tongue.isNotEmpty &&
+        diet != null &&
+        diet.isNotEmpty &&
+        marital != null &&
+        marital.isNotEmpty &&
+        profileFor != null &&
+        profileFor.isNotEmpty &&
         hasPhotos;
   }
 
@@ -90,7 +100,9 @@ class _AuthGateState extends State<AuthGate> {
     }
     if (_checking && _needsOnboarding == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(color: MangalamTheme.maroon),
+        ),
       );
     }
     if (_needsOnboarding == true) {

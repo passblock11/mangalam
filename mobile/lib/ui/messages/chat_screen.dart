@@ -48,7 +48,9 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     try {
       final json =
-          await _apiChat.get('/v1/conversations/${widget.conversationId}/messages')
+          await _apiChat.get(
+                '/v1/conversations/${widget.conversationId}/messages',
+              )
               as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
@@ -82,29 +84,39 @@ class _ChatScreenState extends State<ChatScreen> {
     if (body.isEmpty) return;
     _text.clear();
     try {
-      await _apiChat.post('/v1/conversations/${widget.conversationId}/messages', {'body': body});
+      await _apiChat.post(
+        '/v1/conversations/${widget.conversationId}/messages',
+        {'body': body},
+      );
       await _refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
 
   Future<void> _revealPhone() async {
     try {
-      final json = await _apiChat.post(
-              '/v1/conversations/${widget.conversationId}/reveal-phone', {})
-          as Map<String, dynamic>;
+      final json =
+          await _apiChat.post(
+                '/v1/conversations/${widget.conversationId}/reveal-phone',
+                {},
+              )
+              as Map<String, dynamic>;
       final phone = json['revealed_phone'];
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Phone: ${phone ?? 'n/a'}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Phone: ${phone ?? 'n/a'}')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -124,11 +136,17 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: [
                   Text(
                     widget.otherName,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
                   ),
                   const Text(
                     'Tap to reveal phone',
-                    style: TextStyle(fontSize: 11.5, color: MangalamTheme.muted),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: MangalamTheme.muted,
+                    ),
                   ),
                 ],
               ),
@@ -161,34 +179,44 @@ class _ChatScreenState extends State<ChatScreen> {
               actions: [
                 TextButton(
                   onPressed: _refresh,
-                  child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                  child: const Text(
+                    'Retry',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
             ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon))
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: MangalamTheme.maroon,
+                    ),
+                  )
                 : _messages.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Say hello 👋',
-                          style: TextStyle(color: MangalamTheme.muted, fontSize: 15),
-                        ),
-                      )
-                    : Container(
-                        color: MangalamTheme.cream,
-                        child: ListView.builder(
-                          controller: _scroll,
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                          itemCount: _messages.length,
-                          itemBuilder: (context, i) {
-                            final m = _messages[i] as Map<String, dynamic>;
-                            final isMine = m['sender_id'] == _apiChat.currentUserId;
-                            final body = m['body'] as String? ?? '';
-                            return _Bubble(body: body, mine: isMine);
-                          },
-                        ),
+                ? const Center(
+                    child: Text(
+                      'Say hello 👋',
+                      style: TextStyle(
+                        color: MangalamTheme.muted,
+                        fontSize: 15,
                       ),
+                    ),
+                  )
+                : Container(
+                    color: MangalamTheme.cream,
+                    child: ListView.builder(
+                      controller: _scroll,
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, i) {
+                        final m = _messages[i] as Map<String, dynamic>;
+                        final isMine = m['sender_id'] == _apiChat.currentUserId;
+                        final body = m['body'] as String? ?? '';
+                        return _Bubble(body: body, mine: isMine);
+                      },
+                    ),
+                  ),
           ),
           SafeArea(
             child: Container(
@@ -204,12 +232,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       child: Row(
                         children: [
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Iconsax.add_circle,
-                                color: MangalamTheme.maroon),
-                            onPressed: () {},
-                          ),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: TextField(
                               controller: _text,
@@ -239,7 +262,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: const SizedBox(
                         width: 48,
                         height: 48,
-                        child: Icon(Iconsax.send_1, color: Colors.white, size: 20),
+                        child: Icon(
+                          Iconsax.send_1,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
@@ -281,8 +308,12 @@ class _Bubble extends StatelessWidget {
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),
-            bottomLeft: mine ? const Radius.circular(18) : const Radius.circular(4),
-            bottomRight: mine ? const Radius.circular(4) : const Radius.circular(18),
+            bottomLeft: mine
+                ? const Radius.circular(18)
+                : const Radius.circular(4),
+            bottomRight: mine
+                ? const Radius.circular(4)
+                : const Radius.circular(18),
           ),
           boxShadow: [
             BoxShadow(

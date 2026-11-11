@@ -13,7 +13,8 @@ class DiscoverTab extends StatefulWidget {
   State<DiscoverTab> createState() => _DiscoverTabState();
 }
 
-class _DiscoverTabState extends State<DiscoverTab> with SingleTickerProviderStateMixin {
+class _DiscoverTabState extends State<DiscoverTab>
+    with SingleTickerProviderStateMixin {
   final _api = ApiClient();
   late TabController _tabController;
   List<dynamic>? _items;
@@ -48,7 +49,8 @@ class _DiscoverTabState extends State<DiscoverTab> with SingleTickerProviderStat
     });
     try {
       final tab = _tabController.index == 0 ? 'all' : 'shortlist';
-      final json = await _api.get('/v1/matches', {'tab': tab}) as Map<String, dynamic>;
+      final json =
+          await _api.get('/v1/matches', {'tab': tab}) as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
         _items = json['items'] as List<dynamic>?;
@@ -65,14 +67,21 @@ class _DiscoverTabState extends State<DiscoverTab> with SingleTickerProviderStat
 
   Future<void> _interaction(String id, String action) async {
     try {
-      await _api.post('/v1/interactions', {'to_profile_id': id, 'action': action});
+      await _api.post('/v1/interactions', {
+        'to_profile_id': id,
+        'action': action,
+      });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_actionMessage(action))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_actionMessage(action))));
       }
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -134,14 +143,17 @@ class _DiscoverTabState extends State<DiscoverTab> with SingleTickerProviderStat
       );
     }
     if (_loading && _items == null) {
-      return const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon));
+      return const Center(
+        child: CircularProgressIndicator(color: MangalamTheme.maroon),
+      );
     }
     final items = _items ?? [];
     if (items.isEmpty) {
       return MangalamEmptyState(
         icon: Iconsax.heart_search,
         title: 'No new matches nearby',
-        subtitle: 'Try adjusting your preferences or check back later for new profiles.',
+        subtitle:
+            'Try adjusting your preferences or check back later for new profiles.',
         action: OutlinedButton.icon(
           onPressed: _load,
           icon: const Icon(Iconsax.refresh),
@@ -152,29 +164,51 @@ class _DiscoverTabState extends State<DiscoverTab> with SingleTickerProviderStat
     return RefreshIndicator(
       color: MangalamTheme.maroon,
       onRefresh: _load,
-      child: ListView.builder(
-        padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 120),
-        itemCount: items.length,
-        itemBuilder: (context, i) {
-          final m = items[i] as Map<String, dynamic>;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: _ProfileCard(
-              data: m,
-              onLike: () => _interaction(m['id'] as String, 'like'),
-              onPass: () => _interaction(m['id'] as String, 'pass'),
-              onShortlist: () => _interaction(m['id'] as String, 'shortlist'),
-              onView: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => ProfileDetailScreen(profileId: m['id'] as String),
-                  ),
-                );
-                if (mounted) await _load();
-              },
+      child: Stack(
+        children: [
+          ListView.builder(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              _loading ? 20 : 12,
+              16,
+              MediaQuery.of(context).padding.bottom + 120,
             ),
-          );
-        },
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final m = items[i] as Map<String, dynamic>;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _ProfileCard(
+                  data: m,
+                  onLike: () => _interaction(m['id'] as String, 'like'),
+                  onPass: () => _interaction(m['id'] as String, 'pass'),
+                  onShortlist: () =>
+                      _interaction(m['id'] as String, 'shortlist'),
+                  onView: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            ProfileDetailScreen(profileId: m['id'] as String),
+                      ),
+                    );
+                    if (mounted) await _load();
+                  },
+                ),
+              );
+            },
+          ),
+          if (_loading)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                color: MangalamTheme.maroon,
+                backgroundColor: MangalamTheme.maroon.withValues(alpha: 0.08),
+                minHeight: 2,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -203,7 +237,8 @@ class _ProfileCard extends StatelessWidget {
     final active = data['active_recent'] == true;
     final diet = data['diet']?.toString() ?? '';
     final motherTongue = data['mother_tongue']?.toString() ?? '';
-    final photoUrls = (data['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
+    final photoUrls =
+        (data['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
 
     return Container(
       decoration: BoxDecoration(
@@ -267,7 +302,10 @@ class _ProfileCard extends StatelessWidget {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.55)],
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.55),
+                            ],
                           ),
                         ),
                         child: Column(
@@ -291,7 +329,9 @@ class _ProfileCard extends StatelessWidget {
                                   Text(
                                     '$age yrs',
                                     style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.92),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.92,
+                                      ),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -323,7 +363,8 @@ class _ProfileCard extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     if (diet.isNotEmpty) _tag(Iconsax.cup, diet),
-                    if (motherTongue.isNotEmpty) _tag(Iconsax.translate, motherTongue),
+                    if (motherTongue.isNotEmpty)
+                      _tag(Iconsax.translate, motherTongue),
                   ],
                 ),
               ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/api_client.dart';
 import '../../utils/formatting.dart';
@@ -14,7 +15,8 @@ class LikesTab extends StatefulWidget {
   State<LikesTab> createState() => _LikesTabState();
 }
 
-class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin {
+class _LikesTabState extends State<LikesTab>
+    with SingleTickerProviderStateMixin {
   final _api = ApiClient();
   late TabController _controller;
   int _reloadKey = 0;
@@ -63,7 +65,8 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
   }
 
   Future<List<dynamic>> _fetch() async {
-    final json = await _api.get('/v1/likes', {'tab': _tabParam}) as Map<String, dynamic>;
+    final json =
+        await _api.get('/v1/likes', {'tab': _tabParam}) as Map<String, dynamic>;
     return json['items'] as List<dynamic>? ?? [];
   }
 
@@ -88,7 +91,9 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
         future: _fetch(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon));
+            return const Center(
+              child: CircularProgressIndicator(color: MangalamTheme.maroon),
+            );
           }
           if (snap.hasError) {
             return MangalamEmptyState(
@@ -110,7 +115,12 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
             );
           }
           return ListView.separated(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 120),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              MediaQuery.of(context).padding.bottom + 120,
+            ),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, i) {
@@ -123,7 +133,9 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
                 onMessage: () => _openChat(profile),
                 onView: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => ProfileDetailScreen(profileId: profile['id'] as String? ?? ''),
+                    builder: (_) => ProfileDetailScreen(
+                      profileId: profile['id'] as String? ?? '',
+                    ),
                   ),
                 ),
               );
@@ -160,10 +172,13 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
     final id = profile['id'] as String? ?? '';
     final name = profile['display_name']?.toString() ?? 'Member';
     try {
-      final res = await _api.post('/v1/conversations', {
-        'other_profile_id': id,
-        'first_message': 'Hi $name, I saw your profile and wanted to connect.',
-      }) as Map<String, dynamic>;
+      final res =
+          await _api.post('/v1/conversations', {
+                'other_profile_id': id,
+                'first_message':
+                    'Hi $name, I saw your profile and wanted to connect.',
+              })
+              as Map<String, dynamic>;
       final cid = res['conversation_id'] as String?;
       if (cid != null && context.mounted) {
         await Navigator.of(context).push(
@@ -177,7 +192,9 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('You need a mutual match to start chat — open profile to connect.'),
+            content: Text(
+              'You need a mutual match to start chat — open profile to connect.',
+            ),
           ),
         );
         await Navigator.of(context).push(
@@ -215,7 +232,8 @@ class _ConnectionRow extends StatelessWidget {
     final age = profile['age'];
     final verified = profile['is_verified'] == true;
     final phone = profile['phone'] as String?;
-    final photoUrls = (profile['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
+    final photoUrls =
+        (profile['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
 
     final matchedAt = meta['matched_at'] as String?;
     final viewedAt = meta['viewed_at'] as String?;
@@ -252,11 +270,18 @@ class _ConnectionRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         name,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                     if (verified)
-                      const Icon(Iconsax.verify, size: 16, color: MangalamTheme.gold),
+                      const Icon(
+                        Iconsax.verify,
+                        size: 16,
+                        color: MangalamTheme.gold,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 3),
@@ -266,19 +291,29 @@ class _ConnectionRow extends StatelessWidget {
                     if (community.isNotEmpty) community,
                     if (lang.isNotEmpty) lang,
                   ].join(' · '),
-                  style: const TextStyle(fontSize: 12.5, color: MangalamTheme.muted),
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: MangalamTheme.muted,
+                  ),
                 ),
                 if (city.isNotEmpty || state.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Row(
                       children: [
-                        const Icon(Iconsax.location, size: 12, color: MangalamTheme.muted),
+                        const Icon(
+                          Iconsax.location,
+                          size: 12,
+                          color: MangalamTheme.muted,
+                        ),
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
                             '$city, $state',
-                            style: const TextStyle(fontSize: 12, color: MangalamTheme.muted),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: MangalamTheme.muted,
+                            ),
                           ),
                         ),
                       ],
@@ -311,7 +346,14 @@ class _ConnectionRow extends StatelessWidget {
                 ),
               ),
               IconButton(
-                onPressed: phone != null && phone.isNotEmpty ? () {} : null,
+                onPressed: phone != null && phone.isNotEmpty
+                    ? () async {
+                        final uri = Uri.parse(
+                          'tel:${phone.replaceAll(RegExp(r'\s'), '')}',
+                        );
+                        if (await canLaunchUrl(uri)) await launchUrl(uri);
+                      }
+                    : null,
                 icon: const Icon(Iconsax.call),
                 color: MangalamTheme.gold,
                 style: IconButton.styleFrom(

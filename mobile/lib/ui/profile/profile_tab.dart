@@ -26,6 +26,7 @@ class _ProfileTabState extends State<ProfileTab> {
   Map<String, dynamic>? _wallet;
   Map<String, dynamic>? _appSettings;
   String? _error;
+  bool _loading = true;
   bool _savingPhotos = false;
 
   String? get _supportEmail => _appSettings?['support_email'] as String?;
@@ -58,10 +59,14 @@ class _ProfileTabState extends State<ProfileTab> {
         _wallet = json['wallet'] as Map<String, dynamic>?;
         _appSettings = cfg?['settings'] as Map<String, dynamic>?;
         _error = null;
+        _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
@@ -79,8 +84,12 @@ class _ProfileTabState extends State<ProfileTab> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Contact support',
-                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                'Contact support',
+                style: Theme.of(
+                  ctx,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 12),
               if (wa != null && wa.isNotEmpty)
                 OutlinedButton.icon(
@@ -108,8 +117,10 @@ class _ProfileTabState extends State<ProfileTab> {
                   (phone == null || phone.isEmpty) &&
                   (wa == null || wa.isEmpty)) ...[
                 const SizedBox(height: 8),
-                const Text('Support contact not configured yet. Please try again later.',
-                    style: TextStyle(color: MangalamTheme.muted, fontSize: 13)),
+                const Text(
+                  'Support contact not configured yet. Please try again later.',
+                  style: TextStyle(color: MangalamTheme.muted, fontSize: 13),
+                ),
               ],
             ],
           ),
@@ -118,7 +129,9 @@ class _ProfileTabState extends State<ProfileTab> {
     );
     if (choice == null || !mounted) return;
     final uri = switch (choice) {
-      'whatsapp' => Uri.parse('https://wa.me/${wa!.replaceAll(RegExp(r'\D'), '')}'),
+      'whatsapp' => Uri.parse(
+        'https://wa.me/${wa!.replaceAll(RegExp(r'\D'), '')}',
+      ),
       'email' => Uri.parse('mailto:$email'),
       'call' => Uri.parse('tel:${phone!.replaceAll(RegExp(r'\s'), '')}'),
       _ => null,
@@ -141,8 +154,12 @@ class _ProfileTabState extends State<ProfileTab> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('App language',
-                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                'App language',
+                style: Theme.of(
+                  ctx,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 12),
               ...langs.map((code) {
                 return RadioListTile<String>(
@@ -167,7 +184,9 @@ class _ProfileTabState extends State<ProfileTab> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -179,12 +198,14 @@ class _ProfileTabState extends State<ProfileTab> {
       await _api.patch('/v1/me', {'photo_urls': urls});
       if (!mounted) return;
       setState(() => _profile?['photo_urls'] = urls);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Photos updated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Photos updated')));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
       if (mounted) setState(() => _savingPhotos = false);
@@ -228,7 +249,11 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
         ],
       ),
-      body: _error != null
+      body: _loading && _profile == null && _error == null
+          ? const Center(
+              child: CircularProgressIndicator(color: MangalamTheme.maroon),
+            )
+          : _error != null && _profile == null
           ? MangalamEmptyState(
               icon: Iconsax.warning_2,
               title: 'Could not load profile',
@@ -239,305 +264,384 @@ class _ProfileTabState extends State<ProfileTab> {
                 label: const Text('Retry'),
               ),
             )
-          : ListView(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                8,
-                20,
-                MediaQuery.of(context).padding.bottom + 132,
-              ),
-              children: [
-                // ── Hero photo + name ──
-                Center(
-                  child: SizedBox(
-                    width: 132,
-                    height: 132,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(66),
-                          child: ProfilePhoto(name: name, photoUrls: photoUrls),
+          : RefreshIndicator(
+              color: MangalamTheme.maroon,
+              onRefresh: _load,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  8,
+                  20,
+                  MediaQuery.of(context).padding.bottom + 132,
+                ),
+                children: [
+                  // ── Hero photo + name ──
+                  Center(
+                    child: SizedBox(
+                      width: 132,
+                      height: 132,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(66),
+                            child: ProfilePhoto(
+                              name: name,
+                              photoUrls: photoUrls,
+                            ),
+                          ),
+                          if (verified)
+                            Positioned(
+                              bottom: 2,
+                              right: 2,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: MangalamTheme.gold,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Iconsax.verify,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    name,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    email,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: MangalamTheme.muted,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      if (age != null) _pill(Iconsax.cake, '$age yrs'),
+                      if (community.isNotEmpty)
+                        _pill(Iconsax.profile_2user, community),
+                      if (lang.isNotEmpty) _pill(Iconsax.translate, lang),
+                      if (diet.isNotEmpty) _pill(Iconsax.cup, diet),
+                    ],
+                  ),
+                  if (city.isNotEmpty || state.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Iconsax.location,
+                            size: 16,
+                            color: MangalamTheme.muted,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$city, $state',
+                            style: const TextStyle(
+                              color: MangalamTheme.muted,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (occupation.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Iconsax.briefcase,
+                            size: 16,
+                            color: MangalamTheme.muted,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            occupation,
+                            style: const TextStyle(
+                              color: MangalamTheme.muted,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final ok = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(
+                          builder: (_) => const EditProfileScreen(),
                         ),
-                        if (verified)
-                          Positioned(
-                            bottom: 2,
-                            right: 2,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
+                      );
+                      if (ok == true && mounted) await _load();
+                    },
+                    icon: const Icon(Iconsax.edit),
+                    label: const Text('Edit profile'),
+                  ),
+                  const SizedBox(height: 12),
+                  _VerificationCard(
+                    status: _profile?['verification_status']?.toString(),
+                    note: _profile?['verification_note']?.toString(),
+                    onChanged: _load,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── Photos section ──
+                  MangalamSectionHeader(
+                    title: 'Your photos',
+                    icon: Iconsax.camera,
+                  ),
+                  const SizedBox(height: 12),
+                  PhotoPickerSection(
+                    photoUrls: photoUrls,
+                    onChanged: _savePhotos,
+                  ),
+                  if (_savingPhotos) const SizedBox(height: 8),
+                  const SizedBox(height: 24),
+
+                  // ── Menu card ──
+                  MangalamCard(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      children: [
+                        _MenuTile(
+                          icon: Iconsax.document_text,
+                          title: 'Premium biodata',
+                          subtitle: 'Export PDF (coming soon)',
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: MangalamTheme.gold.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'FREE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: MangalamTheme.gold,
+                              ),
+                            ),
+                          ),
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Biodata PDF export is coming soon',
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const Divider(height: 1, indent: 16),
+                        _MenuTile(
+                          icon: Iconsax.info_circle,
+                          title: 'Get help & support',
+                          subtitle:
+                              _supportEmail ??
+                              _supportPhone ??
+                              'Contact our team',
+                          onTap: _openSupport,
+                        ),
+                        const Divider(height: 1, indent: 16),
+                        _MenuTile(
+                          icon: Iconsax.global,
+                          title: 'App language',
+                          trailing: Text(
+                            _profile?['app_language']?.toString() ?? 'en',
+                            style: const TextStyle(color: MangalamTheme.muted),
+                          ),
+                          onTap: _changeLanguage,
+                        ),
+                        const Divider(height: 1, indent: 16),
+                        _MenuTile(
+                          icon: Iconsax.setting,
+                          title: 'Account settings',
+                          onTap: () async {
+                            final ok = await Navigator.of(context).push<bool>(
+                              MaterialPageRoute(
+                                builder: (_) => const EditProfileScreen(),
+                              ),
+                            );
+                            if (ok == true && mounted) await _load();
+                          },
+                        ),
+                        const Divider(height: 1, indent: 16),
+                        _MenuTile(
+                          icon: Iconsax.shield,
+                          title: 'Privacy Policy',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => LegalScreen(
+                                slug: 'privacy',
+                                title: 'Privacy Policy',
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 16),
+                        _MenuTile(
+                          icon: Iconsax.document_text,
+                          title: 'Terms of Service',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => LegalScreen(
+                                slug: 'terms',
+                                title: 'Terms of Service',
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 16),
+                        _MenuTile(
+                          icon: Iconsax.refresh_circle,
+                          title: 'Refund & Cancellation',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => LegalScreen(
+                                slug: 'refund',
+                                title: 'Refund & Cancellation',
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 16),
+                        _MenuTile(
+                          icon: Iconsax.info_circle,
+                          title: 'About Mangalam',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => LegalScreen(
+                                slug: 'about',
+                                title: 'About Mangalam',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── Premium card ──
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFFFFF8E1), Color(0xFFFFE9B0)],
+                      ),
+                      border: Border.all(
+                        color: MangalamTheme.gold.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Premium',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.all(6),
                               decoration: const BoxDecoration(
                                 color: MangalamTheme.gold,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Iconsax.verify,
-                                  color: Colors.white, size: 16),
+                              child: const Icon(
+                                Iconsax.crown,
+                                color: Colors.white,
+                                size: 22,
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  name,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  email,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: MangalamTheme.muted, fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    if (age != null) _pill(Iconsax.cake, '$age yrs'),
-                    if (community.isNotEmpty) _pill(Iconsax.profile_2user, community),
-                    if (lang.isNotEmpty) _pill(Iconsax.translate, lang),
-                    if (diet.isNotEmpty) _pill(Iconsax.cup, diet),
-                  ],
-                ),
-                if (city.isNotEmpty || state.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Iconsax.location, size: 16, color: MangalamTheme.muted),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$city, $state',
-                          style: const TextStyle(color: MangalamTheme.muted, fontSize: 13),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                if (occupation.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Iconsax.briefcase, size: 16, color: MangalamTheme.muted),
-                        const SizedBox(width: 4),
-                        Text(
-                          occupation,
-                          style: const TextStyle(color: MangalamTheme.muted, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: () async {
-                    final ok = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-                    );
-                    if (ok == true && mounted) await _load();
-                  },
-                  icon: const Icon(Iconsax.edit),
-                  label: const Text('Edit profile'),
-                ),
-                const SizedBox(height: 12),
-                _VerificationCard(
-                  status: _profile?['verification_status']?.toString(),
-                  note: _profile?['verification_note']?.toString(),
-                  onChanged: _load,
-                ),
-                const SizedBox(height: 24),
-
-                // ── Photos section ──
-                MangalamSectionHeader(title: 'Your photos', icon: Iconsax.camera),
-                const SizedBox(height: 12),
-                PhotoPickerSection(
-                  photoUrls: photoUrls,
-                  onChanged: _savePhotos,
-                ),
-                if (_savingPhotos) const SizedBox(height: 8),
-                const SizedBox(height: 24),
-
-                // ── Menu card ──
-                MangalamCard(
-                  padding: EdgeInsets.zero,
-                  child: Column(
-                    children: [
-                      _MenuTile(
-                        icon: Iconsax.document_text,
-                        title: 'Premium biodata',
-                        subtitle: 'Export PDF (coming soon)',
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: MangalamTheme.gold.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            'FREE',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: MangalamTheme.gold,
-                            ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Unlock unlimited contacts, advanced filters & more.',
+                          style: TextStyle(
+                            color: MangalamTheme.muted,
+                            fontSize: 13,
+                            height: 1.4,
                           ),
                         ),
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Biodata PDF export is coming soon')),
-                          );
-                        },
-                      ),
-                      const Divider(height: 1, indent: 16),
-                      _MenuTile(
-                        icon: Iconsax.info_circle,
-                        title: 'Get help & support',
-                        subtitle: _supportEmail ?? _supportPhone ?? 'Contact our team',
-                        onTap: _openSupport,
-                      ),
-                      const Divider(height: 1, indent: 16),
-                      _MenuTile(
-                        icon: Iconsax.global,
-                        title: 'App language',
-                        trailing: Text(
-                          _profile?['app_language']?.toString() ?? 'en',
-                          style: const TextStyle(color: MangalamTheme.muted),
-                        ),
-                        onTap: _changeLanguage,
-                      ),
-                      const Divider(height: 1, indent: 16),
-                      _MenuTile(
-                        icon: Iconsax.setting,
-                        title: 'Account settings',
-                        onTap: () async {
-                          final ok = await Navigator.of(context).push<bool>(
-                            MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-                          );
-                          if (ok == true && mounted) await _load();
-                        },
-                      ),
-                      const Divider(height: 1, indent: 16),
-                      _MenuTile(
-                        icon: Iconsax.shield,
-                        title: 'Privacy Policy',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => LegalScreen(slug: 'privacy', title: 'Privacy Policy'),
-                          ),
-                        ),
-                      ),
-                      const Divider(height: 1, indent: 16),
-                      _MenuTile(
-                        icon: Iconsax.document_text,
-                        title: 'Terms of Service',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => LegalScreen(slug: 'terms', title: 'Terms of Service'),
-                          ),
-                        ),
-                      ),
-                      const Divider(height: 1, indent: 16),
-                      _MenuTile(
-                        icon: Iconsax.refresh_circle,
-                        title: 'Refund & Cancellation',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => LegalScreen(slug: 'refund', title: 'Refund & Cancellation'),
-                          ),
-                        ),
-                      ),
-                      const Divider(height: 1, indent: 16),
-                      _MenuTile(
-                        icon: Iconsax.info_circle,
-                        title: 'About Mangalam',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => LegalScreen(slug: 'about', title: 'About Mangalam'),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Premium card ──
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFFFF8E1), Color(0xFFFFE9B0)],
-                    ),
-                    border: Border.all(color: MangalamTheme.gold.withValues(alpha: 0.4)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Premium',
-                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: MangalamTheme.gold,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Iconsax.crown, color: Colors.white, size: 22),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Unlock unlimited contacts, advanced filters & more.',
-                        style: TextStyle(color: MangalamTheme.muted, fontSize: 13, height: 1.4),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Iconsax.wallet, size: 18, color: MangalamTheme.maroon),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Contact balance: ${_wallet?['contact_credits'] ?? '—'}',
-                            style: const TextStyle(
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(
+                              Iconsax.wallet,
+                              size: 18,
                               color: MangalamTheme.maroon,
-                              fontWeight: FontWeight.w700,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Contact balance: ${_wallet?['contact_credits'] ?? '—'}',
+                              style: const TextStyle(
+                                color: MangalamTheme.maroon,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: () async {
+                            final ok = await _razorpay.rechargeContactCredits(
+                              context,
+                            );
+                            if (ok && mounted) await _load();
+                          },
+                          icon: const Icon(Iconsax.flash),
+                          label: const Text('Recharge now'),
+                        ),
+                        if (_wallet?['premium_until'] != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Valid till ${_wallet!['premium_until']}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: MangalamTheme.muted,
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: () async {
-                          final ok = await _razorpay.rechargeContactCredits(context);
-                          if (ok && mounted) await _load();
-                        },
-                        icon: const Icon(Iconsax.flash),
-                        label: const Text('Recharge now'),
-                      ),
-                      if (_wallet?['premium_until'] != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Valid till ${_wallet!['premium_until']}',
-                          style: const TextStyle(fontSize: 12, color: MangalamTheme.muted),
-                        ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }
@@ -586,7 +690,9 @@ class _MenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
       leading: Container(
         width: 38,
         height: 38,
@@ -596,18 +702,33 @@ class _MenuTile extends StatelessWidget {
         ),
         child: Icon(icon, size: 20, color: MangalamTheme.maroon),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+      title: Text(
+        title,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+      ),
       subtitle: subtitle != null
-          ? Text(subtitle!, style: const TextStyle(fontSize: 12.5, color: MangalamTheme.muted))
+          ? Text(
+              subtitle!,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: MangalamTheme.muted,
+              ),
+            )
           : null,
-      trailing: trailing ?? const Icon(Iconsax.arrow_right, color: MangalamTheme.muted),
+      trailing:
+          trailing ??
+          const Icon(Iconsax.arrow_right, color: MangalamTheme.muted),
       onTap: onTap,
     );
   }
 }
 
 class _VerificationCard extends StatelessWidget {
-  const _VerificationCard({required this.status, required this.note, required this.onChanged});
+  const _VerificationCard({
+    required this.status,
+    required this.note,
+    required this.onChanged,
+  });
 
   final String? status;
   final String? note;
@@ -637,7 +758,9 @@ class _VerificationCard extends StatelessWidget {
     } else if (isRejected) {
       tint = MangalamTheme.maroon;
       title = 'Verification rejected';
-      subtitle = note?.isNotEmpty == true ? note! : 'Please re-submit clear photos.';
+      subtitle = note?.isNotEmpty == true
+          ? note!
+          : 'Please re-submit clear photos.';
       icon = Iconsax.warning_2;
     } else {
       tint = MangalamTheme.maroon;
@@ -649,9 +772,9 @@ class _VerificationCard extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(18),
       onTap: () async {
-        await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const VerificationScreen()),
-        );
+        await Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const VerificationScreen()));
         onChanged();
       },
       child: Container(
@@ -677,13 +800,31 @@ class _VerificationCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: tint)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: tint,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: const TextStyle(fontSize: 12.5, color: MangalamTheme.muted, height: 1.35)),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: MangalamTheme.muted,
+                      height: 1.35,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Icon(Iconsax.arrow_right, color: MangalamTheme.muted, size: 20),
+            const Icon(
+              Iconsax.arrow_right,
+              color: MangalamTheme.muted,
+              size: 20,
+            ),
           ],
         ),
       ),
