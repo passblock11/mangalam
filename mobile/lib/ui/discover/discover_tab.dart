@@ -32,6 +32,12 @@ class _DiscoverTabState extends State<DiscoverTab>
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
+    // Clear the previous tab's items so a proper centered loader shows
+    // while the new tab fetches (instead of flashing the other tab's data).
+    setState(() {
+      _items = null;
+      _error = null;
+    });
     _load();
   }
 

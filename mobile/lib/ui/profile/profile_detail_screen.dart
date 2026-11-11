@@ -630,8 +630,14 @@ class _ContactBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: SizedBox(
-            width: double.infinity,
+          // Force a FINITE max width so the inner Row (and its Expanded /
+          // FilledButton children) never receive unbounded constraints from
+          // the bottomNavigationBar slot during layout. This is bulletproof
+          // regardless of what the parent passes down.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width,
+            ),
             child: contactVisible
                 ? Row(
                     children: [
