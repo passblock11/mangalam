@@ -164,7 +164,7 @@ export function VerificationsSection() {
                 </div>
               )}
 
-              {v.verification_status === "pending" && (
+              {(v.verification_status === "pending" || v.verification_status === "rejected") && (
                 <div className="flex gap-2 border-t border-[var(--border)] bg-zinc-50/60 p-3">
                   <Button
                     variant="success"
@@ -173,16 +173,19 @@ export function VerificationsSection() {
                     disabled={busy === v.id}
                     onClick={() => void approve(v.id)}
                   >
-                    <ShieldCheck size={14} /> Approve
+                    <ShieldCheck size={14} /> {v.verification_status === "rejected" ? "Approve" : "Approve"}
                   </Button>
                   <Button
                     variant="danger"
                     size="sm"
                     className="flex-1"
                     disabled={busy === v.id}
-                    onClick={() => setRejectFor(v.id)}
+                    onClick={() => {
+                      setRejectNote(v.verification_note ?? "");
+                      setRejectFor(v.id);
+                    }}
                   >
-                    <ShieldAlert size={14} /> Reject
+                    <ShieldAlert size={14} /> {v.verification_status === "rejected" ? "Update reason" : "Reject"}
                   </Button>
                 </div>
               )}
