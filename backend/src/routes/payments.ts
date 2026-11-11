@@ -34,6 +34,36 @@ function razorpayConfig():
   return { keyId, keySecret, pricePaisePerCredit };
 }
 
+/** DB-driven Razorpay config (admin-managed) with env-var fallback. */
+async function razorpayConfigAsync(): Promise<
+  | { keyId: string; keySecret: string; pricePaisePerCredit: number }
+  | { error: string }
+> {
+  try {
+    const sb = getSupabaseAdmin();
+    const { data } = await sb
+      .from("app_settings")
+      .select("razorpay_key_id,razorpay_key_secret,active_payment_method")
+      .eq("id", 1)
+      .maybeSingle();
+    if (data?.razorpay_key_id && data?.razorpay_key_secret) {
+      const rawPrice = env("CONTACT_CREDIT_PRICE_PAISE");
+      const pricePaisePerCredit = rawPrice ? Number.parseInt(rawPrice, 10) : 100;
+      if (!Number.isFinite(pricePaisePerCredit) || pricePaisePerCredit < 1) {
+        return { error: "CONTACT_CREDIT_PRICE_PAISE is invalid" };
+      }
+      return {
+        keyId: data.razorpay_key_id,
+        keySecret: data.razorpay_key_secret,
+        pricePaisePerCredit,
+      };
+    }
+  } catch {
+    // ignore DB errors, fall through to env
+  }
+  return razorpayConfig();
+}
+
 async function hmacSha256Hex(secret: string, message: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -77,7 +107,7 @@ export const paymentsRouter = new Hono();
 paymentsRouter.use("*", requireAuth);
 
 paymentsRouter.post("/razorpay/order", async (c) => {
-  const cfg = razorpayConfig();
+  const cfg = await razorpayConfigAsync();
   if ("error" in cfg) {
     return c.json({ error: cfg.error }, 503);
   }
@@ -127,7 +157,7 @@ paymentsRouter.post("/razorpay/order", async (c) => {
 });
 
 paymentsRouter.post("/razorpay/verify", async (c) => {
-  const cfg = razorpayConfig();
+  const cfg = await razorpayConfigAsync();
   if ("error" in cfg) {
     return c.json({ error: cfg.error }, 503);
   }

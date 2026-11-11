@@ -8,6 +8,7 @@ import '../../services/razorpay_checkout.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_picker_section.dart';
 import 'edit_profile_screen.dart';
+import 'legal_screen.dart';
 import 'verification_screen.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -276,6 +277,46 @@ class _ProfileTabState extends State<ProfileTab> {
                       ),
                       const Divider(height: 1, indent: 16),
                       _MenuTile(icon: Iconsax.setting, title: 'Account settings'),
+                      const Divider(height: 1, indent: 16),
+                      _MenuTile(
+                        icon: Iconsax.shield,
+                        title: 'Privacy Policy',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => LegalScreen(slug: 'privacy', title: 'Privacy Policy'),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 16),
+                      _MenuTile(
+                        icon: Iconsax.document_text,
+                        title: 'Terms of Service',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => LegalScreen(slug: 'terms', title: 'Terms of Service'),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 16),
+                      _MenuTile(
+                        icon: Iconsax.refresh_circle,
+                        title: 'Refund & Cancellation',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => LegalScreen(slug: 'refund', title: 'Refund & Cancellation'),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 16),
+                      _MenuTile(
+                        icon: Iconsax.info_circle,
+                        title: 'About Mangalam',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => LegalScreen(slug: 'about', title: 'About Mangalam'),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),

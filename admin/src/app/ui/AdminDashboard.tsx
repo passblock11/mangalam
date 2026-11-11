@@ -9,14 +9,16 @@ import {
   Wallet,
   Heart,
   Menu,
+  Settings,
 } from "lucide-react";
 import { OverviewSection } from "./OverviewSection";
 import { VerificationsSection } from "./VerificationsSection";
 import { UsersSection } from "./UsersSection";
 import { ReportsSection } from "./ReportsSection";
 import { PaymentsSection } from "./PaymentsSection";
+import { SettingsSection } from "./SettingsSection";
 
-type Tab = "overview" | "verifications" | "users" | "reports" | "payments";
+type Tab = "overview" | "verifications" | "users" | "reports" | "payments" | "settings";
 
 const NAV: { id: Tab; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -24,6 +26,7 @@ const NAV: { id: Tab; label: string; icon: React.ComponentType<{ size?: number }
   { id: "users", label: "Users", icon: Users },
   { id: "reports", label: "Reports", icon: Flag },
   { id: "payments", label: "Payments", icon: Wallet },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 export function AdminDashboard() {
@@ -81,6 +84,7 @@ export function AdminDashboard() {
           {tab === "users" && <UsersSection />}
           {tab === "reports" && <ReportsSection />}
           {tab === "payments" && <PaymentsSection />}
+          {tab === "settings" && <SettingsSection />}
         </div>
       </main>
     </div>
