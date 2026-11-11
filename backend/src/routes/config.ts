@@ -9,7 +9,7 @@ export const configRouter = new Hono();
 // ─────────────────────────────────────────────────────────────────────────────
 // Public bootstrap config (no auth) — safe fields only
 // ─────────────────────────────────────────────────────────────────────────────
-configRouter.get("/config", async (c) => {
+configRouter.get("/", async (c) => {
   const sb = getSupabaseAdmin();
   const { data: settings } = await sb
     .from("app_settings")
