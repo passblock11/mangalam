@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/api_client.dart';
+import '../../services/oauth_sign_in.dart';
 import '../../services/razorpay_checkout.dart';
 import 'edit_profile_screen.dart';
 
@@ -39,12 +40,14 @@ class _ProfileTabState extends State<ProfileTab> {
   Future<void> _load() async {
     try {
       final json = await _api.get('/v1/me') as Map<String, dynamic>;
+      if (!mounted) return;
       setState(() {
         _profile = json['profile'] as Map<String, dynamic>?;
         _wallet = json['wallet'] as Map<String, dynamic>?;
         _error = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     }
   }
@@ -73,7 +76,7 @@ class _ProfileTabState extends State<ProfileTab> {
           title: const Text('Profile'),
           actions: [
             IconButton(
-              onPressed: () => Supabase.instance.client.auth.signOut(),
+              onPressed: () => OAuthSignIn.signOutCompletely(),
               icon: const Icon(Icons.logout),
               tooltip: 'Sign out',
             ),
@@ -148,7 +151,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       final ok = await Navigator.of(context).push<bool>(
                         MaterialPageRoute(builder: (_) => const EditProfileScreen()),
                       );
-                      if (ok == true) await _load();
+                      if (ok == true && mounted) await _load();
                     },
                     child: const Text('Update profile'),
                   ),

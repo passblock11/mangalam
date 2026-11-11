@@ -13,6 +13,7 @@ import { profilesRouter } from "./routes/profiles.js";
 import { blocksRouter } from "./routes/blocks.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { authRouter } from "./routes/auth.js";
+import { publicRouter } from "./routes/public.js";
 
 export const app = new Hono();
 
@@ -27,6 +28,7 @@ app.use(
 
 const v1 = new Hono()
   .route("/health", healthRouter)
+  .route("/public", publicRouter)
   .route("/auth", authRouter)
   .route("/me", meRouter)
   .route("/matches", matchesRouter)

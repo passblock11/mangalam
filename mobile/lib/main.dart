@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config.dart';
+import 'core/google_auth_config.dart';
+import 'services/oauth_sign_in.dart';
 import 'ui/auth/auth_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await GoogleAuthConfig.hydrate();
 
   if (AppConfig.hasSupabase) {
     await Supabase.initialize(
@@ -15,6 +19,7 @@ Future<void> main() async {
         authFlowType: AuthFlowType.pkce,
       ),
     );
+    await OAuthSignIn.ensureGoogleInitialized();
   }
 
   runApp(const MangalamApp());

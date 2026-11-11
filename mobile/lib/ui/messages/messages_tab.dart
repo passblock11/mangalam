@@ -26,6 +26,7 @@ class _MessagesTabState extends State<MessagesTab>
 
   void _onTab() {
     if (_tab.indexIsChanging) return;
+    if (!mounted) return;
     setState(() => _key++);
   }
 

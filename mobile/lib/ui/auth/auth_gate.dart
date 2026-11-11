@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../services/api_client.dart';
+import '../../services/api_client.dart' show ApiClient, ApiException;
 import '../home/home_shell.dart';
 import 'login_screen.dart';
 import 'onboarding_screen.dart';
@@ -42,6 +42,11 @@ class _AuthGateState extends State<AuthGate> {
       final p = json['profile'] as Map<String, dynamic>?;
       final needs = p == null || !_profileReady(p);
       if (mounted) setState(() => _needsOnboarding = needs);
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 && mounted) {
+        await Supabase.instance.client.auth.signOut();
+      }
+      if (mounted) setState(() => _needsOnboarding = true);
     } catch (_) {
       if (mounted) setState(() => _needsOnboarding = true);
     } finally {
@@ -54,14 +59,20 @@ class _AuthGateState extends State<AuthGate> {
     final gender = p['gender'] as String?;
     final dob = p['date_of_birth'] as String?;
     final city = (p['city'] as String?)?.trim();
-    return name != null &&
-        name.isNotEmpty &&
-        gender != null &&
-        gender.isNotEmpty &&
-        dob != null &&
-        dob.isNotEmpty &&
-        city != null &&
-        city.isNotEmpty;
+    final religion = p['religion'] as String?;
+    final tongue = p['mother_tongue'] as String?;
+    final diet = p['diet'] as String?;
+    final marital = p['marital_status'] as String?;
+    final profileFor = p['profile_for'] as String?;
+    return name != null && name.isNotEmpty &&
+        gender != null && gender.isNotEmpty &&
+        dob != null && dob.isNotEmpty &&
+        city != null && city.isNotEmpty &&
+        religion != null && religion.isNotEmpty &&
+        tongue != null && tongue.isNotEmpty &&
+        diet != null && diet.isNotEmpty &&
+        marital != null && marital.isNotEmpty &&
+        profileFor != null && profileFor.isNotEmpty;
   }
 
   void _onOnboardingDone() {

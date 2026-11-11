@@ -86,6 +86,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final json = await _api.get('/v1/me') as Map<String, dynamic>;
@@ -133,6 +134,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _save() async {
+    if (!mounted) return;
     setState(() => _saving = true);
     try {
       final h = int.tryParse(_height.text.trim());

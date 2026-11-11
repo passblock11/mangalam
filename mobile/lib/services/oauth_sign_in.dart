@@ -1,70 +1,78 @@
-import 'dart:convert';
-import 'dart:math';
-
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../core/config.dart';
+
+import '../core/google_auth_config.dart';
 import 'api_client.dart';
 
-/// Google & Apple native sign-in → Supabase session (no SMS / DLT).
+/// **Mobile-native** Google → Supabase (`google_sign_in` + `signInWithIdToken`).
 ///
-/// Google flow follows:
+/// Supabase Flutter **mobile** guide (not web OAuth):
 /// https://supabase.com/docs/guides/auth/social-sign-in/auth-google?platform=flutter-mobile
 class OAuthSignIn {
   static const _googleScopes = ['email', 'profile'];
 
   static bool _googleReady = false;
 
+  /// Call once at startup (see `main.dart`).
   static Future<void> ensureGoogleInitialized() async {
-    if (_googleReady || !AppConfig.hasGoogleOAuth) return;
+    if (_googleReady || kIsWeb || !GoogleAuthConfig.isReadyForNative) return;
+
+    final iosClient = defaultTargetPlatform == TargetPlatform.iOS
+        ? GoogleAuthConfig.iosClientId
+        : null;
+
     await GoogleSignIn.instance.initialize(
-      serverClientId: AppConfig.googleWebClientId,
-      clientId: AppConfig.googleIosClientId.isEmpty
-          ? null
-          : AppConfig.googleIosClientId,
+      serverClientId: GoogleAuthConfig.webClientId,
+      clientId: iosClient,
     );
     _googleReady = true;
   }
 
   static Future<void> signInWithGoogle() async {
-    if (_canTryGoogleNative()) {
-      await ensureGoogleInitialized();
-      if (GoogleSignIn.instance.supportsAuthenticate()) {
-        try {
-          await _nativeGoogleSignIn();
-          return;
-        } on GoogleSignInException catch (e) {
-          if (e.code == GoogleSignInExceptionCode.canceled ||
-              e.code == GoogleSignInExceptionCode.interrupted) {
-            return;
-          }
-          rethrow;
-        }
+    if (kIsWeb) {
+      throw const OAuthConfigException(
+        'This build targets mobile. Use the iOS/Android app for Google sign-in.',
+      );
+    }
+
+    await GoogleAuthConfig.hydrate();
+
+    if (!GoogleAuthConfig.isReadyForNative) {
+      throw OAuthConfigException(GoogleAuthConfig.setupInstructions);
+    }
+
+    await ensureGoogleInitialized();
+
+    if (!GoogleSignIn.instance.supportsAuthenticate()) {
+      throw const OAuthConfigException(
+        'Google Sign-In is not supported on this platform.',
+      );
+    }
+
+    try {
+      await _nativeGoogleSignIn();
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted) {
+        return;
       }
+      throw OAuthConfigException(_googleSignInMessage(e));
     }
-    await _signInWithOAuthBrowser(OAuthProvider.google);
   }
 
-  static bool _canTryGoogleNative() {
-    if (!AppConfig.hasGoogleOAuth || kIsWeb) return false;
-    if (defaultTargetPlatform == TargetPlatform.iOS &&
-        !AppConfig.hasGoogleIosClient) {
-      return false;
-    }
-    return true;
+  /// Sign out Supabase + Google so the next login can pick any account.
+  static Future<void> signOutCompletely() async {
+    await GoogleSignIn.instance.signOut();
+    await Supabase.instance.client.auth.signOut();
   }
 
+  /// Interactive sign-in only (no silent reuse of the device default account).
   static Future<void> _nativeGoogleSignIn() async {
     final googleSignIn = GoogleSignIn.instance;
 
-    final GoogleSignInAccount? existing =
-        await googleSignIn.attemptLightweightAuthentication();
-    final GoogleSignInAccount googleUser =
-        existing ?? await googleSignIn.authenticate();
+    await googleSignIn.signOut();
+    final GoogleSignInAccount googleUser = await googleSignIn.authenticate();
 
     final authorization =
         await googleUser.authorizationClient.authorizationForScopes(
@@ -74,7 +82,9 @@ class OAuthSignIn {
 
     final idToken = googleUser.authentication.idToken;
     if (idToken == null || idToken.isEmpty) {
-      throw const OAuthConfigException('Google did not return an ID token.');
+      throw const OAuthConfigException(
+        'Google did not return an ID token. Check Web + Android/iOS client IDs in Google Cloud and Supabase.',
+      );
     }
 
     await Supabase.instance.client.auth.signInWithIdToken(
@@ -85,79 +95,14 @@ class OAuthSignIn {
     await _syncProfileName(googleUser.displayName);
   }
 
-  static Future<void> signInWithApple() async {
-    if (await isAppleSignInAvailable) {
-      try {
-        await _signInWithAppleNative();
-        return;
-      } on SignInWithAppleAuthorizationException catch (e) {
-        if (e.code != AuthorizationErrorCode.canceled) rethrow;
-        return;
-      } on PlatformException catch (e) {
-        if (e.code == 'sign_in_canceled') return;
-        // Fall back to browser OAuth (e.g. misconfigured entitlement).
-      }
+  static String _googleSignInMessage(GoogleSignInException e) {
+    final detail = e.description ?? e.toString();
+    if (detail.contains('10') || detail.toLowerCase().contains('developer')) {
+      return '${GoogleAuthConfig.setupInstructions}\n\n'
+          'Android tip: add debug SHA-1 to the Google Cloud **Android** OAuth client '
+          '(run `cd mobile && ./scripts/android_sha1.sh`).';
     }
-    await _signInWithOAuthBrowser(OAuthProvider.apple);
-  }
-
-  static Future<void> _signInWithOAuthBrowser(OAuthProvider provider) async {
-    final launched = await Supabase.instance.client.auth.signInWithOAuth(
-      provider,
-      redirectTo: AppConfig.oauthRedirectUrl,
-      authScreenLaunchMode: LaunchMode.externalApplication,
-    );
-    if (!launched) {
-      throw OAuthConfigException(
-        'Could not open ${provider.name} sign-in. Enable the provider in Supabase and add redirect URL ${AppConfig.oauthRedirectUrl}',
-      );
-    }
-  }
-
-  static Future<void> _signInWithAppleNative() async {
-
-    final rawNonce = _generateNonce();
-    final hashedNonce = sha256.convert(utf8.encode(rawNonce)).toString();
-
-    final credential = await SignInWithApple.getAppleIDCredential(
-      scopes: const [
-        AppleIDAuthorizationScopes.email,
-        AppleIDAuthorizationScopes.fullName,
-      ],
-      nonce: hashedNonce,
-    );
-
-    final idToken = credential.identityToken;
-    if (idToken == null || idToken.isEmpty) {
-      throw const OAuthConfigException('Apple did not return an identity token.');
-    }
-
-    await Supabase.instance.client.auth.signInWithIdToken(
-      provider: OAuthProvider.apple,
-      idToken: idToken,
-      nonce: rawNonce,
-    );
-
-    final parts = <String>[
-      if (credential.givenName != null) credential.givenName!,
-      if (credential.familyName != null) credential.familyName!,
-    ];
-    final appleName = parts.join(' ').trim();
-    if (appleName.isNotEmpty) {
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(data: {'full_name': appleName}),
-      );
-    }
-    await _syncProfileName(appleName.isNotEmpty ? appleName : null);
-  }
-
-  static Future<bool> get isAppleSignInAvailable async {
-    if (kIsWeb) return false;
-    try {
-      return await SignInWithApple.isAvailable();
-    } on PlatformException {
-      return false;
-    }
+    return detail;
   }
 
   static Future<void> _syncProfileName(String? name) async {
@@ -173,14 +118,6 @@ class OAuthSignIn {
     } catch (_) {
       // Profile row is created by DB trigger; name can be set later in edit profile.
     }
-  }
-
-  static String _generateNonce([int length = 32]) {
-    const charset =
-        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
-    final random = Random.secure();
-    return List.generate(length, (_) => charset[random.nextInt(charset.length)])
-        .join();
   }
 }
 

@@ -8,6 +8,7 @@ const patchSchema = z
     display_name: z.string().min(1).max(120).optional(),
     date_of_birth: z.string().optional(),
     gender: z.enum(["male", "female", "other"]).optional(),
+    religion: z.string().max(80).optional(),
     community: z.string().max(120).optional(),
     mother_tongue: z.string().max(80).optional(),
     diet: z.string().max(80).optional(),

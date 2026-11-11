@@ -28,17 +28,20 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final json = await _api.get('/v1/profiles/${widget.profileId}') as Map<String, dynamic>;
+      if (!mounted) return;
       setState(() {
         _data = json['profile'] as Map<String, dynamic>?;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;

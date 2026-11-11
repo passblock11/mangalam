@@ -26,6 +26,7 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
 
   void _onTab() {
     if (_controller.indexIsChanging) return;
+    if (!mounted) return;
     setState(() => _reloadKey++);
   }
 

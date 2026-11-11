@@ -1,0 +1,6 @@
+mobile
+admin
+.git
+**/.dart_tool
+**/build
+**/node_modules

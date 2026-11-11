@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../core/config.dart';
+import '../../core/google_auth_config.dart';
 import '../../services/oauth_sign_in.dart';
-import 'phone_otp_sheet.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,20 +16,22 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _busy = false;
   String? _error;
-  bool _appleAvailable = false;
+  bool _googleReady = GoogleAuthConfig.isReadyForNative;
 
   @override
   void initState() {
     super.initState();
-    _loadAppleAvailability();
-    if (AppConfig.hasGoogleOAuth) {
-      OAuthSignIn.ensureGoogleInitialized();
-    }
+    unawaited(_primeGoogle());
   }
 
-  Future<void> _loadAppleAvailability() async {
-    final ok = await OAuthSignIn.isAppleSignInAvailable;
-    if (mounted) setState(() => _appleAvailable = ok);
+  Future<void> _primeGoogle() async {
+    await GoogleAuthConfig.hydrate();
+    if (mounted && GoogleAuthConfig.hasWebClient) {
+      await OAuthSignIn.ensureGoogleInitialized();
+    }
+    if (mounted) {
+      setState(() => _googleReady = GoogleAuthConfig.isReadyForNative);
+    }
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -47,23 +50,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _openPhoneOtp() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (context) => const PhoneOtpSheet(),
-    );
-  }
-
   String _friendlyError(Object e) {
     final raw = e.toString();
     if (raw.contains('canceled') || raw.contains('Cancelled')) {
       return 'Sign-in was cancelled.';
-    }
-    if (raw.contains('DLT') || raw.contains('MSG91')) {
-      return 'Phone SMS needs DLT setup. Prefer Google or Apple above.';
     }
     return raw.replaceFirst('ApiException(', '').replaceAll('): ', ': ');
   }
@@ -72,6 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final googleReady = _googleReady;
 
     return Scaffold(
       body: SafeArea(
@@ -96,7 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Find your match. Sign in in seconds.',
+                    'Sign in with Google.',
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: cs.onSurfaceVariant,
                       height: 1.35,
@@ -104,69 +95,32 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 40),
-                  _SocialButton(
-                    label: 'Continue with Google',
-                    icon: Icons.g_mobiledata_rounded,
-                    onPressed: _busy
+                  FilledButton.icon(
+                    onPressed: (_busy || !AppConfig.hasSupabase || !googleReady)
                         ? null
                         : () => _run(OAuthSignIn.signInWithGoogle),
-                    outlined: true,
-                  ),
-                  const SizedBox(height: 12),
-                  if (_appleAvailable)
-                    SignInWithAppleButton(
-                      height: 52,
-                      borderRadius: BorderRadius.circular(12),
-                      onPressed: _busy
-                          ? null
-                          : () => _run(OAuthSignIn.signInWithApple),
-                    )
-                  else
-                    _SocialButton(
-                      label: 'Continue with Apple',
-                      icon: Icons.apple,
-                      onPressed: _busy
-                          ? null
-                          : () => _run(OAuthSignIn.signInWithApple),
-                      outlined: true,
+                    icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
+                    label: const Text(
+                      'Continue with Google',
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
-                  const SizedBox(height: 28),
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: cs.outlineVariant)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          'or',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                      Expanded(child: Divider(color: cs.outlineVariant)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : _openPhoneOtp,
-                    icon: const Icon(Icons.sms_outlined, size: 20),
-                    label: const Text('Continue with phone OTP'),
-                    style: OutlinedButton.styleFrom(
+                    style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(52),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Phone OTP needs India DLT on MSG91. Google & Apple work without SMS.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: cs.outline,
-                      height: 1.3,
+                  if (!googleReady && _error == null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      GoogleAuthConfig.setupInstructions,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        height: 1.35,
+                      ),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 20),
                     Material(
@@ -208,51 +162,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SocialButton extends StatelessWidget {
-  const _SocialButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.outlined = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback? onPressed;
-  final bool outlined;
-
-  @override
-  Widget build(BuildContext context) {
-    final child = Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, size: 26),
-        const SizedBox(width: 10),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-      ],
-    );
-    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
-    if (outlined) {
-      return OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
-          shape: shape,
-        ),
-        child: child,
-      );
-    }
-    return FilledButton(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
-        shape: shape,
-      ),
-      child: child,
     );
   }
 }

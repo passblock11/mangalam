@@ -37,6 +37,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -44,11 +45,13 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final json = await _apiChat.get('/v1/conversations/${widget.conversationId}/messages')
           as Map<String, dynamic>;
+      if (!mounted) return;
       setState(() {
         _messages = json['messages'] as List<dynamic>? ?? [];
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;

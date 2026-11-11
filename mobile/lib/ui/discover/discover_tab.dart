@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/api_client.dart';
+import '../../services/oauth_sign_in.dart';
 import '../profile/profile_detail_screen.dart';
 
 enum DiscoverMode { all, shortlist }
@@ -42,6 +42,7 @@ class _DiscoverTabState extends State<DiscoverTab>
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -50,11 +51,13 @@ class _DiscoverTabState extends State<DiscoverTab>
       final tab = _tabController.index == 0 ? 'all' : 'shortlist';
       final json =
           await _api.get('/v1/matches', {'tab': tab}) as Map<String, dynamic>;
+      if (!mounted) return;
       setState(() {
         _items = json['items'] as List<dynamic>?;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -91,7 +94,7 @@ class _DiscoverTabState extends State<DiscoverTab>
           title: const Text('Discover'),
           actions: [
             IconButton(
-              onPressed: () => Supabase.instance.client.auth.signOut(),
+              onPressed: () => OAuthSignIn.signOutCompletely(),
               icon: const Icon(Icons.logout),
               tooltip: 'Sign out',
             ),
