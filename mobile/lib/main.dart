@@ -5,6 +5,7 @@ import 'core/config.dart';
 import 'core/google_auth_config.dart';
 import 'services/oauth_sign_in.dart';
 import 'ui/auth/auth_gate.dart';
+import 'ui/core/branded_splash.dart';
 import 'ui/core/mangalam_theme.dart';
 
 Future<void> main() async {
@@ -35,7 +36,7 @@ class MangalamApp extends StatelessWidget {
       title: 'Mangalam',
       debugShowCheckedModeBanner: false,
       theme: MangalamTheme.light(),
-      home: const _Root(),
+      home: BrandedSplash(next: (_) => const _Root()),
     );
   }
 }

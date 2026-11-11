@@ -76,12 +76,17 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Stack(
                 children: [
                   Container(
-                    decoration: const BoxDecoration(gradient: MangalamTheme.heroGradient),
+                    decoration: const BoxDecoration(
+                      gradient: MangalamTheme.heroGradient,
+                    ),
                   ),
                   SafeArea(
                     bottom: false,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 24,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -195,13 +200,18 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: MangalamTheme.maroon.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: MangalamTheme.maroon.withValues(alpha: 0.25),
+                              color: MangalamTheme.maroon.withValues(
+                                alpha: 0.25,
+                              ),
                             ),
                           ),
                           child: Row(
                             children: [
-                              Icon(Iconsax.warning_2,
-                                  size: 20, color: MangalamTheme.maroon),
+                              Icon(
+                                Iconsax.warning_2,
+                                size: 20,
+                                color: MangalamTheme.maroon,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
@@ -277,7 +287,10 @@ class _GoogleButton extends StatelessWidget {
                 const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: MangalamTheme.maroon),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: MangalamTheme.maroon,
+                  ),
                 )
               else
                 const SizedBox(width: 22, height: 22, child: GoogleGLogo()),
@@ -359,11 +372,7 @@ class _Mandala extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(
-              Iconsax.heart,
-              color: Colors.white,
-              size: 26,
-            ),
+            child: const Icon(Iconsax.heart, color: Colors.white, size: 26),
           ),
         ],
       ),
@@ -377,10 +386,7 @@ class GoogleGLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _GoogleGPainter(),
-      size: const Size(22, 22),
-    );
+    return CustomPaint(painter: _GoogleGPainter(), size: const Size(22, 22));
   }
 }
 
@@ -394,7 +400,8 @@ class _GoogleGPainter extends CustomPainter {
     // Blue (top-right quadrant)
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      -0.55, 1.7,
+      -0.55,
+      1.7,
       false,
       Paint()
         ..color = const Color(0xFF4285F4)
@@ -405,7 +412,8 @@ class _GoogleGPainter extends CustomPainter {
     // Red (bottom-right)
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      1.15, 1.7,
+      1.15,
+      1.7,
       false,
       Paint()
         ..color = const Color(0xFFEA4335)
@@ -416,7 +424,8 @@ class _GoogleGPainter extends CustomPainter {
     // Yellow (bottom-left)
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      2.85, 1.7,
+      2.85,
+      1.7,
       false,
       Paint()
         ..color = const Color(0xFFFBBC05)
@@ -427,7 +436,8 @@ class _GoogleGPainter extends CustomPainter {
     // Green (top-left)
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      4.55, 1.7,
+      4.55,
+      1.7,
       false,
       Paint()
         ..color = const Color(0xFF34A853)

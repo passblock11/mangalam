@@ -10,6 +10,7 @@ class AppConfig {
     'SUPABASE_URL',
     defaultValue: 'https://behlrsqilhzhniglhgqh.supabase.co',
   );
+
   /// Supabase publishable (anon) key — safe in client apps; not the service role key.
   static const supabasePublishableKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
@@ -47,8 +48,10 @@ class AppConfig {
   /// `Info.plist` URL scheme: `com.googleusercontent.apps.<prefix>` (see Supabase Google Flutter docs).
   static String get googleIosReversedClientId {
     if (googleIosClientId.isEmpty) return '';
-    final prefix = googleIosClientId.replaceAll('.apps.googleusercontent.com', '');
+    final prefix = googleIosClientId.replaceAll(
+      '.apps.googleusercontent.com',
+      '',
+    );
     return 'com.googleusercontent.apps.$prefix';
   }
-
 }

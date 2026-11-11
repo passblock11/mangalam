@@ -76,9 +76,9 @@ class OAuthSignIn {
 
     final authorization =
         await googleUser.authorizationClient.authorizationForScopes(
-              _googleScopes,
-            ) ??
-            await googleUser.authorizationClient.authorizeScopes(_googleScopes);
+          _googleScopes,
+        ) ??
+        await googleUser.authorizationClient.authorizeScopes(_googleScopes);
 
     final idToken = googleUser.authentication.idToken;
     if (idToken == null || idToken.isEmpty) {

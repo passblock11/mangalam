@@ -24,7 +24,9 @@ class OptionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Material(
-      color: selected ? MangalamTheme.maroon.withValues(alpha: 0.06) : Colors.white,
+      color: selected
+          ? MangalamTheme.maroon.withValues(alpha: 0.06)
+          : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -52,7 +54,9 @@ class OptionCard extends StatelessWidget {
                   child: Icon(
                     icon,
                     size: 20,
-                    color: selected ? MangalamTheme.maroon : MangalamTheme.muted,
+                    color: selected
+                        ? MangalamTheme.maroon
+                        : MangalamTheme.muted,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -64,16 +68,18 @@ class OptionCard extends StatelessWidget {
                     Text(
                       label,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                          ),
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                      ),
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: MangalamTheme.muted,
-                            ),
+                          color: MangalamTheme.muted,
+                        ),
                       ),
                     ],
                   ],
@@ -87,7 +93,11 @@ class OptionCard extends StatelessWidget {
                     color: MangalamTheme.maroon,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Iconsax.tick_circle, color: Colors.white, size: 16),
+                  child: const Icon(
+                    Iconsax.tick_circle,
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
             ],
           ),
@@ -172,7 +182,9 @@ class OnboardingProgress extends StatelessWidget {
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
               ),
             ),
           )
@@ -188,16 +200,16 @@ class OnboardingProgress extends StatelessWidget {
                   Text(
                     'Step ${current + 1} of $total',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: MangalamTheme.muted,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: MangalamTheme.muted,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   Text(
                     '${(((current + 1) / total) * 100).round()}%',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: MangalamTheme.maroon,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      color: MangalamTheme.maroon,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ],
               ),

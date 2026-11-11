@@ -55,7 +55,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // Step 2b: Contact (phone + whatsapp)
   final _phone = TextEditingController();
   final _whatsapp = TextEditingController();
-  bool _phoneVisible = false; // owner opt-in to share contact with verified paid members
+  bool _phoneVisible =
+      false; // owner opt-in to share contact with verified paid members
 
   // Step 6: Astrology
   String? _mangalDosh;
@@ -63,10 +64,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _birthPlace = TextEditingController();
 
   // Step 7: Partner preferences
-  final _pAgeMin = TextEditingController();
-  final _pAgeMax = TextEditingController();
+  int? _pAgeMin;
+  int? _pAgeMax;
   String? _pDiet;
   String? _pMotherTongue;
+
+  // App language (asked during onboarding, saved to profiles.app_language)
+  String _appLanguage = 'en';
 
   @override
   void dispose() {
@@ -77,8 +81,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _birthPlace.dispose();
     _phone.dispose();
     _whatsapp.dispose();
-    _pAgeMin.dispose();
-    _pAgeMax.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -163,17 +165,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'birth_place': _birthPlace.text.trim(),
         'photo_urls': _photoUrls,
         'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
-        'whatsapp_number': _whatsapp.text.trim().isEmpty ? null : _whatsapp.text.trim(),
+        'whatsapp_number': _whatsapp.text.trim().isEmpty
+            ? null
+            : _whatsapp.text.trim(),
         'phone_visible': _phoneVisible,
       };
       final pp = <String, dynamic>{};
-      final amin = int.tryParse(_pAgeMin.text.trim());
-      final amax = int.tryParse(_pAgeMax.text.trim());
-      if (amin != null) pp['age_min'] = amin;
-      if (amax != null) pp['age_max'] = amax;
+      if (_pAgeMin != null) pp['age_min'] = _pAgeMin;
+      if (_pAgeMax != null) pp['age_max'] = _pAgeMax;
       if (_pDiet != null) pp['diet'] = _pDiet;
       if (_pMotherTongue != null) pp['mother_tongue'] = _pMotherTongue;
       if (pp.isNotEmpty) body['partner_preferences'] = pp;
+      body['app_language'] = _appLanguage;
       body.removeWhere((k, v) => v == null || v == '');
       await _api.patch('/v1/me', body);
       widget.onCompleted();
@@ -266,7 +269,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   color: MangalamTheme.maroon.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(_error!, style: const TextStyle(color: MangalamTheme.maroon, fontSize: 13)),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: MangalamTheme.maroon,
+                    fontSize: 13,
+                  ),
+                ),
               ),
               const SizedBox(height: 10),
             ],
@@ -278,7 +287,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ? const SizedBox(
                         height: 22,
                         width: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : Text(_step == _totalSteps - 1 ? 'Finish' : 'Continue'),
               ),
@@ -311,9 +323,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _stepPhotos() {
     return _stepContent(
       title: 'Add your photos',
-      subtitle: 'Profiles with photos get up to 10× more interest. Add at least one.',
+      subtitle:
+          'Profiles with photos get up to 10× more interest. Add at least one.',
       emoji: '📸',
       children: [
+        // Language selection (asked first during onboarding)
+        DropdownButtonFormField<String>(
+          initialValue: _appLanguage,
+          decoration: const InputDecoration(
+            labelText: 'App language',
+            prefixIcon: Icon(Iconsax.global),
+          ),
+          items: OnboardingData.appLanguages
+              .map((l) => DropdownMenuItem(value: l.code, child: Text(l.name)))
+              .toList(),
+          onChanged: (v) => setState(() => _appLanguage = v ?? 'en'),
+        ),
+        const SizedBox(height: 18),
         PhotoPickerSection(
           photoUrls: _photoUrls,
           onChanged: (urls) => setState(() => _photoUrls = urls),
@@ -325,18 +351,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _stepProfileFor() {
     return _stepContent(
       title: 'Who is this profile for?',
-      subtitle: 'Tell us whose profile you\'re creating so we can personalize the experience.',
+      subtitle:
+          'Tell us whose profile you\'re creating so we can personalize the experience.',
       emoji: '👤',
       children: [
-        ...OnboardingData.profileForOptions.map((o) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: OptionCard(
-                label: o,
-                selected: _profileFor == o,
-                onTap: () => setState(() => _profileFor = o),
-                icon: o == 'Self' ? Iconsax.user : Iconsax.profile_2user,
-              ),
-            )),
+        ...OnboardingData.profileForOptions.map(
+          (o) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: OptionCard(
+              label: o,
+              selected: _profileFor == o,
+              onTap: () => setState(() => _profileFor = o),
+              icon: o == 'Self' ? Iconsax.user : Iconsax.profile_2user,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -350,11 +379,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         TextField(
           controller: _name,
           textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Full name', prefixIcon: Icon(Iconsax.user)),
+          decoration: const InputDecoration(
+            labelText: 'Full name',
+            prefixIcon: Icon(Iconsax.user),
+          ),
         ),
         const SizedBox(height: 14),
-        _dropdown('Gender', _gender, OnboardingData.genders, (v) => setState(() => _gender = v),
-            icon: Iconsax.user),
+        _dropdown(
+          'Gender',
+          _gender,
+          OnboardingData.genders,
+          (v) => setState(() => _gender = v),
+          icon: Iconsax.user,
+        ),
         const SizedBox(height: 14),
         InkWell(
           onTap: _pickDob,
@@ -364,7 +401,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               decoration: InputDecoration(
                 labelText: 'Date of birth',
                 prefixIcon: const Icon(Iconsax.calendar),
-                suffixIcon: _dob != null ? const Icon(Iconsax.tick_circle, color: MangalamTheme.maroon) : null,
+                suffixIcon: _dob != null
+                    ? const Icon(
+                        Iconsax.tick_circle,
+                        color: MangalamTheme.maroon,
+                      )
+                    : null,
               ),
               child: Text(
                 _dob == null
@@ -410,7 +452,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           subtitle: const Text(
             'Only verified & Premium members can see your phone / WhatsApp. Off by default.',
-            style: TextStyle(fontSize: 12, color: MangalamTheme.muted, height: 1.35),
+            style: TextStyle(
+              fontSize: 12,
+              color: MangalamTheme.muted,
+              height: 1.35,
+            ),
           ),
           activeColor: MangalamTheme.maroon,
         ),
@@ -424,8 +470,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       subtitle: 'Helps us find matches within your community.',
       emoji: '🪔',
       children: [
-        _dropdown('Religion', _religion, OnboardingData.religions, (v) => setState(() => _religion = v),
-            icon: Iconsax.book_1),
+        _dropdown(
+          'Religion',
+          _religion,
+          OnboardingData.religions,
+          (v) => setState(() => _religion = v),
+          icon: Iconsax.book_1,
+        ),
         const SizedBox(height: 14),
         TextField(
           controller: _community,
@@ -435,11 +486,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        _dropdown('Mother tongue', _motherTongue, OnboardingData.motherTongues, (v) => setState(() => _motherTongue = v),
-            icon: Iconsax.translate),
+        _dropdown(
+          'Mother tongue',
+          _motherTongue,
+          OnboardingData.motherTongues,
+          (v) => setState(() => _motherTongue = v),
+          icon: Iconsax.translate,
+        ),
         const SizedBox(height: 14),
-        _dropdown('Diet', _diet, OnboardingData.diets, (v) => setState(() => _diet = v),
-            icon: Iconsax.cup),
+        _dropdown(
+          'Diet',
+          _diet,
+          OnboardingData.diets,
+          (v) => setState(() => _diet = v),
+          icon: Iconsax.cup,
+        ),
       ],
     );
   }
@@ -453,11 +514,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         TextField(
           controller: _city,
           textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'City', prefixIcon: Icon(Iconsax.building)),
+          decoration: const InputDecoration(
+            labelText: 'City',
+            prefixIcon: Icon(Iconsax.building),
+          ),
         ),
         const SizedBox(height: 14),
-        _dropdown('State', _state, OnboardingData.indianStates, (v) => setState(() => _state = v),
-            icon: Iconsax.map),
+        _dropdown(
+          'State',
+          _state,
+          OnboardingData.indianStates,
+          (v) => setState(() => _state = v),
+          icon: Iconsax.map,
+        ),
       ],
     );
   }
@@ -477,17 +546,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           icon: Iconsax.arrow_swap,
         ),
         const SizedBox(height: 14),
-        _dropdown('Marital status', _maritalStatus, OnboardingData.maritalStatuses,
-            (v) => setState(() => _maritalStatus = v), icon: Iconsax.heart),
+        _dropdown(
+          'Marital status',
+          _maritalStatus,
+          OnboardingData.maritalStatuses,
+          (v) => setState(() => _maritalStatus = v),
+          icon: Iconsax.heart,
+        ),
         const SizedBox(height: 14),
-        _dropdown('Education', _education, OnboardingData.educationLevels, (v) => setState(() => _education = v),
-            icon: Iconsax.book_saved),
+        _dropdown(
+          'Education',
+          _education,
+          OnboardingData.educationLevels,
+          (v) => setState(() => _education = v),
+          icon: Iconsax.book_saved,
+        ),
         const SizedBox(height: 14),
-        _dropdown('Occupation', _occupation, OnboardingData.occupations, (v) => setState(() => _occupation = v),
-            icon: Iconsax.briefcase),
+        _dropdown(
+          'Occupation',
+          _occupation,
+          OnboardingData.occupations,
+          (v) => setState(() => _occupation = v),
+          icon: Iconsax.briefcase,
+        ),
         const SizedBox(height: 14),
-        _dropdown('Monthly income', _salary, OnboardingData.salaryRanges, (v) => setState(() => _salary = v),
-            icon: Iconsax.wallet),
+        _dropdown(
+          'Monthly income',
+          _salary,
+          OnboardingData.salaryRanges,
+          (v) => setState(() => _salary = v),
+          icon: Iconsax.wallet,
+        ),
       ],
     );
   }
@@ -498,8 +587,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       subtitle: 'Important for family matching in Indian matrimony.',
       emoji: '🪐',
       children: [
-        _dropdown('Mangal Dosh', _mangalDosh, OnboardingData.mangalDoshOptions,
-            (v) => setState(() => _mangalDosh = v), icon: Iconsax.flash),
+        _dropdown(
+          'Mangal Dosh',
+          _mangalDosh,
+          OnboardingData.mangalDoshOptions,
+          (v) => setState(() => _mangalDosh = v),
+          icon: Iconsax.flash,
+        ),
         const SizedBox(height: 14),
         TextField(
           controller: _birthTime,
@@ -527,30 +621,60 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       emoji: '💞',
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: TextField(
-                controller: _pAgeMin,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Min age', prefixIcon: Icon(Iconsax.arrow_up)),
+              child: DropdownButtonFormField<int>(
+                initialValue: _pAgeMin,
+                decoration: const InputDecoration(
+                  labelText: 'Min age',
+                  prefixIcon: Icon(Iconsax.arrow_up),
+                ),
+                items: OnboardingData.ageOptions
+                    .map(
+                      (a) =>
+                          DropdownMenuItem(value: a, child: Text('$a years')),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _pAgeMin = v),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: TextField(
-                controller: _pAgeMax,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Max age', prefixIcon: Icon(Iconsax.arrow_down)),
+              child: DropdownButtonFormField<int>(
+                initialValue: _pAgeMax,
+                decoration: const InputDecoration(
+                  labelText: 'Max age',
+                  prefixIcon: Icon(Iconsax.arrow_down),
+                ),
+                items: OnboardingData.ageOptions
+                    .where((a) => _pAgeMin == null || a >= _pAgeMin!)
+                    .map(
+                      (a) =>
+                          DropdownMenuItem(value: a, child: Text('$a years')),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _pAgeMax = v),
               ),
             ),
           ],
         ),
         const SizedBox(height: 14),
-        _dropdown('Preferred diet', _pDiet, OnboardingData.diets, (v) => setState(() => _pDiet = v),
-            icon: Iconsax.cup),
+        _dropdown(
+          'Preferred diet',
+          _pDiet,
+          OnboardingData.diets,
+          (v) => setState(() => _pDiet = v),
+          icon: Iconsax.cup,
+        ),
         const SizedBox(height: 14),
-        _dropdown('Preferred mother tongue', _pMotherTongue, OnboardingData.motherTongues,
-            (v) => setState(() => _pMotherTongue = v), icon: Iconsax.translate),
+        _dropdown(
+          'Preferred mother tongue',
+          _pMotherTongue,
+          OnboardingData.motherTongues,
+          (v) => setState(() => _pMotherTongue = v),
+          icon: Iconsax.translate,
+        ),
       ],
     );
   }
@@ -570,7 +694,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         prefixIcon: icon != null ? Icon(icon) : null,
       ),
       items: items
-          .map((e) => DropdownMenuItem(value: e, child: Text(labelFor != null ? labelFor(e) : e)))
+          .map(
+            (e) => DropdownMenuItem(
+              value: e,
+              child: Text(labelFor != null ? labelFor(e) : e),
+            ),
+          )
           .toList(),
       onChanged: onChanged,
     );

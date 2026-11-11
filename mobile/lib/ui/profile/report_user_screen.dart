@@ -178,11 +178,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
             ),
             child: Row(
               children: [
-                const Icon(
-                  Iconsax.user,
-                  color: MangalamTheme.maroon,
-                  size: 22,
-                ),
+                const Icon(Iconsax.user, color: MangalamTheme.maroon, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

@@ -57,9 +57,9 @@ class _PhotoPickerSectionState extends State<PhotoPickerSection> {
       widget.onChanged(newUrls);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -111,7 +111,11 @@ class _PhotoPickerSectionState extends State<PhotoPickerSection> {
 }
 
 class _PhotoTile extends StatelessWidget {
-  const _PhotoTile({required this.url, required this.size, required this.onRemove});
+  const _PhotoTile({
+    required this.url,
+    required this.size,
+    required this.onRemove,
+  });
 
   final String url;
   final double size;
@@ -139,8 +143,11 @@ class _PhotoTile extends StatelessWidget {
                     color: Colors.black54,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Iconsax.close_circle,
-                      color: Colors.white, size: 16),
+                  child: const Icon(
+                    Iconsax.close_circle,
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
               ),
             ),
@@ -186,8 +193,11 @@ class _AddTile extends StatelessWidget {
                 ),
               )
             : PopupMenuButton<String>(
-                icon: const Icon(Iconsax.add_circle,
-                    color: MangalamTheme.maroon, size: 30),
+                icon: const Icon(
+                  Iconsax.add_circle,
+                  color: MangalamTheme.maroon,
+                  size: 30,
+                ),
                 padding: EdgeInsets.zero,
                 onSelected: (v) {
                   if (v == 'gallery') onGallery();
@@ -196,19 +206,23 @@ class _AddTile extends StatelessWidget {
                 itemBuilder: (_) => const [
                   PopupMenuItem(
                     value: 'gallery',
-                    child: Row(children: [
-                      Icon(Iconsax.gallery_export, size: 18),
-                      SizedBox(width: 8),
-                      Text('From gallery'),
-                    ]),
+                    child: Row(
+                      children: [
+                        Icon(Iconsax.gallery_export, size: 18),
+                        SizedBox(width: 8),
+                        Text('From gallery'),
+                      ],
+                    ),
                   ),
                   PopupMenuItem(
                     value: 'camera',
-                    child: Row(children: [
-                      Icon(Iconsax.camera, size: 18),
-                      SizedBox(width: 8),
-                      Text('Take photo'),
-                    ]),
+                    child: Row(
+                      children: [
+                        Icon(Iconsax.camera, size: 18),
+                        SizedBox(width: 8),
+                        Text('Take photo'),
+                      ],
+                    ),
                   ),
                 ],
               ),

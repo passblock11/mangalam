@@ -19,12 +19,7 @@ class HomeShell extends StatelessWidget {
       child: Scaffold(
         body: const TabBarView(
           physics: NeverScrollableScrollPhysics(),
-          children: [
-            DiscoverTab(),
-            LikesTab(),
-            MessagesTab(),
-            ProfileTab(),
-          ],
+          children: [DiscoverTab(), LikesTab(), MessagesTab(), ProfileTab()],
         ),
         extendBody: true,
         bottomNavigationBar: const _GlassNavBar(),

@@ -53,7 +53,9 @@ class PhotoService {
     if (uid.isEmpty) throw StateError('Not signed in');
     final path = '$uid/$index.jpg';
     final bytes = await file.readAsBytes();
-    await _sb.storage.from(_bucket).uploadBinary(
+    await _sb.storage
+        .from(_bucket)
+        .uploadBinary(
           path,
           bytes,
           fileOptions: const FileOptions(
@@ -102,11 +104,16 @@ class PhotoService {
     if (uid.isEmpty) throw StateError('Not signed in');
     final path = '$uid/$kind.jpg';
     final bytes = await file.readAsBytes();
-    await _sb.storage.from(_verifBucket).uploadBinary(
-      path,
-      bytes,
-      fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
-    );
+    await _sb.storage
+        .from(_verifBucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: true,
+          ),
+        );
     // Private bucket — return the path; backend reads via signed URL.
     return path;
   }

@@ -66,21 +66,22 @@ class MangalamTheme {
 
   // ── Theme construction ─────────────────────────────────────────
   static ThemeData light() {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: maroon,
-      brightness: Brightness.light,
-      primary: maroon,
-      onPrimary: Colors.white,
-      secondary: gold,
-      onSecondary: ink,
-      surface: cream,
-      onSurface: ink,
-      surfaceContainerHighest: const Color(0xFFF3E9DF),
-      error: const Color(0xFFC62828),
-    ).copyWith(
-      outline: const Color(0xFFD7C8B8),
-      outlineVariant: const Color(0xFFE8DDCF),
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: maroon,
+          brightness: Brightness.light,
+          primary: maroon,
+          onPrimary: Colors.white,
+          secondary: gold,
+          onSecondary: ink,
+          surface: cream,
+          onSurface: ink,
+          surfaceContainerHighest: const Color(0xFFF3E9DF),
+          error: const Color(0xFFC62828),
+        ).copyWith(
+          outline: const Color(0xFFD7C8B8),
+          outlineVariant: const Color(0xFFE8DDCF),
+        );
 
     final base = ThemeData(
       colorScheme: scheme,
@@ -120,7 +121,9 @@ class MangalamTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(52),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         ),
       ),
@@ -129,7 +132,9 @@ class MangalamTheme {
           foregroundColor: maroon,
           minimumSize: const Size.fromHeight(52),
           side: BorderSide(color: scheme.outline),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
@@ -150,7 +155,10 @@ class MangalamTheme {
         labelColor: maroon,
         unselectedLabelColor: muted,
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+        ),
         indicatorSize: TabBarIndicatorSize.label,
         indicator: const UnderlineTabIndicator(
           borderSide: BorderSide(width: 2.5, color: maroon),
@@ -173,12 +181,30 @@ class MangalamTheme {
 
   static TextTheme _buildText(TextTheme base) {
     return base.copyWith(
-      displayLarge: base.displayLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1.2),
-      displayMedium: base.displayMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1),
-      headlineLarge: base.headlineLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.8),
-      headlineMedium: base.headlineMedium?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.5),
-      headlineSmall: base.headlineSmall?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.4),
-      titleLarge: base.titleLarge?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.3),
+      displayLarge: base.displayLarge?.copyWith(
+        fontWeight: FontWeight.w800,
+        letterSpacing: -1.2,
+      ),
+      displayMedium: base.displayMedium?.copyWith(
+        fontWeight: FontWeight.w800,
+        letterSpacing: -1,
+      ),
+      headlineLarge: base.headlineLarge?.copyWith(
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.8,
+      ),
+      headlineMedium: base.headlineMedium?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      headlineSmall: base.headlineSmall?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.4,
+      ),
+      titleLarge: base.titleLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
+      ),
       titleMedium: base.titleMedium?.copyWith(fontWeight: FontWeight.w700),
       titleSmall: base.titleSmall?.copyWith(fontWeight: FontWeight.w600),
       bodyLarge: base.bodyLarge?.copyWith(height: 1.45, color: ink),
@@ -210,7 +236,10 @@ class MangalamTheme {
       ),
       labelStyle: const TextStyle(color: muted, fontWeight: FontWeight.w500),
       hintStyle: const TextStyle(color: Color(0xFFA99F92)),
-      floatingLabelStyle: const TextStyle(color: maroon, fontWeight: FontWeight.w600),
+      floatingLabelStyle: const TextStyle(
+        color: maroon,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }
@@ -344,9 +373,9 @@ class MangalamSectionHeader extends StatelessWidget {
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.2,
-                ),
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
+            ),
           ),
         ),
         if (action != null) action!,
@@ -380,7 +409,9 @@ class MangalamCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color ?? Colors.white,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor ?? Theme.of(context).colorScheme.outlineVariant),
+        border: Border.all(
+          color: borderColor ?? Theme.of(context).colorScheme.outlineVariant,
+        ),
         boxShadow: [
           BoxShadow(
             color: MangalamTheme.maroon.withValues(alpha: 0.04),
@@ -430,9 +461,9 @@ class MangalamEmptyState extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 8),
@@ -440,15 +471,12 @@ class MangalamEmptyState extends StatelessWidget {
                 subtitle!,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: MangalamTheme.muted,
-                      height: 1.4,
-                    ),
+                  color: MangalamTheme.muted,
+                  height: 1.4,
+                ),
               ),
             ],
-            if (action != null) ...[
-              const SizedBox(height: 20),
-              action!,
-            ],
+            if (action != null) ...[const SizedBox(height: 20), action!],
           ],
         ),
       ),

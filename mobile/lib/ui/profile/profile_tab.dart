@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_client.dart';
 import '../../services/oauth_sign_in.dart';
 import '../../services/razorpay_checkout.dart';
+import '../auth/onboarding_data.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_picker_section.dart';
 import 'edit_profile_screen.dart';
@@ -143,33 +144,50 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _changeLanguage() async {
-    final langs = ['en', 'hi', 'mr', 'ta', 'te', 'kn', 'bn', 'gu', 'pa'];
+    final langs = OnboardingData.appLanguages;
     final current = _profile?['app_language']?.toString() ?? 'en';
     final choice = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'App language',
-                style: Theme.of(
-                  ctx,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                child: Text(
+                  'App language',
+                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
-              const SizedBox(height: 12),
-              ...langs.map((code) {
-                return RadioListTile<String>(
-                  value: code,
-                  groupValue: current,
-                  title: Text(code.toUpperCase()),
-                  onChanged: (v) => Navigator.pop(ctx, v),
-                );
-              }),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: langs
+                      .map(
+                        (l) => RadioListTile<String>(
+                          value: l.code,
+                          groupValue: current,
+                          title: Text(l.name),
+                          subtitle: Text(
+                            l.code.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: MangalamTheme.muted,
+                            ),
+                          ),
+                          onChanged: (v) => Navigator.pop(ctx, v),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
             ],
           ),
         ),
@@ -181,7 +199,11 @@ class _ProfileTabState extends State<ProfileTab> {
       if (!mounted) return;
       setState(() => _profile?['app_language'] = choice);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Language set to ${choice.toUpperCase()}')),
+        SnackBar(
+          content: Text(
+            'Language set to ${OnboardingData.appLanguageName(choice)}',
+          ),
+        ),
       );
     } catch (e) {
       if (mounted) {
@@ -484,7 +506,9 @@ class _ProfileTabState extends State<ProfileTab> {
                           icon: Iconsax.global,
                           title: 'App language',
                           trailing: Text(
-                            _profile?['app_language']?.toString() ?? 'en',
+                            OnboardingData.appLanguageName(
+                              _profile?['app_language']?.toString() ?? 'en',
+                            ),
                             style: const TextStyle(color: MangalamTheme.muted),
                           ),
                           onTap: _changeLanguage,

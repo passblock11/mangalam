@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
-import '../core/mangalam_theme.dart' show MangalamCard, MangalamSectionHeader, MangalamTheme;
+import '../auth/onboarding_data.dart';
+import '../core/mangalam_theme.dart'
+    show MangalamCard, MangalamSectionHeader, MangalamTheme;
 import '../core/photo_picker_section.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -34,8 +36,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _birthPlace = TextEditingController();
   final _dob = TextEditingController();
 
-  final _pAgeMin = TextEditingController();
-  final _pAgeMax = TextEditingController();
+  int? _pAgeMin;
+  int? _pAgeMax;
   final _pLocation = TextEditingController();
   final _pHeight = TextEditingController();
   final _pDiet = TextEditingController();
@@ -79,8 +81,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _birthTime.dispose();
     _birthPlace.dispose();
     _dob.dispose();
-    _pAgeMin.dispose();
-    _pAgeMax.dispose();
     _pLocation.dispose();
     _pHeight.dispose();
     _pDiet.dispose();
@@ -119,14 +119,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _mangal.text = p['mangal_dosh']?.toString() ?? '';
       _birthTime.text = p['birth_time']?.toString() ?? '';
       _birthPlace.text = p['birth_place']?.toString() ?? '';
-      _photoUrls = (p['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
+      _photoUrls =
+          (p['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
       if (p['date_of_birth'] != null) {
         _dob.text = p['date_of_birth'].toString().split('T').first;
       }
       final pp = p['partner_preferences'];
       if (pp is Map) {
-        _pAgeMin.text = pp['age_min']?.toString() ?? '';
-        _pAgeMax.text = pp['age_max']?.toString() ?? '';
+        _pAgeMin = (pp['age_min'] is int)
+            ? pp['age_min'] as int
+            : int.tryParse(pp['age_min']?.toString() ?? '');
+        _pAgeMax = (pp['age_max'] is int)
+            ? pp['age_max'] as int
+            : int.tryParse(pp['age_max']?.toString() ?? '');
         _pLocation.text = pp['location']?.toString() ?? '';
         _pHeight.text = pp['height']?.toString() ?? '';
         _pDiet.text = pp['diet']?.toString() ?? '';
@@ -149,9 +154,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() => _saving = true);
     try {
       final h = int.tryParse(_height.text.trim());
-      final body = <String, dynamic>{
-        'display_name': _name.text.trim(),
-      };
+      final body = <String, dynamic>{'display_name': _name.text.trim()};
       final city = _city.text.trim();
       final state = _state.text.trim();
       final community = _community.text.trim();
@@ -197,10 +200,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         if (v.isNotEmpty) pp[k] = v;
       }
 
-      final amin = int.tryParse(_pAgeMin.text.trim());
-      final amax = int.tryParse(_pAgeMax.text.trim());
-      if (amin != null) pp['age_min'] = amin;
-      if (amax != null) pp['age_max'] = amax;
+      if (_pAgeMin != null) pp['age_min'] = _pAgeMin;
+      if (_pAgeMax != null) pp['age_max'] = _pAgeMax;
       put('location', _pLocation.text.trim());
       put('height', _pHeight.text.trim());
       put('diet', _pDiet.text.trim());
@@ -214,12 +215,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       await _api.patch('/v1/me', body);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Saved')));
         Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -231,7 +236,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Edit profile')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon))
+          ? const Center(
+              child: CircularProgressIndicator(color: MangalamTheme.maroon),
+            )
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
@@ -259,13 +266,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ),
                       items: const [
                         DropdownMenuItem(value: 'male', child: Text('Male')),
-                        DropdownMenuItem(value: 'female', child: Text('Female')),
+                        DropdownMenuItem(
+                          value: 'female',
+                          child: Text('Female'),
+                        ),
                         DropdownMenuItem(value: 'other', child: Text('Other')),
                       ],
                       onChanged: (v) => setState(() => _gender = v),
                     ),
                     const SizedBox(height: 12),
-                    _field(_dob, 'Date of birth (YYYY-MM-DD)', icon: Iconsax.calendar),
+                    _field(
+                      _dob,
+                      'Date of birth (YYYY-MM-DD)',
+                      icon: Iconsax.calendar,
+                    ),
                   ],
                 ),
                 _section(
@@ -274,7 +288,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   children: [
                     _field(_community, 'Community', icon: Iconsax.people),
                     const SizedBox(height: 12),
-                    _field(_motherTongue, 'Mother tongue', icon: Iconsax.translate),
+                    _field(
+                      _motherTongue,
+                      'Mother tongue',
+                      icon: Iconsax.translate,
+                    ),
                     const SizedBox(height: 12),
                     _field(_diet, 'Diet', icon: Iconsax.cup),
                   ],
@@ -292,13 +310,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   icon: Iconsax.arrow_swap,
                   title: 'Personal',
                   children: [
-                    _field(_height, 'Height (cm)', icon: Iconsax.arrow_swap, number: true),
+                    _field(
+                      _height,
+                      'Height (cm)',
+                      icon: Iconsax.arrow_swap,
+                      number: true,
+                    ),
                     const SizedBox(height: 12),
-                    _field(_profileFor, 'Profile for', icon: Iconsax.profile_2user),
+                    _field(
+                      _profileFor,
+                      'Profile for',
+                      icon: Iconsax.profile_2user,
+                    ),
                     const SizedBox(height: 12),
                     _field(_marital, 'Marital status', icon: Iconsax.heart),
                     const SizedBox(height: 12),
-                    _field(_bio, 'Bio', icon: Iconsax.document_text, maxLines: 4),
+                    _field(
+                      _bio,
+                      'Bio',
+                      icon: Iconsax.document_text,
+                      maxLines: 4,
+                    ),
                   ],
                 ),
                 _section(
@@ -307,7 +339,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   children: [
                     _field(_occupation, 'Occupation', icon: Iconsax.briefcase),
                     const SizedBox(height: 12),
-                    _field(_education, 'Education level', icon: Iconsax.book_saved),
+                    _field(
+                      _education,
+                      'Education level',
+                      icon: Iconsax.book_saved,
+                    ),
                     const SizedBox(height: 12),
                     _field(_salary, 'Monthly salary', icon: Iconsax.wallet),
                   ],
@@ -318,9 +354,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   children: [
                     _field(_mangal, 'Mangal Dosh', icon: Iconsax.flash),
                     const SizedBox(height: 12),
-                    _field(_birthTime, 'Birth time (HH:MM)', icon: Iconsax.clock),
+                    _field(
+                      _birthTime,
+                      'Birth time (HH:MM)',
+                      icon: Iconsax.clock,
+                    ),
                     const SizedBox(height: 12),
-                    _field(_birthPlace, 'Place of birth', icon: Iconsax.location),
+                    _field(
+                      _birthPlace,
+                      'Place of birth',
+                      icon: Iconsax.location,
+                    ),
                   ],
                 ),
                 _section(
@@ -328,10 +372,48 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   title: 'Partner preference',
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: _field(_pAgeMin, 'Age min', icon: Iconsax.arrow_up, number: true)),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            initialValue: _pAgeMin,
+                            decoration: const InputDecoration(
+                              labelText: 'Age min',
+                              prefixIcon: Icon(Iconsax.arrow_up),
+                            ),
+                            items: OnboardingData.ageOptions
+                                .map(
+                                  (a) => DropdownMenuItem(
+                                    value: a,
+                                    child: Text('$a years'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(() => _pAgeMin = v),
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: _field(_pAgeMax, 'Age max', icon: Iconsax.arrow_down, number: true)),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            initialValue: _pAgeMax,
+                            decoration: const InputDecoration(
+                              labelText: 'Age max',
+                              prefixIcon: Icon(Iconsax.arrow_down),
+                            ),
+                            items: OnboardingData.ageOptions
+                                .where(
+                                  (a) => _pAgeMin == null || a >= _pAgeMin!,
+                                )
+                                .map(
+                                  (a) => DropdownMenuItem(
+                                    value: a,
+                                    child: Text('$a years'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(() => _pAgeMax = v),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -341,17 +423,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     const SizedBox(height: 12),
                     _field(_pDiet, 'Diet pref', icon: Iconsax.cup),
                     const SizedBox(height: 12),
-                    _field(_pMarital, 'Marital status pref', icon: Iconsax.heart),
+                    _field(
+                      _pMarital,
+                      'Marital status pref',
+                      icon: Iconsax.heart,
+                    ),
                     const SizedBox(height: 12),
-                    _field(_pTongue, 'Mother tongue pref', icon: Iconsax.translate),
+                    _field(
+                      _pTongue,
+                      'Mother tongue pref',
+                      icon: Iconsax.translate,
+                    ),
                     const SizedBox(height: 12),
                     _field(_pMangal, 'Mangal Dosh pref', icon: Iconsax.flash),
                     const SizedBox(height: 12),
-                    _field(_pOccupation, 'Occupation pref', icon: Iconsax.briefcase),
+                    _field(
+                      _pOccupation,
+                      'Occupation pref',
+                      icon: Iconsax.briefcase,
+                    ),
                     const SizedBox(height: 12),
                     _field(_pSalary, 'Salary pref', icon: Iconsax.wallet),
                     const SizedBox(height: 12),
-                    _field(_pEducation, 'Education pref', icon: Iconsax.book_saved),
+                    _field(
+                      _pEducation,
+                      'Education pref',
+                      icon: Iconsax.book_saved,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -361,17 +459,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   children: [
                     _field(_phone, 'Phone number', icon: Iconsax.call),
                     const SizedBox(height: 12),
-                    _field(_whatsapp, 'WhatsApp number (optional)', icon: Iconsax.message),
+                    _field(
+                      _whatsapp,
+                      'WhatsApp number (optional)',
+                      icon: Iconsax.message,
+                    ),
                     const SizedBox(height: 4),
                     const Text(
                       'Sharing is off by default. Only verified + Premium members can view these when you opt in.',
-                      style: TextStyle(fontSize: 12, color: MangalamTheme.muted, height: 1.35),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: MangalamTheme.muted,
+                        height: 1.35,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 SwitchListTile(
-                  title: const Text('Share my contact with verified, paid members'),
+                  title: const Text(
+                    'Share my contact with verified, paid members',
+                  ),
                   subtitle: const Text(
                     'Only verified & Premium members will see your phone / WhatsApp.',
                     style: TextStyle(fontSize: 12, color: MangalamTheme.muted),
@@ -386,7 +494,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ? const SizedBox(
                           height: 22,
                           width: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text('Save changes'),
                 ),

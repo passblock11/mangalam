@@ -41,10 +41,10 @@ class GoogleAuthConfig {
           'GOOGLE_REVERSED_CLIENT_ID in ios/Flutter/GoogleSignIn.xcconfig.\n'
           'Android only needs the Web client ID (already in the app).';
     }
-  if (!hasWebClient) {
-    return 'Missing GOOGLE_WEB_CLIENT_ID. Run with:\n'
-        'flutter run --dart-define-from-file=dart_defines.json';
-  }
+    if (!hasWebClient) {
+      return 'Missing GOOGLE_WEB_CLIENT_ID. Run with:\n'
+          'flutter run --dart-define-from-file=dart_defines.json';
+    }
     return 'Google sign-in is not ready on this device yet.';
   }
 

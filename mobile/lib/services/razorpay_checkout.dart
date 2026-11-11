@@ -24,7 +24,8 @@ class RazorpayCheckout {
     List<Map<String, dynamic>> plans = [];
     try {
       final res = await _api.get('/v1/config/plans') as Map<String, dynamic>;
-      plans = (res['plans'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+      plans =
+          (res['plans'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     } catch (_) {
       // ignore — fall back to empty
     }
@@ -48,7 +49,9 @@ class RazorpayCheckout {
 
     void onError(PaymentFailureResponse r) {
       if (!completer.isCompleted) {
-        completer.completeError(Exception(r.message ?? r.code ?? 'Payment failed'));
+        completer.completeError(
+          Exception(r.message ?? r.code ?? 'Payment failed'),
+        );
       }
     }
 
@@ -65,9 +68,11 @@ class RazorpayCheckout {
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, onExternal);
 
     try {
-      final order = await _api.post('/v1/payments/razorpay/order', {
-        'plan_code': planCode,
-      }) as Map<String, dynamic>;
+      final order =
+          await _api.post('/v1/payments/razorpay/order', {
+                'plan_code': planCode,
+              })
+              as Map<String, dynamic>;
 
       final keyId = order['key_id'] as String?;
       final orderId = order['order_id'] as String?;
@@ -85,8 +90,10 @@ class RazorpayCheckout {
         'description': planName,
         'order_id': orderId,
         'prefill': {
-          if (user?.email != null && user!.email!.isNotEmpty) 'email': user.email,
-          if (user?.phone != null && user!.phone!.isNotEmpty) 'contact': user.phone,
+          if (user?.email != null && user!.email!.isNotEmpty)
+            'email': user.email,
+          if (user?.phone != null && user!.phone!.isNotEmpty)
+            'contact': user.phone,
         },
         'external': {
           'wallets': ['paytm'],
@@ -110,22 +117,24 @@ class RazorpayCheckout {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment successful — your plan is now active')),
+          const SnackBar(
+            content: Text('Payment successful — your plan is now active'),
+          ),
         );
       }
       return true;
     } on TimeoutException catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment timed out')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Payment timed out')));
       }
       return false;
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
       return false;
     } finally {
@@ -150,7 +159,9 @@ class _PlanPickerSheet extends StatelessWidget {
           children: [
             Text(
               'Choose a plan',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
             const Text(
@@ -195,19 +206,34 @@ class _PlanPickerSheet extends StatelessWidget {
                               color: MangalamTheme.gold.withValues(alpha: 0.16),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Iconsax.crown, color: MangalamTheme.gold, size: 22),
+                            child: const Icon(
+                              Iconsax.crown,
+                              color: MangalamTheme.gold,
+                              size: 22,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                                Text(
+                                  name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                  ),
+                                ),
                                 if (desc != null && desc.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 2),
-                                    child: Text(desc,
-                                        style: const TextStyle(fontSize: 12, color: MangalamTheme.muted)),
+                                    child: Text(
+                                      desc,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: MangalamTheme.muted,
+                                      ),
+                                    ),
                                   ),
                                 const SizedBox(height: 4),
                                 Wrap(
@@ -249,8 +275,14 @@ class _PlanPickerSheet extends StatelessWidget {
         color: MangalamTheme.maroon.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(text,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: MangalamTheme.maroon)),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: MangalamTheme.maroon,
+        ),
+      ),
     );
   }
 }

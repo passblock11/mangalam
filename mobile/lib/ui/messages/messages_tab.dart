@@ -13,7 +13,8 @@ class MessagesTab extends StatefulWidget {
   State<MessagesTab> createState() => _MessagesTabState();
 }
 
-class _MessagesTabState extends State<MessagesTab> with SingleTickerProviderStateMixin {
+class _MessagesTabState extends State<MessagesTab>
+    with SingleTickerProviderStateMixin {
   final _api = ApiClient();
   late TabController _tab;
   int _key = 0;
@@ -42,7 +43,8 @@ class _MessagesTabState extends State<MessagesTab> with SingleTickerProviderStat
 
   Future<List<dynamic>> _load() async {
     final json =
-        await _api.get('/v1/conversations', {'folder': _folder}) as Map<String, dynamic>;
+        await _api.get('/v1/conversations', {'folder': _folder})
+            as Map<String, dynamic>;
     return json['conversations'] as List<dynamic>? ?? [];
   }
 
@@ -66,7 +68,9 @@ class _MessagesTabState extends State<MessagesTab> with SingleTickerProviderStat
         future: _load(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon));
+            return const Center(
+              child: CircularProgressIndicator(color: MangalamTheme.maroon),
+            );
           }
           if (snap.hasError) {
             return MangalamEmptyState(
@@ -88,7 +92,12 @@ class _MessagesTabState extends State<MessagesTab> with SingleTickerProviderStat
             );
           }
           return ListView.separated(
-            padding: EdgeInsets.fromLTRB(8, 8, 8, MediaQuery.of(context).padding.bottom + 120),
+            padding: EdgeInsets.fromLTRB(
+              8,
+              8,
+              8,
+              MediaQuery.of(context).padding.bottom + 120,
+            ),
             itemCount: list.length,
             separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
             itemBuilder: (context, i) {
@@ -100,10 +109,15 @@ class _MessagesTabState extends State<MessagesTab> with SingleTickerProviderStat
               final body = last?['body'] as String? ?? '';
               final created = last?['created_at'] as String?;
               final verified = other['is_verified'] == true;
-              final photoUrls = (other['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
+              final photoUrls =
+                  (other['photo_urls'] as List<dynamic>?)?.cast<String>() ??
+                  const [];
 
               return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: SizedBox(
@@ -117,27 +131,41 @@ class _MessagesTabState extends State<MessagesTab> with SingleTickerProviderStat
                     Expanded(
                       child: Text(
                         name,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15.5,
+                        ),
                       ),
                     ),
                     if (verified)
-                      const Icon(Iconsax.verify, size: 14, color: MangalamTheme.gold),
+                      const Icon(
+                        Iconsax.verify,
+                        size: 14,
+                        color: MangalamTheme.gold,
+                      ),
                   ],
                 ),
                 subtitle: Text(
                   body,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: MangalamTheme.muted, fontSize: 13.5),
+                  style: const TextStyle(
+                    color: MangalamTheme.muted,
+                    fontSize: 13.5,
+                  ),
                 ),
                 trailing: Text(
                   formatRelativeTime(created),
-                  style: const TextStyle(fontSize: 11.5, color: MangalamTheme.muted),
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: MangalamTheme.muted,
+                  ),
                 ),
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => ChatScreen(conversationId: id, otherName: name),
+                      builder: (_) =>
+                          ChatScreen(conversationId: id, otherName: name),
                     ),
                   );
                   if (mounted) setState(() => _key++);

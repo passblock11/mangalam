@@ -56,7 +56,9 @@ class DetailCardGrid extends StatelessWidget {
           decoration: BoxDecoration(
             color: MangalamTheme.cream,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: MangalamTheme.maroon.withValues(alpha: 0.18)),
+            border: Border.all(
+              color: MangalamTheme.maroon.withValues(alpha: 0.18),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,7 +66,10 @@ class DetailCardGrid extends StatelessWidget {
             children: [
               Text(
                 e.label,
-                style: const TextStyle(fontSize: 11, color: MangalamTheme.muted),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: MangalamTheme.muted,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -84,7 +89,12 @@ class DetailCardGrid extends StatelessWidget {
 }
 
 class SectionCard extends StatelessWidget {
-  const SectionCard({super.key, required this.icon, required this.title, required this.child});
+  const SectionCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.child,
+  });
 
   final IconData icon;
   final String title;
@@ -124,7 +134,9 @@ class SectionCard extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
             ],
           ),
