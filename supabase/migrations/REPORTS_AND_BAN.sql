@@ -44,9 +44,10 @@ values ('report-screenshots', 'report-screenshots', true)
 on conflict (id) do nothing;
 
 -- Allow any authenticated user to upload to their own folder
+drop policy if exists "report_screenshots_upload" on storage.objects;
 create policy "report_screenshots_upload" on storage.objects
   for insert to authenticated
-  with check (bucket_id = 'report-screenshots' and (storage.foldername(name))[1] = auth.uid());
+  with check (bucket_id = 'report-screenshots' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- Public read (so admin can view without signed URLs)
 drop policy if exists "report_screenshots_read" on storage.objects;
@@ -56,7 +57,7 @@ create policy "report_screenshots_read" on storage.objects
 -- Owners can delete their own screenshots
 drop policy if exists "report_screenshots_delete" on storage.objects;
 create policy "report_screenshots_delete" on storage.objects
-  for delete to authenticated using (bucket_id = 'report-screenshots' and (storage.foldername(name))[1] = auth.uid());
+  for delete to authenticated using (bucket_id = 'report-screenshots' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ─── 4. Reload PostgREST schema cache ───────────────────────────────────────
 notify pgrst, 'reload schema';
