@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
+import '../core/city_search_field.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_picker_section.dart';
 import 'onboarding_data.dart';
@@ -511,13 +512,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       subtitle: 'So we can show nearby matches first.',
       emoji: '📍',
       children: [
-        TextField(
-          controller: _city,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            labelText: 'City',
-            prefixIcon: Icon(Iconsax.building),
-          ),
+        CitySearchField(
+          initialCity: _city.text,
+          onSelected: (v) => setState(() => _city.text = v),
+          onStateSelected: (stateName) {
+            // Auto-fill the State dropdown if it matches a known state
+            final match = OnboardingData.indianStates.firstWhere(
+              (s) => s.toLowerCase() == stateName.toLowerCase(),
+              orElse: () => '',
+            );
+            if (match.isNotEmpty) setState(() => _state = match);
+          },
         ),
         const SizedBox(height: 14),
         _dropdown(
@@ -692,10 +697,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return DropdownButtonFormField<String>(
       initialValue: value,
       isExpanded: true,
+      menuMaxHeight: 320,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: icon != null ? Icon(icon) : null,
       ),
+      selectedItemBuilder: (ctx) => items
+          .map(
+            (e) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                labelFor != null ? labelFor(e) : e,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                softWrap: false,
+              ),
+            ),
+          )
+          .toList(),
       items: items
           .map(
             (e) => DropdownMenuItem(
@@ -703,6 +722,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: Text(
                 labelFor != null ? labelFor(e) : e,
                 overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                softWrap: false,
               ),
             ),
           )

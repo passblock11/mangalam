@@ -3,6 +3,7 @@ import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../auth/onboarding_data.dart';
+import '../core/city_search_field.dart';
 import '../core/mangalam_theme.dart'
     show MangalamCard, MangalamSectionHeader, MangalamTheme;
 import '../core/photo_picker_section.dart';
@@ -301,7 +302,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   icon: Iconsax.building,
                   title: 'Location',
                   children: [
-                    _field(_city, 'City', icon: Iconsax.building),
+                    CitySearchField(
+                      initialCity: _city.text,
+                      onSelected: (v) => setState(() => _city.text = v),
+                      onStateSelected: (stateName) =>
+                          setState(() => _state.text = stateName),
+                    ),
                     const SizedBox(height: 12),
                     _field(_state, 'State', icon: Iconsax.map),
                   ],
