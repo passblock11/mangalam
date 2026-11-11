@@ -702,19 +702,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         labelText: label,
         prefixIcon: icon != null ? Icon(icon) : null,
       ),
-      selectedItemBuilder: (ctx) => items
-          .map(
-            (e) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                labelFor != null ? labelFor(e) : e,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                softWrap: false,
-              ),
-            ),
-          )
-          .toList(),
       items: items
           .map(
             (e) => DropdownMenuItem(
