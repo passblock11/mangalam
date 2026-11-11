@@ -13,12 +13,20 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode): $body';
 }
 
+/// Thrown when the backend rejects the token because the user is banned.
+/// Carries the admin-supplied ban reason so the app can show it.
+class BannedException implements Exception {
+  BannedException({this.reason});
+  final String? reason;
+  @override
+  String toString() => 'BannedException: ${reason ?? "account banned"}';
+}
+
 /// Calls Mangalam `/v1` API with the current Supabase JWT.
 class ApiClient {
   ApiClient();
 
-  String? get currentUserId =>
-      Supabase.instance.client.auth.currentUser?.id;
+  String? get currentUserId => Supabase.instance.client.auth.currentUser?.id;
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/$'), '');
@@ -33,10 +41,7 @@ class ApiClient {
     if (token == null || token.isEmpty) {
       throw ApiException(401, 'Not signed in');
     }
-    return {
-      ..._jsonHeaders,
-      'Authorization': 'Bearer $token',
-    };
+    return {..._jsonHeaders, 'Authorization': 'Bearer $token'};
   }
 
   /// Unauthenticated POST (e.g. login OTP send/verify).
@@ -50,7 +55,10 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, [Map<String, String>? query]) async {
-    final res = await http.get(_uri(path, query), headers: await _authHeaders());
+    final res = await http.get(
+      _uri(path, query),
+      headers: await _authHeaders(),
+    );
     return _decode(res);
   }
 
@@ -77,6 +85,17 @@ class ApiClient {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (text.isEmpty) return null;
       return jsonDecode(text);
+    }
+    // Detect ban: backend returns 403 with { banned: true, ban_reason }
+    if (res.statusCode == 403) {
+      try {
+        final body = jsonDecode(text) as Map<String, dynamic>;
+        if (body['banned'] == true) {
+          throw BannedException(reason: body['ban_reason']?.toString());
+        }
+      } catch (e) {
+        if (e is BannedException) rethrow;
+      }
     }
     throw ApiException(res.statusCode, text);
   }

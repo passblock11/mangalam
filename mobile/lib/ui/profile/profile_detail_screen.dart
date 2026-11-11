@@ -6,6 +6,7 @@ import '../../services/api_client.dart';
 import '../core/mangalam_theme.dart';
 import '../messages/chat_screen.dart';
 import 'profile_widgets.dart';
+import 'report_user_screen.dart';
 
 class ProfileDetailScreen extends StatefulWidget {
   const ProfileDetailScreen({super.key, required this.profileId});
@@ -36,7 +37,9 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       _error = null;
     });
     try {
-      final json = await _api.get('/v1/profiles/${widget.profileId}') as Map<String, dynamic>;
+      final json =
+          await _api.get('/v1/profiles/${widget.profileId}')
+              as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
         _data = json['profile'] as Map<String, dynamic>?;
@@ -58,51 +61,29 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         'action': action,
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sent: $action')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Sent: $action')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
 
   Future<void> _report() async {
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        final c = TextEditingController();
-        return AlertDialog(
-          title: const Text('Report'),
-          content: TextField(
-            controller: c,
-            decoration: const InputDecoration(hintText: 'Reason'),
-            maxLines: 3,
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, c.text.trim()),
-              child: const Text('Submit'),
-            ),
-          ],
-        );
-      },
+    final name = _data?['display_name']?.toString() ?? 'Member';
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => ReportUserScreen(
+          reportedProfileId: widget.profileId,
+          reportedName: name,
+        ),
+      ),
     );
-    if (reason == null || reason.isEmpty) return;
-    try {
-      await _api.post('/v1/reports', {
-        'reported_profile_id': widget.profileId,
-        'reason': reason,
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reported')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
   }
 
   Future<void> _block() async {
@@ -112,8 +93,14 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         title: const Text('Block'),
         content: const Text('Block this profile?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Block')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Block'),
+          ),
         ],
       ),
     );
@@ -121,12 +108,16 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
     try {
       await _api.post('/v1/blocks', {'blocked_id': widget.profileId});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Blocked')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Blocked')));
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -134,22 +125,25 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   Future<void> _openChat() async {
     try {
       final name = _data?['display_name'] ?? 'Member';
-      final res = await _api.post('/v1/conversations', {
-        'other_profile_id': widget.profileId,
-      }) as Map<String, dynamic>;
+      final res =
+          await _api.post('/v1/conversations', {
+                'other_profile_id': widget.profileId,
+              })
+              as Map<String, dynamic>;
       final cid = res['conversation_id'] as String?;
       if (cid != null && mounted) {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => ChatScreen(conversationId: cid, otherName: name.toString()),
+            builder: (_) =>
+                ChatScreen(conversationId: cid, otherName: name.toString()),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Chat needs mutual match: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Chat needs mutual match: $e')));
       }
     }
   }
@@ -218,15 +212,20 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon))
+          ? const Center(
+              child: CircularProgressIndicator(color: MangalamTheme.maroon),
+            )
           : _error != null
-              ? MangalamEmptyState(
-                  icon: Iconsax.warning_2,
-                  title: 'Could not load profile',
-                  subtitle: _error,
-                  action: FilledButton(onPressed: _load, child: const Text('Retry')),
-                )
-              : _buildScroll(context),
+          ? MangalamEmptyState(
+              icon: Iconsax.warning_2,
+              title: 'Could not load profile',
+              subtitle: _error,
+              action: FilledButton(
+                onPressed: _load,
+                child: const Text('Retry'),
+              ),
+            )
+          : _buildScroll(context),
       bottomNavigationBar: _data == null
           ? null
           : _ContactBar(
@@ -263,7 +262,8 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       (label: 'Marital status', value: (p['marital_status'] ?? '—').toString()),
     ];
 
-    final photoUrls = (p['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
+    final photoUrls =
+        (p['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
 
     return CustomScrollView(
       slivers: [
@@ -308,7 +308,10 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   bottom: 12,
                   right: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(20),
@@ -316,7 +319,11 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Iconsax.gallery, color: Colors.white, size: 13),
+                        const Icon(
+                          Iconsax.gallery,
+                          color: Colors.white,
+                          size: 13,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${photoUrls.length} photo${photoUrls.length == 1 ? '' : 's'}',
@@ -334,7 +341,12 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
           ),
         ),
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 132),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            MediaQuery.of(context).padding.bottom + 132,
+          ),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               // Name + verified
@@ -344,7 +356,8 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   Expanded(
                     child: Text(
                       name,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.4,
                           ),
@@ -353,8 +366,11 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   if (verified)
                     Padding(
                       padding: const EdgeInsets.only(left: 6, top: 4),
-                      child: const Icon(Iconsax.verify,
-                          color: MangalamTheme.gold, size: 24),
+                      child: const Icon(
+                        Iconsax.verify,
+                        color: MangalamTheme.gold,
+                        size: 24,
+                      ),
                     ),
                 ],
               ),
@@ -373,17 +389,28 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   decoration: BoxDecoration(
                     color: MangalamTheme.cream,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Row(
                         children: [
-                          Icon(Iconsax.text_block, size: 16, color: MangalamTheme.maroon),
+                          Icon(
+                            Iconsax.text_block,
+                            size: 16,
+                            color: MangalamTheme.maroon,
+                          ),
                           SizedBox(width: 6),
-                          Text('About',
-                              style: TextStyle(fontWeight: FontWeight.w700, color: MangalamTheme.maroon)),
+                          Text(
+                            'About',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: MangalamTheme.maroon,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -393,7 +420,8 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                       ),
                       if (bio.length > 180)
                         TextButton(
-                          onPressed: () => setState(() => _bioExpanded = !_bioExpanded),
+                          onPressed: () =>
+                              setState(() => _bioExpanded = !_bioExpanded),
                           child: Text(_bioExpanded ? 'Show less' : 'Show more'),
                         ),
                     ],
@@ -403,7 +431,11 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  const Icon(Iconsax.location, size: 18, color: MangalamTheme.muted),
+                  const Icon(
+                    Iconsax.location,
+                    size: 18,
+                    color: MangalamTheme.muted,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(child: Text('$city, $state')),
                 ],
@@ -411,7 +443,11 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(Iconsax.calendar, size: 18, color: MangalamTheme.muted),
+                  const Icon(
+                    Iconsax.calendar,
+                    size: 18,
+                    color: MangalamTheme.muted,
+                  ),
                   const SizedBox(width: 6),
                   Text(age != null ? '$age years' : '—'),
                 ],
@@ -425,9 +461,18 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DetailPair(label: 'Occupation', value: (p['occupation'] ?? '—').toString()),
-                    DetailPair(label: 'Education level', value: (p['education_level'] ?? '—').toString()),
-                    DetailPair(label: 'Monthly salary', value: (p['monthly_salary'] ?? '—').toString()),
+                    DetailPair(
+                      label: 'Occupation',
+                      value: (p['occupation'] ?? '—').toString(),
+                    ),
+                    DetailPair(
+                      label: 'Education level',
+                      value: (p['education_level'] ?? '—').toString(),
+                    ),
+                    DetailPair(
+                      label: 'Monthly salary',
+                      value: (p['monthly_salary'] ?? '—').toString(),
+                    ),
                   ],
                 ),
               ),
@@ -438,10 +483,22 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DetailPair(label: 'Mangal Dosh', value: (p['mangal_dosh'] ?? '—').toString()),
-                    DetailPair(label: 'Date of Birth', value: formatDob(p['date_of_birth'])),
-                    DetailPair(label: 'Birth time', value: formatBirthTime(p['birth_time'])),
-                    DetailPair(label: 'Place of birth', value: (p['birth_place'] ?? '—').toString()),
+                    DetailPair(
+                      label: 'Mangal Dosh',
+                      value: (p['mangal_dosh'] ?? '—').toString(),
+                    ),
+                    DetailPair(
+                      label: 'Date of Birth',
+                      value: formatDob(p['date_of_birth']),
+                    ),
+                    DetailPair(
+                      label: 'Birth time',
+                      value: formatBirthTime(p['birth_time']),
+                    ),
+                    DetailPair(
+                      label: 'Place of birth',
+                      value: (p['birth_place'] ?? '—').toString(),
+                    ),
                   ],
                 ),
               ),
@@ -457,15 +514,42 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                       value:
                           '${partner['age_min']?.toString() ?? '—'} - ${partner['age_max']?.toString() ?? '—'}',
                     ),
-                    DetailPair(label: 'Location', value: partnerPref(partner, 'location')),
-                    DetailPair(label: 'Height', value: partnerPref(partner, 'height')),
-                    DetailPair(label: 'Diet', value: partnerPref(partner, 'diet')),
-                    DetailPair(label: 'Marital status', value: partnerPref(partner, 'marital_status')),
-                    DetailPair(label: 'Mother tongue', value: partnerPref(partner, 'mother_tongue')),
-                    DetailPair(label: 'Mangal Dosh', value: partnerPref(partner, 'mangal_dosh')),
-                    DetailPair(label: 'Occupation', value: partnerPref(partner, 'occupation')),
-                    DetailPair(label: 'Monthly salary', value: partnerPref(partner, 'monthly_salary')),
-                    DetailPair(label: 'Education level', value: partnerPref(partner, 'education_level')),
+                    DetailPair(
+                      label: 'Location',
+                      value: partnerPref(partner, 'location'),
+                    ),
+                    DetailPair(
+                      label: 'Height',
+                      value: partnerPref(partner, 'height'),
+                    ),
+                    DetailPair(
+                      label: 'Diet',
+                      value: partnerPref(partner, 'diet'),
+                    ),
+                    DetailPair(
+                      label: 'Marital status',
+                      value: partnerPref(partner, 'marital_status'),
+                    ),
+                    DetailPair(
+                      label: 'Mother tongue',
+                      value: partnerPref(partner, 'mother_tongue'),
+                    ),
+                    DetailPair(
+                      label: 'Mangal Dosh',
+                      value: partnerPref(partner, 'mangal_dosh'),
+                    ),
+                    DetailPair(
+                      label: 'Occupation',
+                      value: partnerPref(partner, 'occupation'),
+                    ),
+                    DetailPair(
+                      label: 'Monthly salary',
+                      value: partnerPref(partner, 'monthly_salary'),
+                    ),
+                    DetailPair(
+                      label: 'Education level',
+                      value: partnerPref(partner, 'education_level'),
+                    ),
                   ],
                 ),
               ),
@@ -572,13 +656,21 @@ class _ContactBar extends StatelessWidget {
                     ),
                   ],
                 )
-              : _lockedRow(context, locked: locked, ownerDisabled: ownerDisabled),
+              : _lockedRow(
+                  context,
+                  locked: locked,
+                  ownerDisabled: ownerDisabled,
+                ),
         ),
       ),
     );
   }
 
-  Widget _lockedRow(BuildContext context, {required bool locked, required bool ownerDisabled}) {
+  Widget _lockedRow(
+    BuildContext context, {
+    required bool locked,
+    required bool ownerDisabled,
+  }) {
     final String message;
     final IconData icon;
     final Color tint;
@@ -587,7 +679,8 @@ class _ContactBar extends StatelessWidget {
       icon = Iconsax.message_question;
       tint = MangalamTheme.muted;
     } else if (locked) {
-      message = 'Verify your identity & upgrade to Premium to view contact details.';
+      message =
+          'Verify your identity & upgrade to Premium to view contact details.';
       icon = Iconsax.lock;
       tint = MangalamTheme.maroon;
     } else {
@@ -602,7 +695,12 @@ class _ContactBar extends StatelessWidget {
         Expanded(
           child: Text(
             message,
-            style: TextStyle(fontSize: 12.5, color: tint, height: 1.35, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 12.5,
+              color: tint,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         const SizedBox(width: 8),

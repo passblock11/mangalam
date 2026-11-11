@@ -10,6 +10,7 @@ import '../core/mangalam_theme.dart';
 import '../core/photo_picker_section.dart';
 import 'edit_profile_screen.dart';
 import 'legal_screen.dart';
+import 'profile_preview_screen.dart';
 import 'verification_screen.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -456,6 +457,17 @@ class _ProfileTabState extends State<ProfileTab> {
                               ),
                             );
                           },
+                        ),
+                        const Divider(height: 1, indent: 16),
+                        _MenuTile(
+                          icon: Iconsax.eye,
+                          title: 'Preview public profile',
+                          subtitle: 'See how others view your profile',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProfilePreviewScreen(),
+                            ),
+                          ),
                         ),
                         const Divider(height: 1, indent: 16),
                         _MenuTile(

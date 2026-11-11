@@ -231,3 +231,124 @@ adminRouter.delete("/admins/:id", requireAdmin("admins"), async (c) => {
 adminRouter.get("/features", requireAdmin(), async (c) => {
   return c.json({ features: ADMIN_FEATURES as readonly string[] });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reports — full detail list for the admin complaint console
+// ─────────────────────────────────────────────────────────────────────────────
+adminRouter.get("/reports", requireAdmin("reports"), async (c) => {
+  const sb = getSupabaseAdmin();
+  const { data, error } = await sb
+    .from("reports")
+    .select(
+      "id,reporter_id,reported_profile_id,title,description,category,screenshot_urls,reason,status,created_at,reviewed_at,reviewed_by,admin_notes,resolution"
+    )
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) return c.json({ error: error.message }, 500);
+
+  const ids = Array.from(
+    new Set((data ?? []).flatMap((r) => [r.reporter_id, r.reported_profile_id]))
+  );
+  const { data: profs } = await sb
+    .from("profiles")
+    .select("id,display_name,phone,photo_urls,is_banned,is_verified,verification_status")
+    .in("id", ids);
+  const map = new Map((profs ?? []).map((p) => [p.id, p]));
+
+  const rows = (data ?? []).map((r) => ({
+    ...r,
+    reported_profile: map.get(r.reported_profile_id) ?? null,
+    reporter_profile: map.get(r.reporter_id) ?? null,
+  }));
+  return c.json({ reports: rows });
+});
+
+const reportUpdateSchema = z.object({
+  status: z.enum(["open", "reviewing", "closed", "actioned"]).optional(),
+  admin_notes: z.string().max(4000).optional(),
+  resolution: z.string().max(4000).optional(),
+});
+
+adminRouter.patch("/reports/:id", requireAdmin("reports"), async (c) => {
+  const admin = c.get("admin");
+  const id = c.req.param("id");
+  const parsed = reportUpdateSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+
+  const patch: Record<string, unknown> = {};
+  if (parsed.data.status !== undefined) patch.status = parsed.data.status;
+  if (parsed.data.admin_notes !== undefined) patch.admin_notes = parsed.data.admin_notes;
+  if (parsed.data.resolution !== undefined) patch.resolution = parsed.data.resolution;
+  // Mark reviewed when status moves to a terminal state
+  if (parsed.data.status === "closed" || parsed.data.status === "actioned") {
+    patch.reviewed_at = new Date().toISOString();
+    patch.reviewed_by = admin.id;
+  }
+
+  const sb = getSupabaseAdmin();
+  const { error } = await sb.from("reports").update(patch).eq("id", id);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ban / unban a user (app user, not an admin)
+// Sets profiles.is_banned AND the Supabase Auth ban so the token is rejected
+// on the next request (requireAuth) and they cannot re-login.
+// ─────────────────────────────────────────────────────────────────────────────
+const banSchema = z.object({
+  reason: z.string().min(1).max(2000).optional(),
+});
+
+adminRouter.post("/users/:id/ban", requireAdmin("users"), async (c) => {
+  const id = c.req.param("id");
+  const parsed = banSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  const reason = parsed.data.reason?.trim() || null;
+
+  const sb = getSupabaseAdmin();
+  // 1) Flag the profile (this is what requireAuth checks on every request)
+  const { error: pErr } = await sb
+    .from("profiles")
+    .update({
+      is_banned: true,
+      banned_at: new Date().toISOString(),
+      ban_reason: reason,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (pErr) return c.json({ error: pErr.message }, 500);
+
+  // 2) Also ban at the Supabase Auth layer so they can't refresh/re-login
+  const { error: aErr } = await sb.auth.admin.updateUserById(id, {
+    ban_duration: "87600h", // ~10 years
+  });
+  if (aErr) {
+    // Non-fatal: the profile flag is the authoritative check. Log and continue.
+    return c.json({ ok: true, warning: aErr.message });
+  }
+  return c.json({ ok: true });
+});
+
+adminRouter.post("/users/:id/unban", requireAdmin("users"), async (c) => {
+  const id = c.req.param("id");
+  const sb = getSupabaseAdmin();
+  const { error: pErr } = await sb
+    .from("profiles")
+    .update({
+      is_banned: false,
+      banned_at: null,
+      ban_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (pErr) return c.json({ error: pErr.message }, 500);
+
+  const { error: aErr } = await sb.auth.admin.updateUserById(id, {
+    ban_duration: "none",
+  });
+  if (aErr) {
+    return c.json({ ok: true, warning: aErr.message });
+  }
+  return c.json({ ok: true });
+});

@@ -1,6 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { env } from "./env.js";
+import { getSupabaseAdmin } from "./supabase.js";
 
 export type AuthUser = JWTPayload & { sub?: string };
 
@@ -66,6 +67,27 @@ export const requireAuth = createMiddleware(async (c, next) => {
     }
     c.set("user", payload);
     c.set("userId", sub);
+
+    // ── Ban check: a banned user's token is rejected with 403 ──────────
+    // The app reads `banned: true` and signs the user out, showing the ban
+    // reason. We do this here so every authenticated route is protected.
+    const sb = getSupabaseAdmin();
+    const { data: prof } = await sb
+      .from("profiles")
+      .select("is_banned,ban_reason")
+      .eq("id", sub)
+      .maybeSingle();
+    if (prof?.is_banned === true) {
+      return c.json(
+        {
+          error: "Your account has been banned.",
+          banned: true,
+          ban_reason: prof.ban_reason ?? null,
+        },
+        403,
+      );
+    }
+
     await next();
   } catch {
     return c.json({ error: "Invalid or expired token" }, 401);

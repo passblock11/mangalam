@@ -50,7 +50,7 @@ export async function fetchReports(): Promise<
 
 export async function setReportStatus(
   reportId: string,
-  status: "open" | "reviewing" | "closed"
+  status: "open" | "reviewing" | "closed" | "actioned"
 ): Promise<ActionResult<void>> {
   const auth = await requireAdmin("reports");
   if (!auth.ok) return auth;
@@ -448,18 +448,43 @@ export async function revokePremium(profileId: string): Promise<ActionResult<voi
 
 export async function banUser(
   profileId: string,
-  banned: boolean
+  banned: boolean,
+  reason?: string
 ): Promise<ActionResult<void>> {
   const auth = await requireAdmin("users");
   if (!auth.ok) return auth;
   try {
     const sb = supabaseAdmin();
     if (banned) {
+      const trimmed = reason?.trim() || null;
+      // 1) Flag the profile — requireAuth checks this on every API call
+      const { error: pErr } = await sb
+        .from("profiles")
+        .update({
+          is_banned: true,
+          banned_at: new Date().toISOString(),
+          ban_reason: trimmed,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", profileId);
+      if (pErr) return { ok: false, error: mapDbError(pErr.message) };
+      // 2) Ban at the Supabase Auth layer so they can't refresh / re-login
       const { error } = await sb.auth.admin.updateUserById(profileId, {
         ban_duration: "87600h",
       });
       if (error) return { ok: false, error: error.message };
     } else {
+      // Unban: clear the profile flag + the Supabase Auth ban
+      const { error: pErr } = await sb
+        .from("profiles")
+        .update({
+          is_banned: false,
+          banned_at: null,
+          ban_reason: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", profileId);
+      if (pErr) return { ok: false, error: mapDbError(pErr.message) };
       const { error } = await sb.auth.admin.updateUserById(profileId, {
         ban_duration: "none",
       });
@@ -585,12 +610,23 @@ export async function fetchReportsWithContext(): Promise<
       id: string;
       reporter_id: string;
       reported_profile_id: string;
+      title: string | null;
+      description: string | null;
+      category: string;
+      screenshot_urls: string[];
       reason: string;
       status: string;
       created_at: string;
+      reviewed_at: string | null;
+      admin_notes: string | null;
+      resolution: string | null;
       reported_name: string | null;
       reported_phone: string | null;
+      reported_photo: string | null;
+      reported_banned: boolean;
+      reported_verified: boolean;
       reporter_name: string | null;
+      reporter_phone: string | null;
     }[]
   >
 > {
@@ -600,9 +636,11 @@ export async function fetchReportsWithContext(): Promise<
     const sb = supabaseAdmin();
     const { data, error } = await sb
       .from("reports")
-      .select("id,reporter_id,reported_profile_id,reason,status,created_at")
+      .select(
+        "id,reporter_id,reported_profile_id,title,description,category,screenshot_urls,reason,status,created_at,reviewed_at,admin_notes,resolution"
+      )
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(200);
     if (error) return { ok: false, error: mapDbError(error.message) };
 
     const ids = Array.from(
@@ -610,17 +648,51 @@ export async function fetchReportsWithContext(): Promise<
     );
     const { data: profs } = await sb
       .from("profiles")
-      .select("id,display_name,phone")
+      .select("id,display_name,phone,photo_urls,is_banned,is_verified")
       .in("id", ids);
     const map = new Map((profs ?? []).map((p) => [p.id, p]));
 
-    const rows = (data ?? []).map((r) => ({
-      ...r,
-      reported_name: map.get(r.reported_profile_id)?.display_name ?? null,
-      reported_phone: map.get(r.reported_profile_id)?.phone ?? null,
-      reporter_name: map.get(r.reporter_id)?.display_name ?? null,
-    }));
+    const rows = (data ?? []).map((r) => {
+      const reported = map.get(r.reported_profile_id);
+      const reporter = map.get(r.reporter_id);
+      const photoUrls = (reported?.photo_urls as string[] | null) ?? null;
+      return {
+        ...r,
+        reported_name: reported?.display_name ?? null,
+        reported_phone: reported?.phone ?? null,
+        reported_photo: photoUrls && photoUrls.length > 0 ? photoUrls[0] : null,
+        reported_banned: !!reported?.is_banned,
+        reported_verified: !!reported?.is_verified,
+        reporter_name: reporter?.display_name ?? null,
+        reporter_phone: reporter?.phone ?? null,
+      };
+    });
     return { ok: true, data: rows };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: mapDbError(msg) };
+  }
+}
+
+export async function updateReport(
+  reportId: string,
+  patch: { status?: "open" | "reviewing" | "closed" | "actioned"; admin_notes?: string; resolution?: string }
+): Promise<ActionResult<void>> {
+  const auth = await requireAdmin("reports");
+  if (!auth.ok) return auth;
+  try {
+    const sb = supabaseAdmin();
+    const update: Record<string, unknown> = {};
+    if (patch.status !== undefined) update.status = patch.status;
+    if (patch.admin_notes !== undefined) update.admin_notes = patch.admin_notes;
+    if (patch.resolution !== undefined) update.resolution = patch.resolution;
+    if (patch.status === "closed" || patch.status === "actioned") {
+      update.reviewed_at = new Date().toISOString();
+    }
+    const { error } = await sb.from("reports").update(update).eq("id", reportId);
+    if (error) return { ok: false, error: mapDbError(error.message) };
+    revalidatePath("/");
+    return { ok: true, data: undefined };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: mapDbError(msg) };
