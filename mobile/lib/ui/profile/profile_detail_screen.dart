@@ -630,37 +630,40 @@ class _ContactBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: contactVisible
-              ? Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: onWhatsApp,
-                        icon: const Icon(Iconsax.message),
-                        label: const Text('WhatsApp'),
+          child: SizedBox(
+            width: double.infinity,
+            child: contactVisible
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: onWhatsApp,
+                          icon: const Icon(Iconsax.message),
+                          label: const Text('WhatsApp'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    IconButton.outlined(
-                      onPressed: onChat,
-                      icon: const Icon(Iconsax.message),
-                      color: MangalamTheme.maroon,
-                      tooltip: 'Message',
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.outlined(
-                      onPressed: onPhone,
-                      icon: const Icon(Iconsax.call),
-                      color: MangalamTheme.maroon,
-                      tooltip: 'Call',
-                    ),
-                  ],
-                )
-              : _lockedRow(
-                  context,
-                  locked: locked,
-                  ownerDisabled: ownerDisabled,
-                ),
+                      const SizedBox(width: 10),
+                      IconButton.outlined(
+                        onPressed: onChat,
+                        icon: const Icon(Iconsax.message),
+                        color: MangalamTheme.maroon,
+                        tooltip: 'Message',
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        onPressed: onPhone,
+                        icon: const Icon(Iconsax.call),
+                        color: MangalamTheme.maroon,
+                        tooltip: 'Call',
+                      ),
+                    ],
+                  )
+                : _lockedRow(
+                    context,
+                    locked: locked,
+                    ownerDisabled: ownerDisabled,
+                  ),
+          ),
         ),
       ),
     );
