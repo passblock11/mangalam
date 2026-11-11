@@ -189,7 +189,8 @@ class _LikesTabState extends State<LikesTab>
               })
               as Map<String, dynamic>;
       final cid = res['conversation_id'] as String?;
-      if (cid != null && context.mounted) {
+      if (!mounted) return;
+      if (cid != null) {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => ChatScreen(conversationId: cid, otherName: name),
@@ -198,20 +199,19 @@ class _LikesTabState extends State<LikesTab>
         if (mounted) setState(() => _reloadKey++);
       }
     } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'You need a mutual match to start chat — open profile to connect.',
-            ),
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You need a mutual match to start chat — open profile to connect.',
           ),
-        );
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => ProfileDetailScreen(profileId: id),
-          ),
-        );
-      }
+        ),
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ProfileDetailScreen(profileId: id),
+        ),
+      );
     }
   }
 }
