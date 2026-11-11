@@ -3,8 +3,14 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    // Firebase (FCM) — requires google-services.json in android/app/
-    id("com.google.gms.google-services")
+}
+
+// Firebase (FCM): apply the Google Services plugin ONLY when
+// google-services.json is present in android/app/. This lets the project
+// build without Firebase config; add the file later to enable FCM push.
+// In-app notifications via Supabase Realtime work regardless.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 android {
