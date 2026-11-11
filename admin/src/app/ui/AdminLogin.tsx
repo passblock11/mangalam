@@ -111,8 +111,7 @@ export function AdminLogin() {
           </div>
 
           <p className="mt-5 text-center text-xs text-[var(--muted)]">
-            Use a Supabase account with{" "}
-            <code className="rounded bg-zinc-100 px-1 py-0.5">profiles.is_admin = true</code>.
+            Admin credentials are managed in the Settings → Admins section.
           </p>
         </form>
       </div>

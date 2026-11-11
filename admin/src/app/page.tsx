@@ -1,6 +1,8 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getAdminSession } from "@/lib/admin-session-server";
+import { adminsExist } from "./auth-actions";
 import { AdminDashboard } from "./ui/AdminDashboard";
 import { AdminLogin } from "./ui/AdminLogin";
+import { AdminBootstrap } from "./ui/AdminBootstrap";
 import { SignOutButton } from "./ui/SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -19,19 +21,18 @@ export default async function Home() {
     );
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await getAdminSession();
 
-  let isAdmin = false;
-  if (user) {
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .maybeSingle();
-    isAdmin = !!prof?.is_admin;
+  let body: React.ReactNode;
+  if (session) {
+    body = <AdminDashboard session={session} />;
+  } else {
+    const probe = await adminsExist();
+    if (probe.ok && !probe.exists) {
+      body = <AdminBootstrap />;
+    } else {
+      body = <AdminLogin />;
+    }
   }
 
   return (
@@ -55,12 +56,18 @@ export default async function Home() {
               </h1>
               <p className="text-[11px] text-[var(--muted)]">Moderation & verification</p>
             </div>
+            {session && (
+              <span className="ml-3 hidden text-xs text-[var(--muted)] sm:inline">
+                {session.email}
+                {session.is_super_admin ? " · super admin" : ""}
+              </span>
+            )}
           </div>
-          {isAdmin && <SignOutButton />}
+          {session && <SignOutButton />}
         </div>
       </header>
 
-      {isAdmin ? <AdminDashboard /> : <AdminLogin />}
+      {body}
     </div>
   );
 }

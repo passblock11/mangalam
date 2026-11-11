@@ -16,6 +16,7 @@ import { authRouter } from "./routes/auth.js";
 import { publicRouter } from "./routes/public.js";
 import { verificationRouter } from "./routes/verification.js";
 import { configRouter } from "./routes/config.js";
+import { adminRouter } from "./routes/admin.js";
 
 export const app = new Hono();
 
@@ -43,7 +44,8 @@ const v1 = new Hono()
   .route("/blocks", blocksRouter)
   .route("/payments", paymentsRouter)
   .route("/verification", verificationRouter)
-  .route("/config", configRouter);
+  .route("/config", configRouter)
+  .route("/admin", adminRouter);
 
 // Vercel: vercel.json rewrites /v1/* → /api/v1/*
 app.route("/api/v1", v1);

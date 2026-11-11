@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Settings, CreditCard, Tag, FileText, UserCog, Sliders } from "lucide-react";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { PaymentSettings } from "./settings/PaymentSettings";
@@ -8,20 +8,24 @@ import { PlansSettings } from "./settings/PlansSettings";
 import { CouponsSettings } from "./settings/CouponsSettings";
 import { LegalSettings } from "./settings/LegalSettings";
 import { AdminsSettings } from "./settings/AdminsSettings";
+import { hasPermission, type AdminSession, type AdminFeature } from "@/lib/admin-session";
 
 type Sub = "general" | "payment" | "plans" | "coupons" | "legal" | "admins";
 
-const TABS: { id: Sub; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
-  { id: "general", label: "General", icon: Sliders },
-  { id: "payment", label: "Payment", icon: CreditCard },
-  { id: "plans", label: "Plans", icon: Tag },
-  { id: "coupons", label: "Coupons", icon: Tag },
-  { id: "legal", label: "Legal pages", icon: FileText },
-  { id: "admins", label: "Admins", icon: UserCog },
+const TABS: { id: Sub; feature: AdminFeature | null; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+  { id: "general", feature: null, label: "General", icon: Sliders },
+  { id: "payment", feature: null, label: "Payment", icon: CreditCard },
+  { id: "plans", feature: null, label: "Plans", icon: Tag },
+  { id: "coupons", feature: null, label: "Coupons", icon: Tag },
+  { id: "legal", feature: null, label: "Legal pages", icon: FileText },
+  { id: "admins", feature: "admins", label: "Admins", icon: UserCog },
 ];
 
-export function SettingsSection() {
-  const [sub, setSub] = useState<Sub>("general");
+export function SettingsSection({ session }: { session: AdminSession }) {
+  // Super admins see all tabs; otherwise the Admins tab requires the "admins" feature.
+  const visibleTabs = TABS.filter((t) => t.feature === null || hasPermission(session, t.feature));
+  const [sub, setSub] = useState<Sub>(visibleTabs[0]?.id ?? "general");
+
   return (
     <div className="space-y-6">
       <div>
@@ -34,7 +38,7 @@ export function SettingsSection() {
       </div>
 
       <div className="flex flex-wrap gap-1.5 rounded-xl border border-[var(--border)] bg-white p-1.5">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -55,7 +59,7 @@ export function SettingsSection() {
       {sub === "plans" && <PlansSettings />}
       {sub === "coupons" && <CouponsSettings />}
       {sub === "legal" && <LegalSettings />}
-      {sub === "admins" && <AdminsSettings />}
+      {sub === "admins" && <AdminsSettings session={session} />}
     </div>
   );
 }

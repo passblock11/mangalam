@@ -17,27 +17,34 @@ import { UsersSection } from "./UsersSection";
 import { ReportsSection } from "./ReportsSection";
 import { PaymentsSection } from "./PaymentsSection";
 import { SettingsSection } from "./SettingsSection";
+import { hasPermission, type AdminSession, type AdminFeature } from "@/lib/admin-session";
 
 type Tab = "overview" | "verifications" | "users" | "reports" | "payments" | "settings";
 
-const NAV: { id: Tab; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "verifications", label: "Verifications", icon: ShieldCheck },
-  { id: "users", label: "Users", icon: Users },
-  { id: "reports", label: "Reports", icon: Flag },
-  { id: "payments", label: "Payments", icon: Wallet },
-  { id: "settings", label: "Settings", icon: Settings },
+const NAV: { id: Tab; feature: AdminFeature; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+  { id: "overview", feature: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "verifications", feature: "verifications", label: "Verifications", icon: ShieldCheck },
+  { id: "users", feature: "users", label: "Users", icon: Users },
+  { id: "reports", feature: "reports", label: "Reports", icon: Flag },
+  { id: "payments", feature: "payments", label: "Payments", icon: Wallet },
+  { id: "settings", feature: "settings", label: "Settings", icon: Settings },
 ];
 
-export function AdminDashboard() {
-  const [tab, setTab] = useState<Tab>("overview");
+export function AdminDashboard({ session }: { session: AdminSession }) {
+  const allowed = NAV.filter((n) => hasPermission(session, n.feature));
+  const [tab, setTab] = useState<Tab>(allowed[0]?.id ?? "overview");
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // If the active tab is not allowed (e.g. permissions changed), fall back.
+  if (!allowed.some((n) => n.id === tab) && allowed[0]) {
+    setTab(allowed[0].id);
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-65px)] bg-[var(--background)]">
       {/* Sidebar (desktop) */}
       <aside className="hidden w-64 shrink-0 border-r border-[var(--border)] bg-white md:block">
-        <Sidebar tab={tab} onTab={(t) => setTab(t)} />
+        <Sidebar session={session} items={allowed} tab={tab} onTab={(t) => setTab(t)} />
       </aside>
 
       {/* Mobile drawer */}
@@ -50,6 +57,8 @@ export function AdminDashboard() {
           />
           <aside className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">
             <Sidebar
+              session={session}
+              items={allowed}
               tab={tab}
               onTab={(t) => {
                 setTab(t);
@@ -79,12 +88,21 @@ export function AdminDashboard() {
         </div>
 
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-          {tab === "overview" && <OverviewSection />}
-          {tab === "verifications" && <VerificationsSection />}
-          {tab === "users" && <UsersSection />}
-          {tab === "reports" && <ReportsSection />}
-          {tab === "payments" && <PaymentsSection />}
-          {tab === "settings" && <SettingsSection />}
+          {allowed.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+              Your admin account has no feature permissions assigned. Ask a super admin to grant
+              access in Settings → Admins.
+            </div>
+          ) : (
+            <>
+              {tab === "overview" && <OverviewSection />}
+              {tab === "verifications" && <VerificationsSection />}
+              {tab === "users" && <UsersSection />}
+              {tab === "reports" && <ReportsSection />}
+              {tab === "payments" && <PaymentsSection />}
+              {tab === "settings" && <SettingsSection session={session} />}
+            </>
+          )}
         </div>
       </main>
     </div>
@@ -92,9 +110,13 @@ export function AdminDashboard() {
 }
 
 function Sidebar({
+  session,
+  items,
   tab,
   onTab,
 }: {
+  session: AdminSession;
+  items: { id: Tab; label: string; icon: React.ComponentType<{ size?: number }> }[];
   tab: Tab;
   onTab: (t: Tab) => void;
 }) {
@@ -111,7 +133,7 @@ function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {NAV.map((n) => {
+        {items.map((n) => {
           const active = tab === n.id;
           return (
             <button
@@ -132,8 +154,9 @@ function Sidebar({
       </nav>
 
       <div className="border-t border-[var(--border)] p-3 text-[11px] text-[var(--muted)]">
-        <p className="px-2">Moderation & operations</p>
-        <p className="px-2">v2.0 · Mangalam Admin</p>
+        <p className="truncate px-2 font-semibold text-[var(--ink)]">{session.email}</p>
+        <p className="px-2">{session.is_super_admin ? "Super admin" : "Admin"}</p>
+        <p className="mt-1 px-2">v2.0 · Mangalam Admin</p>
       </div>
     </div>
   );

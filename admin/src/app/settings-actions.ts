@@ -3,32 +3,44 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { ActionResult } from "@/lib/actionResult";
 import { revalidatePath } from "next/cache";
+import {
+  requireAdminFeature,
+  getAdminToken,
+  getBackendUrl,
+} from "@/lib/admin-session-server";
+import { type AdminFeature } from "@/lib/admin-session";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-async function requireAdmin(): Promise<ActionResult<{ userId: string }>> {
-  const { createSupabaseServerClient } = await import("@/lib/supabase/server");
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Sign in to continue." };
-  const { data: prof } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!prof?.is_admin) return { ok: false, error: "Not authorized." };
-  return { ok: true, data: { userId: user.id } };
+async function requireSettings() {
+  return requireAdminFeature("settings");
+}
+
+async function requireAdmins() {
+  return requireAdminFeature("admins");
 }
 
 function mapErr(m: string) {
   return m;
 }
 
+async function backendCall(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = await getAdminToken();
+  if (!token) throw new Error("No admin session");
+  return fetch(`${getBackendUrl()}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(init.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+}
+
 // ── App settings (singleton) ────────────────────────────────────────────────
 export async function fetchAppSettings(): Promise<ActionResult<Record<string, unknown>>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { data, error } = await sb
@@ -43,7 +55,7 @@ export async function fetchAppSettings(): Promise<ActionResult<Record<string, un
 export async function updateAppSettings(
   patch: Record<string, unknown>
 ): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { error } = await sb
@@ -57,7 +69,7 @@ export async function updateAppSettings(
 
 // ── Payment methods ──────────────────────────────────────────────────────────
 export async function fetchPaymentMethods(): Promise<ActionResult<any[]>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { data, error } = await sb
@@ -78,7 +90,7 @@ export async function upsertPaymentMethod(
     sort_order: number;
   }
 ): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   // Only one active at a time: if setting active, deactivate others first
@@ -120,7 +132,7 @@ export async function upsertPaymentMethod(
 }
 
 export async function deletePaymentMethod(id: string): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { error } = await sb.from("payment_methods").delete().eq("id", id);
@@ -131,7 +143,7 @@ export async function deletePaymentMethod(id: string): Promise<ActionResult<void
 
 // ── Plans ────────────────────────────────────────────────────────────────────
 export async function fetchPlansAdmin(): Promise<ActionResult<any[]>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { data, error } = await sb
@@ -154,7 +166,7 @@ export async function upsertPlan(plan: {
   is_active: boolean;
   sort_order: number;
 }): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   if (plan.id) {
@@ -172,7 +184,7 @@ export async function upsertPlan(plan: {
 }
 
 export async function deletePlan(id: string): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { error } = await sb.from("plans").delete().eq("id", id);
@@ -183,7 +195,7 @@ export async function deletePlan(id: string): Promise<ActionResult<void>> {
 
 // ── Coupons ──────────────────────────────────────────────────────────────────
 export async function fetchCoupons(): Promise<ActionResult<any[]>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { data, error } = await sb
@@ -206,7 +218,7 @@ export async function upsertCoupon(coupon: {
   valid_until?: string | null;
   is_active: boolean;
 }): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const payload = {
@@ -226,7 +238,7 @@ export async function upsertCoupon(coupon: {
 }
 
 export async function deleteCoupon(id: string): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { error } = await sb.from("coupons").delete().eq("id", id);
@@ -237,7 +249,7 @@ export async function deleteCoupon(id: string): Promise<ActionResult<void>> {
 
 // ── Legal pages ──────────────────────────────────────────────────────────────
 export async function fetchLegalPagesAdmin(): Promise<ActionResult<any[]>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { data, error } = await sb
@@ -255,7 +267,7 @@ export async function upsertLegalPage(page: {
   body: string;
   is_published: boolean;
 }): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const payload = {
@@ -278,7 +290,7 @@ export async function upsertLegalPage(page: {
 }
 
 export async function deleteLegalPage(id: string): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { error } = await sb.from("legal_pages").delete().eq("id", id);
@@ -287,55 +299,103 @@ export async function deleteLegalPage(id: string): Promise<ActionResult<void>> {
   return { ok: true, data: undefined };
 }
 
-// ── Admin management (promote/demote users) ──────────────────────────────────
-export async function fetchAdmins(): Promise<ActionResult<any[]>> {
-  const auth = await requireAdmin();
+// ── Admin management (custom admins table, via backend) ──────────────────────
+export type AdminAccount = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  permissions: Partial<Record<AdminFeature, boolean>>;
+  is_active: boolean;
+  is_super_admin: boolean;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchAdminAccounts(): Promise<ActionResult<AdminAccount[]>> {
+  const auth = await requireAdmins();
   if (!auth.ok) return auth;
-  const sb = supabaseAdmin();
-  const { data, error } = await sb
-    .from("profiles")
-    .select("id,display_name,phone,email,created_at,is_admin,last_active_at")
-    .eq("is_admin", true)
-    .order("created_at", { ascending: true });
-  if (error) return { ok: false, error: mapErr(error.message) };
-  return { ok: true, data: data ?? [] };
+  try {
+    const res = await backendCall("/v1/admin/admins");
+    const data = (await res.json().catch(() => null)) as
+      | { admins?: AdminAccount[]; error?: string }
+      | null;
+    if (!res.ok) return { ok: false, error: data?.error ?? `Failed (${res.status})` };
+    return { ok: true, data: data?.admins ?? [] };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  }
 }
 
-export async function setAdminStatus(
-  profileId: string,
-  isAdmin: boolean
-): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+export async function createAdminAccount(input: {
+  email: string;
+  password: string;
+  full_name?: string;
+  permissions: Partial<Record<AdminFeature, boolean>>;
+  is_super_admin?: boolean;
+}): Promise<ActionResult<AdminAccount>> {
+  const auth = await requireAdmins();
   if (!auth.ok) return auth;
-  if (auth.data.userId === profileId) {
-    return { ok: false, error: "You cannot change your own admin status." };
+  try {
+    const res = await backendCall("/v1/admin/admins", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | { admin?: AdminAccount; error?: string }
+      | null;
+    if (!res.ok) return { ok: false, error: data?.error ?? `Failed (${res.status})` };
+    revalidatePath("/");
+    return { ok: true, data: data!.admin! };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
   }
-  const sb = supabaseAdmin();
-  const { error } = await sb
-    .from("profiles")
-    .update({ is_admin: isAdmin, updated_at: new Date().toISOString() })
-    .eq("id", profileId);
-  if (error) return { ok: false, error: mapErr(error.message) };
-  revalidatePath("/");
-  return { ok: true, data: undefined };
 }
 
-export async function searchProfilesForAdmin(
-  query: string
-): Promise<ActionResult<any[]>> {
-  const auth = await requireAdmin();
-  if (!auth.ok) return auth;
-  const sb = supabaseAdmin();
-  let q = sb
-    .from("profiles")
-    .select("id,display_name,phone,email,is_admin")
-    .order("created_at", { ascending: false })
-    .limit(20);
-  const t = query.trim();
-  if (t) {
-    q = q.or(`display_name.ilike.%${t}%,phone.ilike.%${t}%,email.ilike.%${t}%`);
+export async function updateAdminAccount(
+  id: string,
+  patch: {
+    full_name?: string;
+    permissions?: Partial<Record<AdminFeature, boolean>>;
+    is_active?: boolean;
+    is_super_admin?: boolean;
+    password?: string;
   }
-  const { data, error } = await q;
-  if (error) return { ok: false, error: mapErr(error.message) };
-  return { ok: true, data: data ?? [] };
+): Promise<ActionResult<AdminAccount>> {
+  const auth = await requireAdmins();
+  if (!auth.ok) return auth;
+  try {
+    const res = await backendCall(`/v1/admin/admins/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | { admin?: AdminAccount; error?: string }
+      | null;
+    if (!res.ok) return { ok: false, error: data?.error ?? `Failed (${res.status})` };
+    revalidatePath("/");
+    return { ok: true, data: data!.admin! };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  }
+}
+
+export async function deleteAdminAccount(id: string): Promise<ActionResult<void>> {
+  const auth = await requireAdmins();
+  if (!auth.ok) return auth;
+  try {
+    const res = await backendCall(`/v1/admin/admins/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (!res.ok) return { ok: false, error: data?.error ?? `Failed (${res.status})` };
+    revalidatePath("/");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  }
 }

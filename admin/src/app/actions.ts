@@ -2,35 +2,11 @@
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { ActionResult } from "@/lib/actionResult";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireAdminFeature } from "@/lib/admin-session-server";
 import { revalidatePath } from "next/cache";
 
-async function requireAdmin(): Promise<
-  ActionResult<{ userId: string }>
-> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: ue,
-  } = await supabase.auth.getUser();
-  if (ue || !user) {
-    return { ok: false, error: "Sign in to continue." };
-  }
-
-  const { data: prof, error: pe } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (pe) {
-    return { ok: false, error: pe.message };
-  }
-  if (!prof?.is_admin) {
-    return { ok: false, error: "Not authorized." };
-  }
-
-  return { ok: true, data: { userId: user.id } };
+async function requireAdmin(feature: "overview" | "verifications" | "users" | "reports" | "payments") {
+  return requireAdminFeature(feature);
 }
 
 function mapDbError(message: string): string {
@@ -52,7 +28,7 @@ export async function fetchReports(): Promise<
     }[]
   >
 > {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("reports");
   if (!auth.ok) return auth;
 
   try {
@@ -76,7 +52,7 @@ export async function setReportStatus(
   reportId: string,
   status: "open" | "reviewing" | "closed"
 ): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("reports");
   if (!auth.ok) return auth;
 
   try {
@@ -97,7 +73,7 @@ export async function setProfileVerified(
   profileId: string,
   isVerified: boolean
 ): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("verifications");
   if (!auth.ok) return auth;
 
   try {
@@ -130,7 +106,7 @@ export async function fetchProfiles(query: string): Promise<
     }[]
   >
 > {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("users");
   if (!auth.ok) return auth;
 
   try {
@@ -159,7 +135,7 @@ export async function setContactCredits(
   profileId: string,
   contactCredits: number
 ): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("users");
   if (!auth.ok) return auth;
 
   if (contactCredits < 0 || !Number.isFinite(contactCredits)) {
@@ -202,7 +178,7 @@ export async function fetchPendingVerifications(): Promise<
     }[]
   >
 > {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("verifications");
   if (!auth.ok) return auth;
 
   try {
@@ -257,7 +233,7 @@ export async function reviewVerification(
   approved: boolean,
   note?: string
 ): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("verifications");
   if (!auth.ok) return auth;
 
   try {
@@ -299,7 +275,7 @@ export async function fetchStats(): Promise<
     newUsers7d: number;
   }>
 > {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("overview");
   if (!auth.ok) return auth;
 
   try {
@@ -357,7 +333,7 @@ export async function fetchStats(): Promise<
 export async function fetchUserDetail(
   profileId: string
 ): Promise<ActionResult<Record<string, unknown>>> {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("users");
   if (!auth.ok) return auth;
 
   try {
@@ -420,7 +396,7 @@ export async function grantPremium(
   profileId: string,
   days: number
 ): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("users");
   if (!auth.ok) return auth;
   if (!Number.isFinite(days) || days <= 0) {
     return { ok: false, error: "Invalid duration" };
@@ -447,7 +423,7 @@ export async function grantPremium(
 }
 
 export async function revokePremium(profileId: string): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("users");
   if (!auth.ok) return auth;
   try {
     const sb = supabaseAdmin();
@@ -468,7 +444,7 @@ export async function banUser(
   profileId: string,
   banned: boolean
 ): Promise<ActionResult<void>> {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("users");
   if (!auth.ok) return auth;
   try {
     const sb = supabaseAdmin();
@@ -507,7 +483,7 @@ export async function fetchPayments(): Promise<
     }[]
   >
 > {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("payments");
   if (!auth.ok) return auth;
   try {
     const sb = supabaseAdmin();
@@ -558,7 +534,7 @@ export async function fetchRecentActivity(): Promise<
     }[];
   }>
 > {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("overview");
   if (!auth.ok) return auth;
   try {
     const sb = supabaseAdmin();
@@ -612,7 +588,7 @@ export async function fetchReportsWithContext(): Promise<
     }[]
   >
 > {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("reports");
   if (!auth.ok) return auth;
   try {
     const sb = supabaseAdmin();
@@ -668,7 +644,7 @@ export async function fetchProfilesEnhanced(query: string): Promise<
     }[]
   >
 > {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin("users");
   if (!auth.ok) return auth;
   try {
     const sb = supabaseAdmin();
