@@ -623,17 +623,25 @@ class _ContactBar extends StatelessWidget {
     final locked = profile['contact_locked'] == true;
     final ownerDisabled = profile['contact_owner_disabled'] == true;
 
-    return Material(
-      elevation: 12,
-      color: Colors.white,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           // Force a FINITE max width so the inner Row (and its Expanded /
-          // FilledButton children) never receive unbounded constraints from
-          // the bottomNavigationBar slot during layout. This is bulletproof
-          // regardless of what the parent passes down.
+          // button children) never receive unbounded constraints from the
+          // bottomNavigationBar slot during layout. Bulletproof regardless
+          // of what the parent passes down.
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: MediaQuery.sizeOf(context).width,
@@ -713,10 +721,11 @@ class _ContactBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        FilledButton.tonalIcon(
+        IconButton.outlined(
           onPressed: onChat,
-          icon: const Icon(Iconsax.message, size: 18),
-          label: const Text('Chat'),
+          icon: const Icon(Iconsax.message, size: 20),
+          color: MangalamTheme.maroon,
+          tooltip: 'Chat',
         ),
       ],
     );
