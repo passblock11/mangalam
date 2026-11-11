@@ -208,7 +208,16 @@ export async function fetchPendingVerifications(): Promise<
         .createSignedUrls(paths, 60 * 60);
       if (!signedErr && signedData) {
         for (const item of signedData) {
-          if (item.path && item.signedURL) signed[item.path] = item.signedURL;
+          if (!item.path) continue;
+          // SDK returns signedURL (RELATIVE path like /object/sign/...) and
+          // signedUrl (FULL https URL). Use the full URL so the <img> tag
+          // loads from Supabase, not the admin domain (which 404s).
+          const full = item.signedUrl ?? item.signedURL;
+          if (full) {
+            signed[item.path] = full.startsWith("http")
+              ? full
+              : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1${full}`;
+          }
         }
       }
     }
