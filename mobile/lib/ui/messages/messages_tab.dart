@@ -88,7 +88,7 @@ class _MessagesTabState extends State<MessagesTab> with SingleTickerProviderStat
             );
           }
           return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
+            padding: EdgeInsets.fromLTRB(8, 8, 8, MediaQuery.of(context).padding.bottom + 120),
             itemCount: list.length,
             separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
             itemBuilder: (context, i) {

@@ -153,7 +153,7 @@ class _DiscoverTabState extends State<DiscoverTab> with SingleTickerProviderStat
       color: MangalamTheme.maroon,
       onRefresh: _load,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 120),
         itemCount: items.length,
         itemBuilder: (context, i) {
           final m = items[i] as Map<String, dynamic>;

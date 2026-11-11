@@ -6,9 +6,10 @@ import { getSupabaseAdmin } from "../supabase.js";
 
 const orderBodySchema = z
   .object({
-    credits: z.number().int().min(1).max(500),
+    credits: z.number().int().min(1).max(500).optional(),
+    plan_code: z.string().min(1).max(60).optional(),
   })
-  .strict();
+  .refine((v) => v.credits || v.plan_code, "Provide credits or plan_code");
 
 const verifyBodySchema = z
   .object({
@@ -117,8 +118,32 @@ paymentsRouter.post("/razorpay/order", async (c) => {
   if (!parsed.success) {
     return c.json({ error: parsed.error.flatten() }, 400);
   }
-  const { credits } = parsed.data;
-  const amountPaise = credits * cfg.pricePaisePerCredit;
+  const { credits, plan_code } = parsed.data;
+
+  // Resolve plan if plan_code provided (admin-managed plans table)
+  let amountPaise: number;
+  let creditGrant = 0;
+  let premiumDays = 0;
+  let planCodeNote = "";
+  if (plan_code) {
+    const sb = getSupabaseAdmin();
+    const { data: plan, error: planErr } = await sb
+      .from("plans")
+      .select("code,name,price_paise,credits,duration_days,plan_type,is_active")
+      .eq("code", plan_code)
+      .maybeSingle();
+    if (planErr) return c.json({ error: planErr.message }, 500);
+    if (!plan || !plan.is_active) {
+      return c.json({ error: "Plan not found or inactive" }, 404);
+    }
+    amountPaise = plan.price_paise;
+    creditGrant = plan.credits ?? 0;
+    premiumDays = plan.plan_type === "subscription" || plan.plan_type === "one_time" ? (plan.duration_days ?? 0) : 0;
+    planCodeNote = plan.code;
+  } else {
+    amountPaise = (credits as number) * cfg.pricePaisePerCredit;
+    creditGrant = credits as number;
+  }
 
   const res = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
@@ -129,11 +154,13 @@ paymentsRouter.post("/razorpay/order", async (c) => {
     body: JSON.stringify({
       amount: amountPaise,
       currency: "INR",
-      receipt: `credits_${uid.slice(0, 8)}_${Date.now()}`,
+      receipt: `mangalam_${uid.slice(0, 8)}_${Date.now()}`,
       notes: {
         profile_id: uid,
-        credits: String(credits),
-        price_paise_per_credit: String(cfg.pricePaisePerCredit),
+        credits: String(creditGrant),
+        premium_days: String(premiumDays),
+        plan_code: planCodeNote,
+        price_paise: String(amountPaise),
       },
     }),
   });
@@ -152,7 +179,9 @@ paymentsRouter.post("/razorpay/order", async (c) => {
     order_id: order.id,
     amount_paise: order.amount,
     currency: order.currency,
-    credits,
+    credits: creditGrant,
+    premium_days: premiumDays,
+    plan_code: planCodeNote || undefined,
   });
 });
 
@@ -210,11 +239,17 @@ paymentsRouter.post("/razorpay/verify", async (c) => {
     return c.json({ error: "Order does not belong to this user" }, 403);
   }
   const credits = Number.parseInt(notesCredits ?? "", 10);
-  if (!Number.isFinite(credits) || credits < 1) {
+  const premiumDays = Number.parseInt(order.notes?.premium_days ?? "", 10);
+  const planCode = order.notes?.plan_code ?? "";
+  const notesPrice = Number.parseInt(order.notes?.price_paise ?? "", 10);
+  if (!Number.isFinite(credits) || credits < 0) {
     return c.json({ error: "Invalid order metadata" }, 400);
   }
 
-  const expectedAmount = credits * cfg.pricePaisePerCredit;
+  // Amount check: plan-based orders use notes.price_paise; credit-based use credits * pricePerCredit
+  const expectedAmount = planCode
+    ? (Number.isFinite(notesPrice) ? notesPrice : order.amount)
+    : credits * cfg.pricePaisePerCredit;
   if (order.amount !== expectedAmount) {
     return c.json({ error: "Order amount mismatch" }, 400);
   }
@@ -248,6 +283,8 @@ paymentsRouter.post("/razorpay/verify", async (c) => {
     profile_id: uid,
     credits,
     amount_paise: order.amount,
+    premium_days: Number.isFinite(premiumDays) && premiumDays > 0 ? premiumDays : 0,
+    plan_code: planCode || null,
   });
   if (insErr) {
     return c.json({ error: insErr.message }, 500);
@@ -255,16 +292,25 @@ paymentsRouter.post("/razorpay/verify", async (c) => {
 
   const { data: walletRow, error: wErr } = await sb
     .from("wallets")
-    .select("contact_credits")
+    .select("contact_credits,premium_until")
     .eq("profile_id", uid)
     .maybeSingle();
   if (wErr) return c.json({ error: wErr.message }, 500);
 
   const prev = (walletRow?.contact_credits as number | null) ?? 0;
+  const prevPremiumUntil = (walletRow as { premium_until?: string | null } | null)?.premium_until;
+  let newPremiumUntil: string | null = prevPremiumUntil ?? null;
+  if (Number.isFinite(premiumDays) && premiumDays > 0) {
+    const base = prevPremiumUntil && new Date(prevPremiumUntil).getTime() > Date.now()
+      ? new Date(prevPremiumUntil).getTime()
+      : Date.now();
+    newPremiumUntil = new Date(base + premiumDays * 24 * 3600 * 1000).toISOString();
+  }
   const { data: wallet, error: upErr } = await sb
     .from("wallets")
     .update({
       contact_credits: prev + credits,
+      premium_until: newPremiumUntil,
       updated_at: new Date().toISOString(),
     })
     .eq("profile_id", uid)
@@ -276,6 +322,7 @@ paymentsRouter.post("/razorpay/verify", async (c) => {
     ok: true,
     already_applied: false,
     credits_added: credits,
+    premium_days_added: Number.isFinite(premiumDays) && premiumDays > 0 ? premiumDays : 0,
     wallet: wallet ?? null,
   });
 });
