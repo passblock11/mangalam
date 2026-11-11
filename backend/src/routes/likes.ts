@@ -126,6 +126,34 @@ likesRouter.get("/", async (c) => {
     });
   }
 
+  // ── liked: profiles I sent a like to (pending — not yet matched) ───────────
+  if (tab === "liked") {
+    const { data: rows, error } = await sb
+      .from("interactions")
+      .select("to_profile_id,updated_at")
+      .eq("from_profile_id", uid)
+      .eq("status", "pending")
+      .order("updated_at", { ascending: false })
+      .limit(100);
+    if (error) return c.json({ error: error.message }, 500);
+    const ids = (rows ?? []).map((r) => r.to_profile_id);
+    if (ids.length === 0) return c.json({ items: [] });
+    const { data: profiles } = await sb
+      .from("profiles")
+      .select(profileSelectDetailed())
+      .in("id", ids);
+    const list = (profiles ?? []) as unknown as ProfileRow[];
+    return c.json({
+      items: list.map((p) => ({
+        profile: {
+          ...stripContact(p),
+          age: ageFromDob(p.date_of_birth ?? null),
+        },
+        liked_at: (rows ?? []).find((r) => r.to_profile_id === p.id)?.updated_at,
+      })),
+    });
+  }
+
   // mutual (default)
   const { data: mutualRows, error: mErr } = await sb
     .from("interactions")

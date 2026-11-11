@@ -24,7 +24,7 @@ class _LikesTabState extends State<LikesTab>
   @override
   void initState() {
     super.initState();
-    _controller = TabController(length: 3, vsync: this);
+    _controller = TabController(length: 4, vsync: this);
     _controller.addListener(_onTab);
   }
 
@@ -44,10 +44,12 @@ class _LikesTabState extends State<LikesTab>
   String get _tabParam {
     switch (_controller.index) {
       case 0:
-        return 'mutual';
+        return 'liked';
       case 1:
-        return 'views';
+        return 'mutual';
       case 2:
+        return 'views';
+      case 3:
       default:
         return 'contacts';
     }
@@ -56,8 +58,10 @@ class _LikesTabState extends State<LikesTab>
   String get _emptySubtitle {
     switch (_controller.index) {
       case 0:
-        return 'Your mutual matches will appear here.';
+        return 'Profiles you liked will appear here until they like you back.';
       case 1:
+        return 'Your mutual matches will appear here.';
+      case 2:
         return 'Profiles that viewed you will show up here.';
       default:
         return 'Profiles you contacted will appear here.';
@@ -80,6 +84,7 @@ class _LikesTabState extends State<LikesTab>
           isScrollable: true,
           tabAlignment: TabAlignment.start,
           tabs: const [
+            Tab(text: 'Liked'),
             Tab(text: 'Matches'),
             Tab(text: 'Views'),
             Tab(text: 'Contacts'),
@@ -151,6 +156,8 @@ class _LikesTabState extends State<LikesTab>
       case 0:
         return Iconsax.heart;
       case 1:
+        return Iconsax.heart_circle;
+      case 2:
         return Iconsax.eye;
       default:
         return Iconsax.profile_2user;
@@ -160,8 +167,10 @@ class _LikesTabState extends State<LikesTab>
   String _emptyTitle(int i) {
     switch (i) {
       case 0:
-        return 'No matches yet';
+        return 'No likes yet';
       case 1:
+        return 'No matches yet';
+      case 2:
         return 'No views yet';
       default:
         return 'No contacts yet';
@@ -238,9 +247,12 @@ class _ConnectionRow extends StatelessWidget {
     final matchedAt = meta['matched_at'] as String?;
     final viewedAt = meta['viewed_at'] as String?;
     final contactedAt = meta['contacted_at'] as String?;
+    final likedAt = meta['liked_at'] as String?;
 
     String? line3;
-    if (tabParam == 'mutual' && matchedAt != null) {
+    if (tabParam == 'liked' && likedAt != null) {
+      line3 = 'Liked ${formatRelativeTime(likedAt)}';
+    } else if (tabParam == 'mutual' && matchedAt != null) {
       line3 = 'Matched ${formatRelativeTime(matchedAt)}';
     } else if (tabParam == 'views' && viewedAt != null) {
       line3 = 'Seen ${formatRelativeTime(viewedAt)}';

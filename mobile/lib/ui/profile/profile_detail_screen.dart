@@ -45,6 +45,14 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         _data = json['profile'] as Map<String, dynamic>?;
         _loading = false;
       });
+      // Record this profile view so the other person sees us in their Views
+      // tab. Fire-and-forget; skip own profile and never block the UI on it.
+      final me = _api.currentUserId;
+      if (me != null && me != widget.profileId) {
+        _api
+            .post('/v1/views', {'viewed_id': widget.profileId})
+            .catchError((_) {});
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
