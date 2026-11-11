@@ -15,6 +15,7 @@ const patchSchema = z
     height_cm: z.number().int().min(100).max(250).optional(),
     profile_for: z.string().max(80).optional(),
     marital_status: z.string().max(80).optional(),
+    phone: z.string().max(40).optional(),
     city: z.string().max(120).optional(),
     state: z.string().max(120).optional(),
     country: z.string().max(80).optional(),
