@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return (
-      <div className="min-h-screen bg-zinc-50 px-4 py-16 text-center text-zinc-700">
+      <div className="min-h-screen bg-[var(--background)] px-4 py-16 text-center text-[var(--ink)]">
         <p className="font-medium">Missing Supabase configuration</p>
-        <p className="mt-2 text-sm text-zinc-500">
+        <p className="mt-2 text-sm text-[var(--muted)]">
           Set <code className="rounded bg-zinc-200 px-1">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
           <code className="rounded bg-zinc-200 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> (see
           admin/.env.local.example).
@@ -35,19 +35,32 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Mangalam Admin</h1>
-            <p className="text-sm text-zinc-500">Moderation & verification</p>
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--maroon)] to-[var(--gold)] text-white">
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden
+              >
+                <path d="M12 21s-7.5-4.6-10-9.3C.6 8.4 2.5 5 5.8 5c2 0 3.5 1.2 4.2 2.5C10.7 6.2 12.2 5 14.2 5 17.5 5 19.4 8.4 22 11.7 19.5 16.4 12 21 12 21z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-sm font-extrabold tracking-tight text-[var(--ink)]">
+                Mangalam Admin
+              </h1>
+              <p className="text-[11px] text-[var(--muted)]">Moderation & verification</p>
+            </div>
           </div>
           {isAdmin && <SignOutButton />}
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        {isAdmin ? <AdminDashboard /> : <AdminLogin />}
-      </main>
+
+      {isAdmin ? <AdminDashboard /> : <AdminLogin />}
     </div>
   );
 }
