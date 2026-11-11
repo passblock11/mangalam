@@ -21,6 +21,25 @@ create table if not exists public.razorpay_payment_credits (
   plan_code text,
   created_at timestamptz not null default now()
 );
+-- If the table already existed (old 0003 schema), add the new columns and relax the credits check.
+alter table public.razorpay_payment_credits add column if not exists premium_days int not null default 0;
+alter table public.razorpay_payment_credits add column if not exists plan_code text;
+alter table public.razorpay_payment_credits
+  drop constraint if exists razorpay_payment_credits_credits_check;
+alter table public.razorpay_payment_credits
+  drop constraint if exists razorpay_payment_credits_credits_check1;
+-- Re-add the relaxed check (credits >= 0) only if no such constraint exists yet.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.razorpay_payment_credits'::regclass
+      and conname = 'razorpay_payment_credits_credits_check'
+  ) then
+    alter table public.razorpay_payment_credits
+      add constraint razorpay_payment_credits_credits_check check (credits >= 0);
+  end if;
+end $$;
 alter table public.razorpay_payment_credits enable row level security;
 comment on table public.razorpay_payment_credits is 'One row per successful Razorpay payment that credited contact_credits or premium; prevents double-apply.';
 comment on column public.razorpay_payment_credits.premium_days is 'Premium subscription days granted by this payment (0 for credit-only packs).';
