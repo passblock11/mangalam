@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
+import '../core/mangalam_theme.dart';
+import '../core/photo_picker_section.dart';
 import 'onboarding_data.dart';
 import 'onboarding_widgets.dart';
 
@@ -16,10 +19,13 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _api = ApiClient();
   final _controller = PageController();
-  static const _totalSteps = 7;
+  static const _totalSteps = 8;
   int _step = 0;
   bool _saving = false;
   String? _error;
+
+  // Step 0: Photos
+  List<String> _photoUrls = [];
 
   // Step 1: Profile for
   String? _profileFor;
@@ -73,18 +79,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool get _canContinue {
     switch (_step) {
       case 0:
-        return _profileFor != null;
+        return _photoUrls.isNotEmpty;
       case 1:
-        return _gender != null && _dob != null && _name.text.trim().isNotEmpty;
+        return _profileFor != null;
       case 2:
-        return _religion != null && _motherTongue != null && _diet != null;
+        return _gender != null && _dob != null && _name.text.trim().isNotEmpty;
       case 3:
-        return _city.text.trim().isNotEmpty && _state != null;
+        return _religion != null && _motherTongue != null && _diet != null;
       case 4:
-        return _height != null && _maritalStatus != null;
+        return _city.text.trim().isNotEmpty && _state != null;
       case 5:
-        return _mangalDosh != null;
+        return _height != null && _maritalStatus != null;
       case 6:
+        return _mangalDosh != null;
+      case 7:
         return true;
       default:
         return false;
@@ -99,8 +107,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     setState(() => _error = null);
     if (_step < _totalSteps - 1) {
       _controller.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
       );
     } else {
       _save();
@@ -110,8 +118,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void _back() {
     if (_step > 0) {
       _controller.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -143,6 +151,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'mangal_dosh': _mangalDosh,
         'birth_time': _birthTime.text.trim(),
         'birth_place': _birthPlace.text.trim(),
+        'photo_urls': _photoUrls,
       };
       final pp = <String, dynamic>{};
       final amin = int.tryParse(_pAgeMin.text.trim());
@@ -169,6 +178,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       initialDate: DateTime(now.year - 25, now.month, now.day),
       firstDate: DateTime(now.year - 80),
       lastDate: DateTime(now.year - 18, now.month, now.day),
+      builder: (context, child) {
+        final theme = Theme.of(context);
+        return Theme(
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(
+              primary: MangalamTheme.maroon,
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) setState(() => _dob = picked);
   }
@@ -181,8 +202,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: OnboardingProgress(current: _step, total: _totalSteps),
+              padding: const EdgeInsets.fromLTRB(16, 16, 20, 12),
+              child: OnboardingProgress(
+                current: _step,
+                total: _totalSteps,
+                onBack: _back,
+              ),
             ),
             Expanded(
               child: PageView(
@@ -190,6 +215,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 onPageChanged: (i) => setState(() => _step = i),
                 children: [
+                  _stepPhotos(),
                   _stepProfileFor(),
                   _stepBasic(),
                   _stepReligion(),
@@ -211,7 +237,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
-        color: cs.surface,
+        color: Colors.white,
         border: Border(top: BorderSide(color: cs.outlineVariant)),
       ),
       child: SafeArea(
@@ -220,34 +246,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_error != null) ...[
-              Text(_error!, style: TextStyle(color: cs.error, fontSize: 13)),
-              const SizedBox(height: 8),
-            ],
-            Row(
-              children: [
-                if (_step > 0)
-                  OutlinedButton(
-                    onPressed: _saving ? null : _back,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(56, 52),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Back'),
-                  ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _saving ? null : _next,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: _saving
-                        ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : Text(_step == _totalSteps - 1 ? 'Finish' : 'Continue'),
-                  ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: MangalamTheme.maroon.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-              ],
+                child: Text(_error!, style: const TextStyle(color: MangalamTheme.maroon, fontSize: 13)),
+              ),
+              const SizedBox(height: 10),
+            ],
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _saving ? null : _next,
+                child: _saving
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(_step == _totalSteps - 1 ? 'Finish' : 'Continue'),
+              ),
             ),
           ],
         ),
@@ -255,13 +276,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _stepContent({required String title, String? subtitle, required List<Widget> children}) {
+  Widget _stepContent({
+    required String title,
+    String? subtitle,
+    String? emoji,
+    required List<Widget> children,
+  }) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          StepHeader(title: title, subtitle: subtitle),
+          StepHeader(title: title, subtitle: subtitle, emoji: emoji),
           const SizedBox(height: 24),
           ...children,
         ],
@@ -269,20 +295,35 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
+  Widget _stepPhotos() {
+    return _stepContent(
+      title: 'Add your photos',
+      subtitle: 'Profiles with photos get up to 10× more interest. Add at least one.',
+      emoji: '📸',
+      children: [
+        PhotoPickerSection(
+          photoUrls: _photoUrls,
+          onChanged: (urls) => setState(() => _photoUrls = urls),
+        ),
+      ],
+    );
+  }
+
   Widget _stepProfileFor() {
     return _stepContent(
       title: 'Who is this profile for?',
-      subtitle: 'Tell us whose profile you\'re creating.',
+      subtitle: 'Tell us whose profile you\'re creating so we can personalize the experience.',
+      emoji: '👤',
       children: [
         ...OnboardingData.profileForOptions.map((o) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: OptionCard(
-            label: o,
-            selected: _profileFor == o,
-            onTap: () => setState(() => _profileFor = o),
-            icon: o == 'Self' ? Icons.person : Icons.group,
-          ),
-        )),
+              padding: const EdgeInsets.only(bottom: 10),
+              child: OptionCard(
+                label: o,
+                selected: _profileFor == o,
+                onTap: () => setState(() => _profileFor = o),
+                icon: o == 'Self' ? Iconsax.user : Iconsax.profile_2user,
+              ),
+            )),
       ],
     );
   }
@@ -291,20 +332,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return _stepContent(
       title: 'Basic details',
       subtitle: 'Let\'s start with the essentials.',
+      emoji: '📝',
       children: [
         TextField(
           controller: _name,
           textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Full name', border: OutlineInputBorder()),
+          decoration: const InputDecoration(labelText: 'Full name', prefixIcon: Icon(Iconsax.user)),
         ),
-        const SizedBox(height: 16),
-        _dropdown('Gender', _gender, OnboardingData.genders, (v) => setState(() => _gender = v)),
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: _pickDob,
-          icon: const Icon(Icons.calendar_today_outlined),
-          label: Text(_dob == null ? 'Date of birth' : 'Born ${_dob!.toIso8601String().split('T').first}'),
-          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+        const SizedBox(height: 14),
+        _dropdown('Gender', _gender, OnboardingData.genders, (v) => setState(() => _gender = v),
+            icon: Iconsax.user),
+        const SizedBox(height: 14),
+        InkWell(
+          onTap: _pickDob,
+          borderRadius: BorderRadius.circular(14),
+          child: IgnorePointer(
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: 'Date of birth',
+                prefixIcon: const Icon(Iconsax.calendar),
+                suffixIcon: _dob != null ? const Icon(Iconsax.tick_circle, color: MangalamTheme.maroon) : null,
+              ),
+              child: Text(
+                _dob == null
+                    ? 'Select date'
+                    : '${_dob!.day.toString().padLeft(2, '0')} / ${_dob!.month.toString().padLeft(2, '0')} / ${_dob!.year}',
+                style: TextStyle(
+                  color: _dob == null ? MangalamTheme.muted : MangalamTheme.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -314,17 +373,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return _stepContent(
       title: 'Religion & community',
       subtitle: 'Helps us find matches within your community.',
+      emoji: '🪔',
       children: [
-        _dropdown('Religion', _religion, OnboardingData.religions, (v) => setState(() => _religion = v)),
-        const SizedBox(height: 16),
+        _dropdown('Religion', _religion, OnboardingData.religions, (v) => setState(() => _religion = v),
+            icon: Iconsax.book_1),
+        const SizedBox(height: 14),
         TextField(
           controller: _community,
-          decoration: const InputDecoration(labelText: 'Community / Caste (optional)', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'Community / Caste (optional)',
+            prefixIcon: Icon(Iconsax.people),
+          ),
         ),
-        const SizedBox(height: 16),
-        _dropdown('Mother tongue', _motherTongue, OnboardingData.motherTongues, (v) => setState(() => _motherTongue = v)),
-        const SizedBox(height: 16),
-        _dropdown('Diet', _diet, OnboardingData.diets, (v) => setState(() => _diet = v)),
+        const SizedBox(height: 14),
+        _dropdown('Mother tongue', _motherTongue, OnboardingData.motherTongues, (v) => setState(() => _motherTongue = v),
+            icon: Iconsax.translate),
+        const SizedBox(height: 14),
+        _dropdown('Diet', _diet, OnboardingData.diets, (v) => setState(() => _diet = v),
+            icon: Iconsax.cup),
       ],
     );
   }
@@ -332,15 +398,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _stepLocation() {
     return _stepContent(
       title: 'Where do you live?',
-      subtitle: 'So we can show nearby matches.',
+      subtitle: 'So we can show nearby matches first.',
+      emoji: '📍',
       children: [
         TextField(
           controller: _city,
           textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'City', border: OutlineInputBorder()),
+          decoration: const InputDecoration(labelText: 'City', prefixIcon: Icon(Iconsax.building)),
         ),
-        const SizedBox(height: 16),
-        _dropdown('State', _state, OnboardingData.indianStates, (v) => setState(() => _state = v)),
+        const SizedBox(height: 14),
+        _dropdown('State', _state, OnboardingData.indianStates, (v) => setState(() => _state = v),
+            icon: Iconsax.map),
       ],
     );
   }
@@ -348,7 +416,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _stepPhysical() {
     return _stepContent(
       title: 'About you',
-      subtitle: 'A few more details about you.',
+      subtitle: 'A few more details to complete your profile.',
+      emoji: '💼',
       children: [
         _dropdown(
           'Height',
@@ -356,15 +425,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           OnboardingData.heightOptionsCm,
           (v) => setState(() => _height = v),
           labelFor: OnboardingData.heightLabel,
+          icon: Iconsax.arrow_swap,
         ),
-        const SizedBox(height: 16),
-        _dropdown('Marital status', _maritalStatus, OnboardingData.maritalStatuses, (v) => setState(() => _maritalStatus = v)),
-        const SizedBox(height: 16),
-        _dropdown('Education', _education, OnboardingData.educationLevels, (v) => setState(() => _education = v)),
-        const SizedBox(height: 16),
-        _dropdown('Occupation', _occupation, OnboardingData.occupations, (v) => setState(() => _occupation = v)),
-        const SizedBox(height: 16),
-        _dropdown('Monthly income', _salary, OnboardingData.salaryRanges, (v) => setState(() => _salary = v)),
+        const SizedBox(height: 14),
+        _dropdown('Marital status', _maritalStatus, OnboardingData.maritalStatuses,
+            (v) => setState(() => _maritalStatus = v), icon: Iconsax.heart),
+        const SizedBox(height: 14),
+        _dropdown('Education', _education, OnboardingData.educationLevels, (v) => setState(() => _education = v),
+            icon: Iconsax.book_saved),
+        const SizedBox(height: 14),
+        _dropdown('Occupation', _occupation, OnboardingData.occupations, (v) => setState(() => _occupation = v),
+            icon: Iconsax.briefcase),
+        const SizedBox(height: 14),
+        _dropdown('Monthly income', _salary, OnboardingData.salaryRanges, (v) => setState(() => _salary = v),
+            icon: Iconsax.wallet),
       ],
     );
   }
@@ -373,17 +447,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return _stepContent(
       title: 'Astrology details',
       subtitle: 'Important for family matching in Indian matrimony.',
+      emoji: '🪐',
       children: [
-        _dropdown('Mangal Dosh', _mangalDosh, OnboardingData.mangalDoshOptions, (v) => setState(() => _mangalDosh = v)),
-        const SizedBox(height: 16),
+        _dropdown('Mangal Dosh', _mangalDosh, OnboardingData.mangalDoshOptions,
+            (v) => setState(() => _mangalDosh = v), icon: Iconsax.flash),
+        const SizedBox(height: 14),
         TextField(
           controller: _birthTime,
-          decoration: const InputDecoration(labelText: 'Birth time (HH:MM, optional)', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'Birth time (HH:MM, optional)',
+            prefixIcon: Icon(Iconsax.clock),
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         TextField(
           controller: _birthPlace,
-          decoration: const InputDecoration(labelText: 'Birth place (optional)', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'Birth place (optional)',
+            prefixIcon: Icon(Iconsax.location),
+          ),
         ),
       ],
     );
@@ -393,26 +475,51 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return _stepContent(
       title: 'Partner preferences',
       subtitle: 'What are you looking for? (optional)',
+      emoji: '💞',
       children: [
         Row(
           children: [
-            Expanded(child: TextField(controller: _pAgeMin, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Min age', border: OutlineInputBorder()))),
+            Expanded(
+              child: TextField(
+                controller: _pAgeMin,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Min age', prefixIcon: Icon(Iconsax.arrow_up)),
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: _pAgeMax, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Max age', border: OutlineInputBorder()))),
+            Expanded(
+              child: TextField(
+                controller: _pAgeMax,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Max age', prefixIcon: Icon(Iconsax.arrow_down)),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 16),
-        _dropdown('Preferred diet', _pDiet, OnboardingData.diets, (v) => setState(() => _pDiet = v)),
-        const SizedBox(height: 16),
-        _dropdown('Preferred mother tongue', _pMotherTongue, OnboardingData.motherTongues, (v) => setState(() => _pMotherTongue = v)),
+        const SizedBox(height: 14),
+        _dropdown('Preferred diet', _pDiet, OnboardingData.diets, (v) => setState(() => _pDiet = v),
+            icon: Iconsax.cup),
+        const SizedBox(height: 14),
+        _dropdown('Preferred mother tongue', _pMotherTongue, OnboardingData.motherTongues,
+            (v) => setState(() => _pMotherTongue = v), icon: Iconsax.translate),
       ],
     );
   }
 
-  Widget _dropdown(String label, String? value, List<String> items, ValueChanged<String?> onChanged, {String Function(String)? labelFor}) {
+  Widget _dropdown(
+    String label,
+    String? value,
+    List<String> items,
+    ValueChanged<String?> onChanged, {
+    String Function(String)? labelFor,
+    IconData? icon,
+  }) {
     return DropdownButtonFormField<String>(
       initialValue: value,
-      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: icon != null ? Icon(icon) : null,
+      ),
       items: items
           .map((e) => DropdownMenuItem(value: e, child: Text(labelFor != null ? labelFor(e) : e)))
           .toList(),

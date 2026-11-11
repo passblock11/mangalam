@@ -28,7 +28,7 @@ matchesRouter.get("/", async (c) => {
     const { data: profs, error: pErr } = await sb
       .from("profiles")
       .select(
-        "id,display_name,date_of_birth,gender,community,mother_tongue,city,state,is_verified,updated_at"
+        "id,display_name,date_of_birth,gender,community,mother_tongue,city,state,is_verified,updated_at,photo_urls"
       )
       .in("id", ids);
     if (pErr) return c.json({ error: pErr.message }, 500);
@@ -52,6 +52,7 @@ matchesRouter.get("/", async (c) => {
         city: r.city,
         state: r.state,
         is_verified: r.is_verified,
+        photo_urls: r.photo_urls ?? [],
         active_recent: r.updated_at
           ? Date.now() - new Date(r.updated_at).getTime() < 36 * 3600 * 1000
           : false,
@@ -101,7 +102,7 @@ matchesRouter.get("/", async (c) => {
   let q = sb
     .from("profiles")
     .select(
-      "id,display_name,date_of_birth,gender,community,mother_tongue,city,state,is_verified,updated_at"
+      "id,display_name,date_of_birth,gender,community,mother_tongue,city,state,is_verified,updated_at,photo_urls"
     )
     .neq("id", uid)
     .limit(limit);
@@ -133,6 +134,7 @@ matchesRouter.get("/", async (c) => {
       city: r.city,
       state: r.state,
       is_verified: r.is_verified,
+      photo_urls: r.photo_urls ?? [],
       active_recent: r.updated_at
         ? Date.now() - new Date(r.updated_at).getTime() < 36 * 3600 * 1000
         : false,

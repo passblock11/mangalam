@@ -64,6 +64,8 @@ class _AuthGateState extends State<AuthGate> {
     final diet = p['diet'] as String?;
     final marital = p['marital_status'] as String?;
     final profileFor = p['profile_for'] as String?;
+    final photos = p['photo_urls'];
+    final hasPhotos = photos is List && photos.isNotEmpty;
     return name != null && name.isNotEmpty &&
         gender != null && gender.isNotEmpty &&
         dob != null && dob.isNotEmpty &&
@@ -72,7 +74,8 @@ class _AuthGateState extends State<AuthGate> {
         tongue != null && tongue.isNotEmpty &&
         diet != null && diet.isNotEmpty &&
         marital != null && marital.isNotEmpty &&
-        profileFor != null && profileFor.isNotEmpty;
+        profileFor != null && profileFor.isNotEmpty &&
+        hasPhotos;
   }
 
   void _onOnboardingDone() {

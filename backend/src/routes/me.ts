@@ -30,6 +30,7 @@ const patchSchema = z
     education_level: z.string().max(120).optional(),
     monthly_salary: z.string().max(120).optional(),
     last_active_at: z.string().optional(),
+    photo_urls: z.array(z.string().url().max(500)).max(6).optional(),
   })
   .strict();
 

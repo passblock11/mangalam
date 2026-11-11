@@ -5,6 +5,7 @@ import 'core/config.dart';
 import 'core/google_auth_config.dart';
 import 'services/oauth_sign_in.dart';
 import 'ui/auth/auth_gate.dart';
+import 'ui/core/mangalam_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,14 +31,10 @@ class MangalamApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFFC62828),
-      brightness: Brightness.light,
-    );
-
     return MaterialApp(
       title: 'Mangalam',
-      theme: ThemeData(colorScheme: colorScheme, useMaterial3: true),
+      debugShowCheckedModeBanner: false,
+      theme: MangalamTheme.light(),
       home: const _Root(),
     );
   }

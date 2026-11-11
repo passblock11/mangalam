@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/api_client.dart';
+import '../core/mangalam_theme.dart';
 import '../messages/chat_screen.dart';
 import 'profile_widgets.dart';
 
@@ -139,10 +141,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       if (cid != null && mounted) {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => ChatScreen(
-              conversationId: cid,
-              otherName: name.toString(),
-            ),
+            builder: (_) => ChatScreen(conversationId: cid, otherName: name.toString()),
           ),
         );
       }
@@ -188,24 +187,23 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
-
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.black26,
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Iconsax.arrow_left),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.favorite_border),
+            icon: const Icon(Iconsax.heart),
             onPressed: () => _interaction('like'),
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
+            icon: const Icon(Iconsax.more),
             onSelected: (v) {
               if (v == 'report') _report();
               if (v == 'block') _block();
@@ -218,34 +216,24 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon))
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_error!, textAlign: TextAlign.center),
-                        FilledButton(onPressed: _load, child: const Text('Retry')),
-                      ],
-                    ),
-                  ),
+              ? MangalamEmptyState(
+                  icon: Iconsax.warning_2,
+                  title: 'Could not load profile',
+                  subtitle: _error,
+                  action: FilledButton(onPressed: _load, child: const Text('Retry')),
                 )
-              : _buildScroll(context, accent),
+              : _buildScroll(context),
       bottomNavigationBar: _data == null
           ? null
-          : _ContactBar(
-              onPhone: _launchTel,
-              onChat: _openChat,
-              onWhatsApp: _launchWa,
-            ),
+          : _ContactBar(onPhone: _launchTel, onChat: _openChat, onWhatsApp: _launchWa),
     );
   }
 
-  Widget _buildScroll(BuildContext context, Color accent) {
+  Widget _buildScroll(BuildContext context) {
     final p = _data!;
-    final name = p['display_name'] ?? 'Member';
+    final name = p['display_name']?.toString() ?? 'Member';
     final age = p['age'];
     final community = p['community']?.toString() ?? '';
     final lang = p['mother_tongue']?.toString() ?? '';
@@ -264,9 +252,11 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       (label: 'Mother tongue', value: lang.isEmpty ? '—' : lang),
       (label: 'Diet', value: (p['diet'] ?? '—').toString()),
       (label: 'Height', value: heightHuman(p['height_cm'])),
-      (label: 'Profile for?', value: (p['profile_for'] ?? '—').toString()),
+      (label: 'Profile for', value: (p['profile_for'] ?? '—').toString()),
       (label: 'Marital status', value: (p['marital_status'] ?? '—').toString()),
     ];
+
+    final photoUrls = (p['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
 
     return CustomScrollView(
       slivers: [
@@ -274,21 +264,65 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
           child: Stack(
             children: [
               AspectRatio(
-                aspectRatio: 1,
-                child: ColoredBox(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: Icon(Icons.person, size: 140, color: Theme.of(context).colorScheme.outline),
+                aspectRatio: 0.95,
+                child: ProfilePhoto(name: name, photoUrls: photoUrls),
+              ),
+              // Bottom scrim for app bar readability
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 120,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.35),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
                 ),
               ),
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 8,
                 right: 16,
-                child: IconButton.filled(
-                  style: IconButton.styleFrom(backgroundColor: Colors.white70),
+                child: FloatingActionButton.small(
+                  backgroundColor: Colors.white,
+                  foregroundColor: MangalamTheme.maroon,
                   onPressed: () => _interaction('like'),
-                  icon: Icon(Icons.favorite, color: accent),
+                  child: const Icon(Iconsax.heart),
                 ),
               ),
+              if (photoUrls.isNotEmpty)
+                Positioned(
+                  bottom: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Iconsax.gallery, color: Colors.white, size: 13),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${photoUrls.length} photo${photoUrls.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -296,74 +330,81 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
+              // Name + verified
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Text(
                       name,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                          ),
                     ),
                   ),
                   if (verified)
                     Padding(
-                      padding: const EdgeInsets.only(left: 4, top: 4),
-                      child: Icon(Icons.verified, color: Colors.green.shade700, size: 26),
+                      padding: const EdgeInsets.only(left: 6, top: 4),
+                      child: const Icon(Iconsax.verify,
+                          color: MangalamTheme.gold, size: 24),
                     ),
                 ],
               ),
               if (activityLabel.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.circle, size: 8, color: Colors.green.shade700),
-                        const SizedBox(width: 6),
-                        Text(
-                          activityLabel,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.green.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                const SizedBox(height: 10),
+                MangalamBadge(
+                  label: activityLabel,
+                  icon: Iconsax.info_circle,
+                  color: const Color(0xFF2E7D32),
                 ),
               ],
               if (bio != null && bio.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _bioExpanded ? bio : _clipBio(bio, 180),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                if (bio.length > 180)
-                  TextButton(
-                    onPressed: () => setState(() => _bioExpanded = !_bioExpanded),
-                    child: Text(_bioExpanded ? 'Show less' : 'Show more'),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: MangalamTheme.cream,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
                   ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Iconsax.text_block, size: 16, color: MangalamTheme.maroon),
+                          SizedBox(width: 6),
+                          Text('About',
+                              style: TextStyle(fontWeight: FontWeight.w700, color: MangalamTheme.maroon)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _bioExpanded ? bio : _clipBio(bio, 180),
+                        style: const TextStyle(height: 1.45, fontSize: 14),
+                      ),
+                      if (bio.length > 180)
+                        TextButton(
+                          onPressed: () => setState(() => _bioExpanded = !_bioExpanded),
+                          child: Text(_bioExpanded ? 'Show less' : 'Show more'),
+                        ),
+                    ],
+                  ),
+                ),
               ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Row(
                 children: [
-                  Icon(Icons.place_outlined, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const Icon(Iconsax.location, size: 18, color: MangalamTheme.muted),
                   const SizedBox(width: 6),
                   Expanded(child: Text('$city, $state')),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Row(
                 children: [
-                  Icon(Icons.calendar_today_outlined, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const Icon(Iconsax.calendar, size: 18, color: MangalamTheme.muted),
                   const SizedBox(width: 6),
                   Text(age != null ? '$age years' : '—'),
                 ],
@@ -372,7 +413,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               DetailCardGrid(items: gridItems),
               const SizedBox(height: 20),
               SectionCard(
-                icon: Icons.work_outline,
+                icon: Iconsax.briefcase,
                 title: 'Occupation',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -385,7 +426,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               ),
               const SizedBox(height: 16),
               SectionCard(
-                icon: Icons.personal_video_outlined,
+                icon: Iconsax.flash,
                 title: 'Astrology',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -393,17 +434,14 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                     DetailPair(label: 'Mangal Dosh', value: (p['mangal_dosh'] ?? '—').toString()),
                     DetailPair(label: 'Date of Birth', value: formatDob(p['date_of_birth'])),
                     DetailPair(label: 'Birth time', value: formatBirthTime(p['birth_time'])),
-                    DetailPair(
-                      label: 'Place of birth',
-                      value: (p['birth_place'] ?? '—').toString(),
-                    ),
+                    DetailPair(label: 'Place of birth', value: (p['birth_place'] ?? '—').toString()),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               SectionCard(
-                icon: Icons.favorite_border,
-                title: 'Preference',
+                icon: Iconsax.heart,
+                title: 'Partner preference',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -424,38 +462,42 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
-                    child: FilledButton(
+                    child: FilledButton.icon(
                       onPressed: () => _interaction('like'),
-                      child: const Text('Like'),
+                      icon: const Icon(Iconsax.heart),
+                      label: const Text('Like'),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: OutlinedButton(
+                    child: OutlinedButton.icon(
                       onPressed: () => _interaction('pass'),
-                      child: const Text('Pass'),
+                      icon: const Icon(Iconsax.close_circle),
+                      label: const Text('Pass'),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                    child: FilledButton.tonal(
+                    child: FilledButton.tonalIcon(
                       onPressed: () => _interaction('shortlist'),
-                      child: const Text('Shortlist'),
+                      icon: const Icon(Iconsax.star),
+                      label: const Text('Shortlist'),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: FilledButton.tonal(
+                    child: FilledButton.tonalIcon(
                       onPressed: _openChat,
-                      child: const Text('Message'),
+                      icon: const Icon(Iconsax.message),
+                      label: const Text('Message'),
                     ),
                   ),
                 ],
@@ -474,76 +516,41 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
 }
 
 class _ContactBar extends StatelessWidget {
-  const _ContactBar({
-    required this.onPhone,
-    required this.onChat,
-    required this.onWhatsApp,
-  });
+  const _ContactBar({required this.onPhone, required this.onChat, required this.onWhatsApp});
 
-  final VoidCallback onPhone;
-  final VoidCallback onChat;
-  final VoidCallback onWhatsApp;
+  final VoidCallback onPhone, onChat, onWhatsApp;
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
     return Material(
-      elevation: 8,
+      elevation: 12,
+      color: Colors.white,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
             children: [
-              RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
-                  style: Theme.of(context).textTheme.bodySmall,
-                  children: [
-                    const TextSpan(text: 'Like this Profile? '),
-                    TextSpan(
-                      text: 'Contact Now',
-                      style: TextStyle(
-                        color: accent,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onWhatsApp,
+                  icon: const Icon(Iconsax.message),
+                  label: const Text('WhatsApp'),
                 ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  IconButton(
-                    style: IconButton.styleFrom(
-                      side: BorderSide(color: Theme.of(context).dividerColor),
-                    ),
-                    onPressed: onPhone,
-                    icon: const Icon(Icons.phone_outlined),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    style: IconButton.styleFrom(
-                      side: BorderSide(color: Theme.of(context).dividerColor),
-                    ),
-                    onPressed: onChat,
-                    icon: const Icon(Icons.chat_bubble_outline),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: accent,
-                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                      ),
-                      onPressed: onWhatsApp,
-                      icon: const Icon(Icons.chat),
-                      label: const Text('WhatsApp'),
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 10),
+              IconButton.outlined(
+                onPressed: onChat,
+                icon: const Icon(Iconsax.message),
+                color: MangalamTheme.maroon,
+                tooltip: 'Message',
+              ),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                onPressed: onPhone,
+                icon: const Icon(Iconsax.call),
+                color: MangalamTheme.maroon,
+                tooltip: 'Call',
               ),
             ],
           ),

@@ -37,7 +37,7 @@ profilesRouter.get("/:id", async (c) => {
   const { data: row, error } = await sb
     .from("profiles")
     .select(
-      "id,display_name,phone,phone_visible,date_of_birth,gender,community,mother_tongue,diet,height_cm,profile_for,marital_status,city,state,country,bio,is_verified,updated_at,last_active_at,mangal_dosh,birth_time,birth_place,occupation,education_level,monthly_salary,partner_preferences"
+      "id,display_name,phone,phone_visible,date_of_birth,gender,community,mother_tongue,diet,height_cm,profile_for,marital_status,city,state,country,bio,is_verified,updated_at,last_active_at,mangal_dosh,birth_time,birth_place,occupation,education_level,monthly_salary,partner_preferences,photo_urls"
     )
     .eq("id", id)
     .maybeSingle();

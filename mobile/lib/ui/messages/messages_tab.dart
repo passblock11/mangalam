@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../utils/formatting.dart';
+import '../core/mangalam_theme.dart';
 import 'chat_screen.dart';
 
 class MessagesTab extends StatefulWidget {
@@ -11,8 +13,7 @@ class MessagesTab extends StatefulWidget {
   State<MessagesTab> createState() => _MessagesTabState();
 }
 
-class _MessagesTabState extends State<MessagesTab>
-    with SingleTickerProviderStateMixin {
+class _MessagesTabState extends State<MessagesTab> with SingleTickerProviderStateMixin {
   final _api = ApiClient();
   late TabController _tab;
   int _key = 0;
@@ -40,90 +41,112 @@ class _MessagesTabState extends State<MessagesTab>
   String get _folder => _tab.index == 0 ? 'primary' : 'sent';
 
   Future<List<dynamic>> _load() async {
-    final json = await _api.get('/v1/conversations', {'folder': _folder})
-        as Map<String, dynamic>;
+    final json =
+        await _api.get('/v1/conversations', {'folder': _folder}) as Map<String, dynamic>;
     return json['conversations'] as List<dynamic>? ?? [];
   }
 
   @override
   Widget build(BuildContext context) {
-    final accent = Colors.green.shade700;
-    return Column(
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: TabBar(
-            controller: _tab,
-            tabs: const [
-              Tab(text: 'Primary'),
-              Tab(text: 'Sent'),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Messages'),
+        bottom: TabBar(
+          controller: _tab,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: const [
+            Tab(text: 'Primary'),
+            Tab(text: 'Sent'),
+          ],
         ),
-        Expanded(
-          child: FutureBuilder<List<dynamic>>(
-            key: ValueKey('$_folder$_key'),
-            future: _load(),
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snap.hasError) {
-                return Center(child: Text(snap.error.toString()));
-              }
-              final list = snap.data ?? [];
-              if (list.isEmpty) {
-                return const Center(child: Text('No conversations'));
-              }
-              return ListView.separated(
-                itemCount: list.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, i) {
-                  final row = list[i] as Map<String, dynamic>;
-                  final id = row['id'] as String;
-                  final other =
-                      row['other_profile'] as Map<String, dynamic>? ?? {};
-                  final name = other['display_name'] ?? 'Member';
-                  final last = row['last_message'] as Map<String, dynamic>?;
-                  final body = last?['body'] as String? ?? '';
-                  final created = last?['created_at'] as String?;
-                  return ListTile(
-                    leading: CircleAvatar(
-                      child: Text(_initial(name)),
+      ),
+      body: FutureBuilder<List<dynamic>>(
+        key: ValueKey('$_folder$_key'),
+        future: _load(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon));
+          }
+          if (snap.hasError) {
+            return MangalamEmptyState(
+              icon: Iconsax.warning_2,
+              title: 'Could not load messages',
+              subtitle: snap.error.toString(),
+              action: FilledButton(
+                onPressed: () => setState(() => _key++),
+                child: const Text('Retry'),
+              ),
+            );
+          }
+          final list = snap.data ?? [];
+          if (list.isEmpty) {
+            return MangalamEmptyState(
+              icon: Iconsax.message,
+              title: 'No conversations yet',
+              subtitle: 'Start a chat from a match\'s profile to see it here.',
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
+            itemCount: list.length,
+            separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
+            itemBuilder: (context, i) {
+              final row = list[i] as Map<String, dynamic>;
+              final id = row['id'] as String;
+              final other = row['other_profile'] as Map<String, dynamic>? ?? {};
+              final name = other['display_name']?.toString() ?? 'Member';
+              final last = row['last_message'] as Map<String, dynamic>?;
+              final body = last?['body'] as String? ?? '';
+              final created = last?['created_at'] as String?;
+              final verified = other['is_verified'] == true;
+              final photoUrls = (other['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
+
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: ProfilePhoto(name: name, photoUrls: photoUrls),
+                  ),
+                ),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5),
+                      ),
                     ),
-                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text(
-                      body,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    if (verified)
+                      const Icon(Iconsax.verify, size: 14, color: MangalamTheme.gold),
+                  ],
+                ),
+                subtitle: Text(
+                  body,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: MangalamTheme.muted, fontSize: 13.5),
+                ),
+                trailing: Text(
+                  formatRelativeTime(created),
+                  style: const TextStyle(fontSize: 11.5, color: MangalamTheme.muted),
+                ),
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ChatScreen(conversationId: id, otherName: name),
                     ),
-                    trailing: Text(
-                      formatRelativeTime(created),
-                      style: TextStyle(fontSize: 12, color: accent),
-                    ),
-                    onTap: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ChatScreen(
-                            conversationId: id,
-                            otherName: name,
-                          ),
-                        ),
-                      );
-                      setState(() => _key++);
-                    },
                   );
+                  if (mounted) setState(() => _key++);
                 },
               );
             },
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
-}
-
-String _initial(String name) {
-  if (name.isEmpty) return '?';
-  return name[0].toUpperCase();
 }

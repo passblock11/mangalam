@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
+import '../core/mangalam_theme.dart' show MangalamCard, MangalamSectionHeader, MangalamTheme;
+import '../core/photo_picker_section.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -45,6 +48,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _phoneVisible = false;
   bool _loading = true;
   bool _saving = false;
+  List<String> _photoUrls = const [];
 
   @override
   void initState() {
@@ -109,6 +113,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _mangal.text = p['mangal_dosh']?.toString() ?? '';
       _birthTime.text = p['birth_time']?.toString() ?? '';
       _birthPlace.text = p['birth_place']?.toString() ?? '';
+      _photoUrls = (p['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
       if (p['date_of_birth'] != null) {
         _dob.text = p['date_of_birth'].toString().split('T').first;
       }
@@ -160,6 +165,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (bio.isNotEmpty) body['bio'] = bio;
       if (_gender != null) body['gender'] = _gender;
       body['phone_visible'] = _phoneVisible;
+      if (_photoUrls.isNotEmpty) body['photo_urls'] = _photoUrls;
 
       final occ = _occupation.text.trim();
       final edu = _education.text.trim();
@@ -215,201 +221,187 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Edit profile')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon))
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
-                TextField(
-                  controller: _name,
-                  decoration: const InputDecoration(labelText: 'Display name', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _gender,
-                  decoration: const InputDecoration(labelText: 'Gender', border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: 'male', child: Text('Male')),
-                    DropdownMenuItem(value: 'female', child: Text('Female')),
-                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                _section(
+                  icon: Iconsax.camera,
+                  title: 'Photos',
+                  children: [
+                    PhotoPickerSection(
+                      photoUrls: _photoUrls,
+                      onChanged: (urls) => setState(() => _photoUrls = urls),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _gender = v),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _community,
-                  decoration: const InputDecoration(labelText: 'Community', border: OutlineInputBorder()),
+                _section(
+                  icon: Iconsax.user,
+                  title: 'Basic',
+                  children: [
+                    _field(_name, 'Display name', icon: Iconsax.user),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _gender,
+                      decoration: const InputDecoration(
+                        labelText: 'Gender',
+                        prefixIcon: Icon(Iconsax.user),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'male', child: Text('Male')),
+                        DropdownMenuItem(value: 'female', child: Text('Female')),
+                        DropdownMenuItem(value: 'other', child: Text('Other')),
+                      ],
+                      onChanged: (v) => setState(() => _gender = v),
+                    ),
+                    const SizedBox(height: 12),
+                    _field(_dob, 'Date of birth (YYYY-MM-DD)', icon: Iconsax.calendar),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _motherTongue,
-                  decoration: const InputDecoration(labelText: 'Mother tongue', border: OutlineInputBorder()),
+                _section(
+                  icon: Iconsax.book_1,
+                  title: 'Community',
+                  children: [
+                    _field(_community, 'Community', icon: Iconsax.people),
+                    const SizedBox(height: 12),
+                    _field(_motherTongue, 'Mother tongue', icon: Iconsax.translate),
+                    const SizedBox(height: 12),
+                    _field(_diet, 'Diet', icon: Iconsax.cup),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _diet,
-                  decoration: const InputDecoration(labelText: 'Diet', border: OutlineInputBorder()),
+                _section(
+                  icon: Iconsax.building,
+                  title: 'Location',
+                  children: [
+                    _field(_city, 'City', icon: Iconsax.building),
+                    const SizedBox(height: 12),
+                    _field(_state, 'State', icon: Iconsax.map),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _height,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Height (cm)', border: OutlineInputBorder()),
+                _section(
+                  icon: Iconsax.arrow_swap,
+                  title: 'Personal',
+                  children: [
+                    _field(_height, 'Height (cm)', icon: Iconsax.arrow_swap, number: true),
+                    const SizedBox(height: 12),
+                    _field(_profileFor, 'Profile for', icon: Iconsax.profile_2user),
+                    const SizedBox(height: 12),
+                    _field(_marital, 'Marital status', icon: Iconsax.heart),
+                    const SizedBox(height: 12),
+                    _field(_bio, 'Bio', icon: Iconsax.document_text, maxLines: 4),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _profileFor,
-                  decoration: const InputDecoration(labelText: 'Profile for?', border: OutlineInputBorder()),
+                _section(
+                  icon: Iconsax.briefcase,
+                  title: 'Career',
+                  children: [
+                    _field(_occupation, 'Occupation', icon: Iconsax.briefcase),
+                    const SizedBox(height: 12),
+                    _field(_education, 'Education level', icon: Iconsax.book_saved),
+                    const SizedBox(height: 12),
+                    _field(_salary, 'Monthly salary', icon: Iconsax.wallet),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _marital,
-                  decoration: const InputDecoration(labelText: 'Marital status', border: OutlineInputBorder()),
+                _section(
+                  icon: Iconsax.flash,
+                  title: 'Astrology',
+                  children: [
+                    _field(_mangal, 'Mangal Dosh', icon: Iconsax.flash),
+                    const SizedBox(height: 12),
+                    _field(_birthTime, 'Birth time (HH:MM)', icon: Iconsax.clock),
+                    const SizedBox(height: 12),
+                    _field(_birthPlace, 'Place of birth', icon: Iconsax.location),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _city,
-                  decoration: const InputDecoration(labelText: 'City', border: OutlineInputBorder()),
+                _section(
+                  icon: Iconsax.heart,
+                  title: 'Partner preference',
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: _field(_pAgeMin, 'Age min', icon: Iconsax.arrow_up, number: true)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _field(_pAgeMax, 'Age max', icon: Iconsax.arrow_down, number: true)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _field(_pLocation, 'Location', icon: Iconsax.location),
+                    const SizedBox(height: 12),
+                    _field(_pHeight, 'Height pref', icon: Iconsax.arrow_swap),
+                    const SizedBox(height: 12),
+                    _field(_pDiet, 'Diet pref', icon: Iconsax.cup),
+                    const SizedBox(height: 12),
+                    _field(_pMarital, 'Marital status pref', icon: Iconsax.heart),
+                    const SizedBox(height: 12),
+                    _field(_pTongue, 'Mother tongue pref', icon: Iconsax.translate),
+                    const SizedBox(height: 12),
+                    _field(_pMangal, 'Mangal Dosh pref', icon: Iconsax.flash),
+                    const SizedBox(height: 12),
+                    _field(_pOccupation, 'Occupation pref', icon: Iconsax.briefcase),
+                    const SizedBox(height: 12),
+                    _field(_pSalary, 'Salary pref', icon: Iconsax.wallet),
+                    const SizedBox(height: 12),
+                    _field(_pEducation, 'Education pref', icon: Iconsax.book_saved),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _state,
-                  decoration: const InputDecoration(labelText: 'State', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _bio,
-                  maxLines: 4,
-                  decoration: const InputDecoration(labelText: 'Bio', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 SwitchListTile(
                   title: const Text('Show phone on profile (after trust)'),
                   value: _phoneVisible,
                   onChanged: (v) => setState(() => _phoneVisible = v),
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _dob,
-                  decoration: const InputDecoration(
-                    labelText: 'Date of birth (YYYY-MM-DD)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _mangal,
-                  decoration: const InputDecoration(labelText: 'Mangal Dosh', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _birthTime,
-                  decoration: const InputDecoration(
-                    labelText: 'Birth time (HH:MM or 14:05)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _birthPlace,
-                  decoration: const InputDecoration(labelText: 'Place of birth', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 20),
-                Text('Occupation', style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _occupation,
-                  decoration: const InputDecoration(labelText: 'Occupation', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _education,
-                  decoration: const InputDecoration(labelText: 'Education level', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _salary,
-                  decoration: const InputDecoration(labelText: 'Monthly salary', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 20),
-                Text('Partner preference', style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _pAgeMin,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Age min', border: OutlineInputBorder()),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _pAgeMax,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Age max', border: OutlineInputBorder()),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pLocation,
-                  decoration: const InputDecoration(labelText: 'Location', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pHeight,
-                  decoration: const InputDecoration(labelText: 'Height pref', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pDiet,
-                  decoration: const InputDecoration(labelText: 'Diet pref', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pMarital,
-                  decoration: const InputDecoration(labelText: 'Marital status pref', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pTongue,
-                  decoration: const InputDecoration(labelText: 'Mother tongue pref', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pMangal,
-                  decoration: const InputDecoration(labelText: 'Mangal Dosh pref', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pOccupation,
-                  decoration: const InputDecoration(labelText: 'Occupation pref', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pSalary,
-                  decoration: const InputDecoration(labelText: 'Salary pref', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pEducation,
-                  decoration: const InputDecoration(labelText: 'Education pref', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 FilledButton(
                   onPressed: _saving ? null : _save,
                   child: _saving
                       ? const SizedBox(
                           height: 22,
                           width: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text('Save'),
+                      : const Text('Save changes'),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _section({
+    required IconData icon,
+    required String title,
+    required List<Widget> children,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: MangalamCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            MangalamSectionHeader(title: title, icon: icon),
+            const SizedBox(height: 14),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _field(
+    TextEditingController c,
+    String label, {
+    IconData? icon,
+    bool number = false,
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: c,
+      keyboardType: number ? TextInputType.number : null,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: icon != null ? Icon(icon) : null,
+      ),
     );
   }
 }

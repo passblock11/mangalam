@@ -16,6 +16,7 @@ function profileSelectDetailed() {
     "is_verified",
     "last_active_at",
     "updated_at",
+    "photo_urls",
   ].join(",");
 }
 

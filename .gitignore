@@ -26,3 +26,4 @@ mobile/.flutter-plugins-dependencies
 # Local deploy tooling (do not commit)
 .vercel-mcp-*.json
 .vercel
+.env.vercel-tmp

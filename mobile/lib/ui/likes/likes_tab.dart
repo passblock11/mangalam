@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../utils/formatting.dart';
+import '../core/mangalam_theme.dart';
 import '../messages/chat_screen.dart';
 import '../profile/profile_detail_screen.dart';
 
@@ -49,6 +51,17 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
     }
   }
 
+  String get _emptySubtitle {
+    switch (_controller.index) {
+      case 0:
+        return 'Your mutual matches will appear here.';
+      case 1:
+        return 'Profiles that viewed you will show up here.';
+      default:
+        return 'Profiles you contacted will appear here.';
+    }
+  }
+
   Future<List<dynamic>> _fetch() async {
     final json = await _api.get('/v1/likes', {'tab': _tabParam}) as Map<String, dynamic>;
     return json['items'] as List<dynamic>? ?? [];
@@ -56,214 +69,258 @@ class _LikesTabState extends State<LikesTab> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: TabBar(
-            controller: _controller,
-            tabs: const [
-              Tab(text: 'Matches'),
-              Tab(text: 'Views'),
-              Tab(text: 'Contacts'),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Connections'),
+        bottom: TabBar(
+          controller: _controller,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: const [
+            Tab(text: 'Matches'),
+            Tab(text: 'Views'),
+            Tab(text: 'Contacts'),
+          ],
         ),
-        Expanded(
-          child: FutureBuilder<List<dynamic>>(
-            key: ValueKey('${_controller.index}_$_reloadKey'),
-            future: _fetch(),
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snap.hasError) {
-                return Center(child: Text(snap.error.toString()));
-              }
-              final items = snap.data ?? [];
-              String? banner;
-              if (_controller.index == 0) {
-                banner = 'Find your matches here';
-              } else if (_controller.index == 1) {
-                banner = 'Find who viewed your profile here';
-              } else {
-                banner = 'Profiles you contacted';
-              }
-              if (items.isEmpty) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Banner(text: banner),
-                    const Expanded(child: Center(child: Text('Nothing here yet'))),
-                  ],
-                );
-              }
-              return ListView.separated(
-                padding: EdgeInsets.zero,
-                itemCount: items.length + 1,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, i) {
-                  if (i == 0) return _Banner(text: banner!);
-                  final row = items[i - 1] as Map<String, dynamic>;
-                  final profile = row['profile'] as Map<String, dynamic>? ?? {};
-                  final id = profile['id'] as String? ?? '';
-                  final name = profile['display_name'] ?? 'Member';
-                  final community = profile['community'] ?? '';
-                  final lang = profile['mother_tongue'] ?? '';
-                  final city = profile['city'] ?? '';
-                  final state = profile['state'] ?? '';
-                  final age = profile['age'];
-                  final verified = profile['is_verified'] == true;
-                  final matchedAt = row['matched_at'] as String?;
-                  final viewedAt = row['viewed_at'] as String?;
-                  final contactedAt = row['contacted_at'] as String?;
-                  final phone = profile['phone'] as String?;
-
-                  String line3 = '';
-                  if (_tabParam == 'mutual' && matchedAt != null) {
-                    line3 = 'Matched ${formatRelativeTime(matchedAt)}';
-                  } else if (_tabParam == 'views' && viewedAt != null) {
-                    line3 = 'Seen ${formatRelativeTime(viewedAt)}';
-                  } else if (_tabParam == 'contacts' && contactedAt != null) {
-                    line3 = 'Contacted ${formatRelativeTime(contactedAt)}';
-                  }
-
-                  return ListTile(
-                    leading: CircleAvatar(
-                      child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
-                    ),
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            name,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        if (verified)
-                          Icon(Icons.verified, size: 18, color: Colors.green.shade700),
-                      ],
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 4),
-                        Text(
-                          [
-                            if (age != null) '$age years',
-                            if (community.toString().isNotEmpty) community,
-                            if (lang.toString().isNotEmpty) lang,
-                          ].where((e) => e.toString().isNotEmpty).join(', '),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        Text(
-                          '$city, $state',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        if (line3.isNotEmpty)
-                          Text(
-                            line3,
-                            style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                          ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert),
-                          onSelected: (v) {
-                            if (v == 'profile') {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => ProfileDetailScreen(profileId: id),
-                                ),
-                              );
-                            }
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(value: 'profile', child: Text('View profile')),
-                          ],
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.phone_outlined),
-                          tooltip: 'Call',
-                          onPressed: phone != null && phone.isNotEmpty ? () {} : null,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.chat_bubble_outline),
-                          tooltip: 'Message',
-                          onPressed: () async {
-                            try {
-                              final res = await _api.post('/v1/conversations', {
-                                'other_profile_id': id,
-                                'first_message':
-                                    'Hi $name 👋, I saw your profile and wanted to connect.',
-                              }) as Map<String, dynamic>;
-                              final cid = res['conversation_id'] as String?;
-                              if (cid != null && context.mounted) {
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => ChatScreen(
-                                      conversationId: cid,
-                                      otherName: name,
-                                    ),
-                                  ),
-                                );
-                                setState(() => _reloadKey++);
-                              }
-                            } catch (_) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'You need a mutual match to start chat — open profile to connect.',
-                                    ),
-                                  ),
-                                );
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => ProfileDetailScreen(profileId: id),
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ProfileDetailScreen(profileId: id),
-                        ),
-                      );
-                    },
-                  );
-                },
+      ),
+      body: FutureBuilder<List<dynamic>>(
+        key: ValueKey('${_controller.index}_$_reloadKey'),
+        future: _fetch(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: MangalamTheme.maroon));
+          }
+          if (snap.hasError) {
+            return MangalamEmptyState(
+              icon: Iconsax.warning_2,
+              title: 'Could not load',
+              subtitle: snap.error.toString(),
+              action: FilledButton(
+                onPressed: () => setState(() => _reloadKey++),
+                child: const Text('Retry'),
+              ),
+            );
+          }
+          final items = snap.data ?? [];
+          if (items.isEmpty) {
+            return MangalamEmptyState(
+              icon: _iconForTab(_controller.index),
+              title: _emptyTitle(_controller.index),
+              subtitle: _emptySubtitle,
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              final row = items[i] as Map<String, dynamic>;
+              final profile = row['profile'] as Map<String, dynamic>? ?? {};
+              return _ConnectionRow(
+                profile: profile,
+                meta: row,
+                tabParam: _tabParam,
+                onMessage: () => _openChat(profile),
+                onView: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProfileDetailScreen(profileId: profile['id'] as String? ?? ''),
+                  ),
+                ),
               );
             },
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
+  }
+
+  IconData _iconForTab(int i) {
+    switch (i) {
+      case 0:
+        return Iconsax.heart;
+      case 1:
+        return Iconsax.eye;
+      default:
+        return Iconsax.profile_2user;
+    }
+  }
+
+  String _emptyTitle(int i) {
+    switch (i) {
+      case 0:
+        return 'No matches yet';
+      case 1:
+        return 'No views yet';
+      default:
+        return 'No contacts yet';
+    }
+  }
+
+  Future<void> _openChat(Map<String, dynamic> profile) async {
+    final id = profile['id'] as String? ?? '';
+    final name = profile['display_name']?.toString() ?? 'Member';
+    try {
+      final res = await _api.post('/v1/conversations', {
+        'other_profile_id': id,
+        'first_message': 'Hi $name, I saw your profile and wanted to connect.',
+      }) as Map<String, dynamic>;
+      final cid = res['conversation_id'] as String?;
+      if (cid != null && context.mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ChatScreen(conversationId: cid, otherName: name),
+          ),
+        );
+        if (mounted) setState(() => _reloadKey++);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You need a mutual match to start chat — open profile to connect.'),
+          ),
+        );
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ProfileDetailScreen(profileId: id),
+          ),
+        );
+      }
+    }
   }
 }
 
-class _Banner extends StatelessWidget {
-  const _Banner({required this.text});
+class _ConnectionRow extends StatelessWidget {
+  const _ConnectionRow({
+    required this.profile,
+    required this.meta,
+    required this.tabParam,
+    required this.onMessage,
+    required this.onView,
+  });
 
-  final String text;
+  final Map<String, dynamic> profile;
+  final Map<String, dynamic> meta;
+  final String tabParam;
+  final VoidCallback onMessage;
+  final VoidCallback onView;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyMedium,
+    final name = profile['display_name']?.toString() ?? 'Member';
+    final community = profile['community']?.toString() ?? '';
+    final lang = profile['mother_tongue']?.toString() ?? '';
+    final city = profile['city']?.toString() ?? '';
+    final state = profile['state']?.toString() ?? '';
+    final age = profile['age'];
+    final verified = profile['is_verified'] == true;
+    final phone = profile['phone'] as String?;
+    final photoUrls = (profile['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
+
+    final matchedAt = meta['matched_at'] as String?;
+    final viewedAt = meta['viewed_at'] as String?;
+    final contactedAt = meta['contacted_at'] as String?;
+
+    String? line3;
+    if (tabParam == 'mutual' && matchedAt != null) {
+      line3 = 'Matched ${formatRelativeTime(matchedAt)}';
+    } else if (tabParam == 'views' && viewedAt != null) {
+      line3 = 'Seen ${formatRelativeTime(viewedAt)}';
+    } else if (tabParam == 'contacts' && contactedAt != null) {
+      line3 = 'Contacted ${formatRelativeTime(contactedAt)}';
+    }
+
+    return MangalamCard(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              width: 60,
+              height: 60,
+              child: ProfilePhoto(name: name, photoUrls: photoUrls),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                      ),
+                    ),
+                    if (verified)
+                      const Icon(Iconsax.verify, size: 16, color: MangalamTheme.gold),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  [
+                    if (age != null) '$age yrs',
+                    if (community.isNotEmpty) community,
+                    if (lang.isNotEmpty) lang,
+                  ].join(' · '),
+                  style: const TextStyle(fontSize: 12.5, color: MangalamTheme.muted),
+                ),
+                if (city.isNotEmpty || state.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      children: [
+                        const Icon(Iconsax.location, size: 12, color: MangalamTheme.muted),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            '$city, $state',
+                            style: const TextStyle(fontSize: 12, color: MangalamTheme.muted),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (line3 != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      line3,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: MangalamTheme.maroon,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            children: [
+              IconButton(
+                onPressed: onMessage,
+                icon: const Icon(Iconsax.message),
+                color: MangalamTheme.maroon,
+                style: IconButton.styleFrom(
+                  backgroundColor: MangalamTheme.maroon.withValues(alpha: 0.08),
+                ),
+              ),
+              IconButton(
+                onPressed: phone != null && phone.isNotEmpty ? () {} : null,
+                icon: const Icon(Iconsax.call),
+                color: MangalamTheme.gold,
+                style: IconButton.styleFrom(
+                  backgroundColor: MangalamTheme.gold.withValues(alpha: 0.12),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
