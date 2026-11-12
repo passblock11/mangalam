@@ -153,118 +153,133 @@ class _PlanPickerSheet extends StatelessWidget {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Choose a plan',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Payments are processed securely by Razorpay.',
-              style: TextStyle(color: MangalamTheme.muted, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            if (plans.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Text(
-                  'No plans are available right now. Please check back later or contact support.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: MangalamTheme.muted),
-                ),
-              )
-            else
-              ...plans.map((p) {
-                final name = p['name']?.toString() ?? 'Plan';
-                final desc = p['description']?.toString();
-                final price = (p['price_paise'] as num?)?.toInt() ?? 0;
-                final type = p['plan_type']?.toString() ?? 'credits';
-                final credits = (p['credits'] as num?)?.toInt() ?? 0;
-                final days = (p['duration_days'] as num?)?.toInt() ?? 0;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () => Navigator.pop(context, p),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE7E2DC)),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: MangalamTheme.gold.withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Iconsax.crown,
-                              color: MangalamTheme.gold,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                                if (desc != null && desc.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: Text(
-                                      desc,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: MangalamTheme.muted,
-                                      ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Choose a plan',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Payments are processed securely by Razorpay.',
+                style: TextStyle(color: MangalamTheme.muted, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+            Flexible(
+              fit: FlexFit.loose,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (plans.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          'No plans are available right now. Please check back later or contact support.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: MangalamTheme.muted),
+                        ),
+                      )
+                    else
+                      ...plans.map((p) {
+                        final name = p['name']?.toString() ?? 'Plan';
+                        final desc = p['description']?.toString();
+                        final price = (p['price_paise'] as num?)?.toInt() ?? 0;
+                        final type = p['plan_type']?.toString() ?? 'credits';
+                        final credits = (p['credits'] as num?)?.toInt() ?? 0;
+                        final days = (p['duration_days'] as num?)?.toInt() ?? 0;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () => Navigator.pop(context, p),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: const Color(0xFFE7E2DC)),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
+                                      color: MangalamTheme.gold.withValues(alpha: 0.16),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Iconsax.crown,
+                                      color: MangalamTheme.gold,
+                                      size: 22,
                                     ),
                                   ),
-                                const SizedBox(height: 4),
-                                Wrap(
-                                  spacing: 6,
-                                  children: [
-                                    _chip(type),
-                                    if (credits > 0) _chip('$credits credits'),
-                                    if (days > 0) _chip('$days days premium'),
-                                  ],
-                                ),
-                              ],
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                        if (desc != null && desc.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 2),
+                                            child: Text(
+                                              desc,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: MangalamTheme.muted,
+                                              ),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 4),
+                                        Wrap(
+                                          spacing: 6,
+                                          children: [
+                                            _chip(type),
+                                            if (credits > 0) _chip('$credits credits'),
+                                            if (days > 0) _chip('$days days premium'),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    '₹${(price / 100).toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 18,
+                                      color: MangalamTheme.maroon,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            '₹${(price / 100).toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
-                              color: MangalamTheme.maroon,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
+    ),
     );
   }
 
