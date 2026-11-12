@@ -289,13 +289,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   children: [
                     _field(_community, 'Community', icon: Iconsax.people),
                     const SizedBox(height: 12),
-                    _field(
-                      _motherTongue,
-                      'Mother tongue',
+                    _dropdown(
+                      label: 'Mother tongue',
                       icon: Iconsax.translate,
+                      options: OnboardingData.motherTongues,
+                      controller: _motherTongue,
                     ),
                     const SizedBox(height: 12),
-                    _field(_diet, 'Diet', icon: Iconsax.cup),
+                    _dropdown(
+                      label: 'Diet',
+                      icon: Iconsax.cup,
+                      options: OnboardingData.diets,
+                      controller: _diet,
+                    ),
                   ],
                 ),
                 _section(
@@ -316,20 +322,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   icon: Iconsax.arrow_swap,
                   title: 'Personal',
                   children: [
-                    _field(
-                      _height,
-                      'Height (cm)',
+                    _dropdown(
+                      label: 'Height',
                       icon: Iconsax.arrow_swap,
-                      number: true,
+                      options: OnboardingData.heightOptionsCm,
+                      controller: _height,
+                      display: OnboardingData.heightLabel,
                     ),
                     const SizedBox(height: 12),
-                    _field(
-                      _profileFor,
-                      'Profile for',
+                    _dropdown(
+                      label: 'Profile for',
                       icon: Iconsax.profile_2user,
+                      options: OnboardingData.profileForOptions,
+                      controller: _profileFor,
                     ),
                     const SizedBox(height: 12),
-                    _field(_marital, 'Marital status', icon: Iconsax.heart),
+                    _dropdown(
+                      label: 'Marital status',
+                      icon: Iconsax.heart,
+                      options: OnboardingData.maritalStatuses,
+                      controller: _marital,
+                    ),
                     const SizedBox(height: 12),
                     _field(
                       _bio,
@@ -343,22 +356,38 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   icon: Iconsax.briefcase,
                   title: 'Career',
                   children: [
-                    _field(_occupation, 'Occupation', icon: Iconsax.briefcase),
-                    const SizedBox(height: 12),
-                    _field(
-                      _education,
-                      'Education level',
-                      icon: Iconsax.book_saved,
+                    _dropdown(
+                      label: 'Occupation',
+                      icon: Iconsax.briefcase,
+                      options: OnboardingData.occupations,
+                      controller: _occupation,
                     ),
                     const SizedBox(height: 12),
-                    _field(_salary, 'Monthly salary', icon: Iconsax.wallet),
+                    _dropdown(
+                      label: 'Education level',
+                      icon: Iconsax.book_saved,
+                      options: OnboardingData.educationLevels,
+                      controller: _education,
+                    ),
+                    const SizedBox(height: 12),
+                    _dropdown(
+                      label: 'Monthly salary',
+                      icon: Iconsax.wallet,
+                      options: OnboardingData.salaryRanges,
+                      controller: _salary,
+                    ),
                   ],
                 ),
                 _section(
                   icon: Iconsax.flash,
                   title: 'Astrology',
                   children: [
-                    _field(_mangal, 'Mangal Dosh', icon: Iconsax.flash),
+                    _dropdown(
+                      label: 'Mangal Dosh',
+                      icon: Iconsax.flash,
+                      options: OnboardingData.mangalDoshOptions,
+                      controller: _mangal,
+                    ),
                     const SizedBox(height: 12),
                     _field(
                       _birthTime,
@@ -425,38 +454,74 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _field(_pLocation, 'Location', icon: Iconsax.location),
+                    CitySearchField(
+                      initialCity: _pLocation.text,
+                      onSelected: (v) => setState(() => _pLocation.text = v),
+                    ),
                     const SizedBox(height: 12),
-                    _field(_pHeight, 'Height pref', icon: Iconsax.arrow_swap),
+                    _dropdown(
+                      label: 'Height pref',
+                      icon: Iconsax.arrow_swap,
+                      options: OnboardingData.heightOptionsCm,
+                      controller: _pHeight,
+                      display: OnboardingData.heightLabel,
+                      placeholder: 'No preference',
+                    ),
                     const SizedBox(height: 12),
-                    _field(_pDiet, 'Diet pref', icon: Iconsax.cup),
+                    _dropdown(
+                      label: 'Diet pref',
+                      icon: Iconsax.cup,
+                      options: OnboardingData.diets,
+                      controller: _pDiet,
+                      placeholder: 'No preference',
+                    ),
                     const SizedBox(height: 12),
-                    _field(
-                      _pMarital,
-                      'Marital status pref',
+                    _dropdown(
+                      label: 'Marital status pref',
                       icon: Iconsax.heart,
+                      options: OnboardingData.maritalStatuses,
+                      controller: _pMarital,
+                      placeholder: 'No preference',
                     ),
                     const SizedBox(height: 12),
-                    _field(
-                      _pTongue,
-                      'Mother tongue pref',
+                    _dropdown(
+                      label: 'Mother tongue pref',
                       icon: Iconsax.translate,
+                      options: OnboardingData.motherTongues,
+                      controller: _pTongue,
+                      placeholder: 'No preference',
                     ),
                     const SizedBox(height: 12),
-                    _field(_pMangal, 'Mangal Dosh pref', icon: Iconsax.flash),
+                    _dropdown(
+                      label: 'Mangal Dosh pref',
+                      icon: Iconsax.flash,
+                      options: OnboardingData.mangalDoshOptions,
+                      controller: _pMangal,
+                      placeholder: 'No preference',
+                    ),
                     const SizedBox(height: 12),
-                    _field(
-                      _pOccupation,
-                      'Occupation pref',
+                    _dropdown(
+                      label: 'Occupation pref',
                       icon: Iconsax.briefcase,
+                      options: OnboardingData.occupations,
+                      controller: _pOccupation,
+                      placeholder: 'No preference',
                     ),
                     const SizedBox(height: 12),
-                    _field(_pSalary, 'Salary pref', icon: Iconsax.wallet),
+                    _dropdown(
+                      label: 'Salary pref',
+                      icon: Iconsax.wallet,
+                      options: OnboardingData.salaryRanges,
+                      controller: _pSalary,
+                      placeholder: 'No preference',
+                    ),
                     const SizedBox(height: 12),
-                    _field(
-                      _pEducation,
-                      'Education pref',
+                    _dropdown(
+                      label: 'Education pref',
                       icon: Iconsax.book_saved,
+                      options: OnboardingData.educationLevels,
+                      controller: _pEducation,
+                      placeholder: 'No preference',
                     ),
                   ],
                 ),
@@ -550,6 +615,49 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         labelText: label,
         prefixIcon: icon != null ? Icon(icon) : null,
       ),
+    );
+  }
+
+  /// A dropdown backed by a [TextEditingController]. The controller's current
+  /// text is used as the selection; picking an option writes the option string
+  /// back into the controller so load/save logic is unchanged. A blank
+  /// placeholder option (value '') lets the user clear the field. If the
+  /// stored value does not match any option (e.g. legacy free text), the
+  /// dropdown renders with no selection instead of asserting.
+  Widget _dropdown({
+    required String label,
+    required IconData icon,
+    required List<String> options,
+    required TextEditingController controller,
+    String placeholder = 'Not specified',
+    String Function(String)? display,
+  }) {
+    final current = controller.text.isEmpty
+        ? ''
+        : (options.contains(controller.text) ? controller.text : null);
+    return DropdownButtonFormField<String>(
+      initialValue: current,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+      ),
+      items: [
+        DropdownMenuItem(
+          value: '',
+          child: Text(
+            placeholder,
+            style: const TextStyle(color: MangalamTheme.muted),
+          ),
+        ),
+        ...options.map(
+          (o) => DropdownMenuItem(
+            value: o,
+            child: Text(display != null ? display(o) : o),
+          ),
+        ),
+      ],
+      onChanged: (v) => setState(() => controller.text = v ?? ''),
     );
   }
 }
