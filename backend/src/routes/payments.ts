@@ -144,6 +144,57 @@ export const paymentsRouter = new Hono();
 
 paymentsRouter.use("*", requireAuth);
 
+// Diagnostic endpoint (auth required) — returns the full upstream
+// response so we can see exactly what Razorpay sends back. Does NOT
+// create a real order (uses a throwaway receipt + minimal body).
+paymentsRouter.get("/razorpay/diagnose", async (c) => {
+  const cfg = await razorpayConfigAsync();
+  if ("error" in cfg) {
+    return c.json({ error: cfg.error }, 503);
+  }
+  const uid = c.get("userId");
+  const reqBody = {
+    amount: 100,
+    currency: "INR",
+    receipt: `mangalam_diag_${uid.slice(0, 8)}_${Date.now()}`,
+    notes: { profile_id: uid, diag: "1" },
+  };
+  const reqHeaders: Record<string, string> = {
+    Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret),
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "User-Agent": "Mangalam-Backend/1.0",
+  };
+  let res: Response;
+  try {
+    res = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: reqHeaders,
+      body: JSON.stringify(reqBody),
+    });
+  } catch (e) {
+    return c.json({ fetchError: (e as Error).message }, 502);
+  }
+  const text = await res.text();
+  const respHeaders: Record<string, string> = {};
+  res.headers.forEach((v, k) => { respHeaders[k] = v; });
+  return c.json({
+    request: {
+      url: "https://api.razorpay.com/v1/orders",
+      method: "POST",
+      headers: { ...reqHeaders, Authorization: `Basic ${cfg.keyId}:***` },
+      body: reqBody,
+    },
+    response: {
+      status: res.status,
+      statusText: res.statusText,
+      headers: respHeaders,
+      body: text.slice(0, 2000),
+    },
+    keyId: cfg.keyId,
+  });
+});
+
 paymentsRouter.post("/razorpay/order", async (c) => {
   const cfg = await razorpayConfigAsync();
   if ("error" in cfg) {
