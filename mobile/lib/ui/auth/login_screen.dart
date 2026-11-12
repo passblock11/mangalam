@@ -7,6 +7,7 @@ import '../../core/config.dart';
 import '../../core/google_auth_config.dart';
 import '../../services/oauth_sign_in.dart';
 import '../core/mangalam_theme.dart';
+import '../profile/legal_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -239,13 +240,70 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                       const SizedBox(height: 24),
                       Center(
-                        child: Text(
-                          'By continuing you agree to our Terms\nand Privacy Policy.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: MangalamTheme.muted,
-                            height: 1.4,
-                          ),
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'By continuing you agree to our ',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: MangalamTheme.muted,
+                                height: 1.4,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const LegalScreen(
+                                    slug: 'terms',
+                                    title: 'Terms of Service',
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                'Terms',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: MangalamTheme.maroon,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              ' and ',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: MangalamTheme.muted,
+                                height: 1.4,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const LegalScreen(
+                                    slug: 'privacy',
+                                    title: 'Privacy Policy',
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                'Privacy Policy',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: MangalamTheme.maroon,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: MangalamTheme.muted,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
