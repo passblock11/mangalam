@@ -211,6 +211,8 @@ paymentsRouter.post("/razorpay/order", async (c) => {
     headers: {
       Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret),
       "Content-Type": "application/json",
+      "Accept": "application/json",
+      "User-Agent": "Mangalam-Backend/1.0",
     },
     body: JSON.stringify({
       amount: amountPaise,
@@ -229,11 +231,16 @@ paymentsRouter.post("/razorpay/order", async (c) => {
   const { data, text, status } = await readRazorpay(res);
   if (!res.ok) {
     const desc = razorpayErrorDescription(data, text, status);
+    const respHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => { respHeaders[k] = v; });
     console.error("[razorpay/order] upstream error", {
       status,
       amountPaise,
       planCodeNote,
       body: text.slice(0, 500),
+      contentType: respHeaders["content-type"] ?? "",
+      server: respHeaders["server"] ?? "",
+      cfRay: respHeaders["cf-ray"] ?? "",
     });
     return c.json({ error: `Razorpay order failed: ${desc}` }, 502);
   }
