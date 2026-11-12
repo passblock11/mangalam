@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
-import '../../services/oauth_sign_in.dart';
+import '../auth/sign_out_flow.dart';
 import '../core/mangalam_theme.dart';
 import '../core/notifications_bell.dart';
 import '../core/photo_gallery.dart';
@@ -73,26 +73,7 @@ class _DiscoverTabState extends State<DiscoverTab>
     }
   }
 
-  Future<void> _signOut(BuildContext context) async {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      useRootNavigator: true,
-      builder: (ctx) => const PopScope(
-        canPop: false,
-        child: Center(
-          child: CircularProgressIndicator(color: MangalamTheme.maroon),
-        ),
-      ),
-    );
-    try {
-      await OAuthSignIn.signOutCompletely();
-    } finally {
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
-  }
+  Future<void> _signOut(BuildContext context) => confirmAndSignOut(context);
 
   Future<void> _interaction(String id, String action) async {
     try {

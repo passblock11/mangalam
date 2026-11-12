@@ -3,6 +3,7 @@ import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/photo_service.dart';
 import 'mangalam_theme.dart';
+import 'photo_gallery.dart';
 
 /// A reusable photo grid for onboarding & edit-profile.
 /// Shows existing [photoUrls] + "add" tiles, supports picking from gallery
@@ -90,6 +91,11 @@ class _PhotoPickerSectionState extends State<PhotoPickerSection> {
                 url: widget.photoUrls[i],
                 size: tileSize,
                 onRemove: () => _removeAt(i),
+                onOpen: () => openPhotoViewer(
+                  context,
+                  urls: widget.photoUrls,
+                  initial: i,
+                ),
               ),
             if (remaining > 0)
               _AddTile(
@@ -115,11 +121,13 @@ class _PhotoTile extends StatelessWidget {
     required this.url,
     required this.size,
     required this.onRemove,
+    required this.onOpen,
   });
 
   final String url;
   final double size;
   final VoidCallback onRemove;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +139,10 @@ class _PhotoTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(url, fit: BoxFit.cover),
+            GestureDetector(
+              onTap: onOpen,
+              child: Image.network(url, fit: BoxFit.cover),
+            ),
             Positioned(
               top: 4,
               right: 4,

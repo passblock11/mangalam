@@ -4,8 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/api_client.dart';
-import '../../services/oauth_sign_in.dart';
 import '../../services/razorpay_checkout.dart';
+import '../auth/sign_out_flow.dart';
 import '../../utils/formatting.dart';
 import '../auth/onboarding_data.dart';
 import '../core/mangalam_theme.dart';
@@ -73,29 +73,7 @@ class _ProfileTabState extends State<ProfileTab> {
     }
   }
 
-  Future<void> _signOut(BuildContext context) async {
-    // Show a non-dismissible loader while the network sign-out calls run,
-    // so the user sees immediate feedback instead of a frozen 1–2s gap
-    // before the auth gate redirects to login.
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      useRootNavigator: true,
-      builder: (ctx) => const PopScope(
-        canPop: false,
-        child: Center(
-          child: CircularProgressIndicator(color: MangalamTheme.maroon),
-        ),
-      ),
-    );
-    try {
-      await OAuthSignIn.signOutCompletely();
-    } finally {
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
-  }
+  Future<void> _signOut(BuildContext context) => confirmAndSignOut(context);
 
   Future<void> _openSupport() async {
     final email = _supportEmail;

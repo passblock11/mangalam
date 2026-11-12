@@ -96,6 +96,16 @@ export function LegalSettings() {
                     {p.is_published ? <Badge tone="green">Published</Badge> : <Badge tone="neutral">Draft</Badge>}
                   </div>
                   <p className="font-mono text-xs text-[var(--muted)]">/{p.slug} · updated {fmtDate(p.updated_at)}</p>
+                  {p.is_published && (
+                    <a
+                      href={`/legal/${p.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-semibold text-[var(--maroon)] underline"
+                    >
+                      Public link for Play Store
+                    </a>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">

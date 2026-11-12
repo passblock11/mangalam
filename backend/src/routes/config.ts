@@ -50,11 +50,11 @@ configRouter.get("/legal/:slug", async (c) => {
   const sb = getSupabaseAdmin();
   const { data, error } = await sb
     .from("legal_pages")
-    .select("slug,title,body,version,updated_at")
+    .select("slug,title,body,version,updated_at,is_published")
     .eq("slug", slug)
     .maybeSingle();
   if (error) return c.json({ error: error.message }, 500);
-  if (!data) return c.json({ error: "Not found" }, 404);
+  if (!data || data.is_published !== true) return c.json({ error: "Not found" }, 404);
   return c.json({ page: data });
 });
 
@@ -74,7 +74,7 @@ configRouter.get("/legal/:slug/html", async (c) => {
     .eq("slug", slug)
     .maybeSingle();
   if (error) return c.json({ error: error.message }, 500);
-  if (!data) {
+  if (!data || data.is_published !== true) {
     return c.html(_legalShell("Not found", "", new Date().toISOString(), true), 404);
   }
   const body = (data.body as string) ?? "";

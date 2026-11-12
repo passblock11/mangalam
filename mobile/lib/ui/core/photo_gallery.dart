@@ -45,7 +45,7 @@ class _PhotoGalleryState extends State<PhotoGallery> {
       PageRouteBuilder<void>(
         opaque: false,
         barrierColor: Colors.black,
-        pageBuilder: (_, __, ___) => _FullScreenViewer(
+        pageBuilder: (_, _, _) => _FullScreenViewer(
           urls: widget.photoUrls,
           initial: index,
         ),
@@ -190,6 +190,25 @@ class _InitialAvatar extends StatelessWidget {
               color: Colors.white, fontSize: 64, fontWeight: FontWeight.w800)),
     );
   }
+}
+
+/// Opens every photo full-screen, starting at [initial]. Swipe and the
+/// arrow buttons move between photos. Used by profile galleries and the
+/// photo grids on Profile and Edit profile.
+void openPhotoViewer(
+  BuildContext context, {
+  required List<String> urls,
+  int initial = 0,
+}) {
+  if (urls.isEmpty) return;
+  final start = initial.clamp(0, urls.length - 1);
+  Navigator.of(context).push(
+    PageRouteBuilder<void>(
+      opaque: false,
+      barrierColor: Colors.black,
+      pageBuilder: (_, _, _) => _FullScreenViewer(urls: urls, initial: start),
+    ),
+  );
 }
 
 /// Full-screen, swipeable, pinch-to-zoom photo viewer.
