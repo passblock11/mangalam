@@ -164,12 +164,29 @@ paymentsRouter.post("/razorpay/order", async (c) => {
   let planCodeNote = "";
   if (plan_code) {
     const sb = getSupabaseAdmin();
-    const { data: plan, error: planErr } = await sb
-      .from("plans")
-      .select("code,name,price_paise,credits,duration_days,plan_type,is_active")
-      .eq("code", plan_code)
-      .maybeSingle();
-    if (planErr) return c.json({ error: planErr.message }, 500);
+    type PlanRow = {
+      code: string;
+      price_paise: number;
+      credits: number | null;
+      duration_days: number | null;
+      plan_type: string;
+      is_active: boolean;
+    };
+    let plan: PlanRow | null = null;
+    let planErr: { message?: string } | null = null;
+    try {
+      const r = await sb
+        .from("plans")
+        .select("code,name,price_paise,credits,duration_days,plan_type,is_active")
+        .eq("code", plan_code)
+        .maybeSingle();
+      plan = (r.data as PlanRow | null) ?? null;
+      planErr = (r.error as { message?: string } | null) ?? null;
+    } catch (e) {
+      planErr = { message: (e as Error).message };
+      console.error("[razorpay/order] plans lookup threw", { plan_code, err: (e as Error).message });
+    }
+    if (planErr) return c.json({ error: `Plans lookup failed: ${planErr.message}` }, 500);
     if (!plan || !plan.is_active) {
       return c.json({ error: "Plan not found or inactive" }, 404);
     }
