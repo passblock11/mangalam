@@ -178,6 +178,19 @@ paymentsRouter.get("/razorpay/diagnose", async (c) => {
   const respHeaders: Record<string, string> = {};
   res.headers.forEach((v, k) => { respHeaders[k] = v; });
 
+  // Simple GET with no auth, no body — to test if the network path
+  // itself is blocked regardless of method/auth.
+  let getStatus = 0;
+  let getHeaders: Record<string, string> = {};
+  try {
+    const getRes = await fetch("https://api.razorpay.com/v1/orders", { method: "GET" });
+    getStatus = getRes.status;
+    getRes.headers.forEach((v, k) => { getHeaders[k] = v; });
+  } catch (e) {
+    getStatus = -1;
+    getHeaders = { error: (e as Error).message };
+  }
+
   // Second fetch with a FAKE secret to isolate whether the 406 is
   // caused by the real secret value or by the Vercel Edge network path.
   let fakeRes: Response | null = null;
@@ -219,6 +232,10 @@ paymentsRouter.get("/razorpay/diagnose", async (c) => {
       status: fakeStatus,
       headers: fakeHeaders,
       body: fakeText.slice(0, 500),
+    },
+    simpleGetNoAuth: {
+      status: getStatus,
+      headers: getHeaders,
     },
     keyId: cfg.keyId,
     keySecretLength: cfg.keySecret.length,
