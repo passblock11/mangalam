@@ -179,11 +179,13 @@ class _DiscoverTabState extends State<DiscoverTab>
     }
     final items = _items ?? [];
     if (items.isEmpty) {
+      final shortlist = _tabController.index == 1;
       return MangalamEmptyState(
         icon: Iconsax.heart_search,
-        title: 'No new matches nearby',
-        subtitle:
-            'Try adjusting your preferences or check back later for new profiles.',
+        title: shortlist ? 'Nothing shortlisted yet' : 'No new matches nearby',
+        subtitle: shortlist
+            ? 'Profiles you like or shortlist will show up here.'
+            : 'Try adjusting your preferences or check back later for new profiles.',
         action: OutlinedButton.icon(
           onPressed: _load,
           icon: const Icon(Iconsax.refresh),

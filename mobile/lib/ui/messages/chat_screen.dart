@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_client.dart';
 import '../../services/photo_service.dart';
 import '../core/mangalam_theme.dart';
+import '../profile/profile_detail_screen.dart';
 
 final _apiChat = ApiClient();
 
@@ -18,11 +20,13 @@ class ChatScreen extends StatefulWidget {
     super.key,
     required this.conversationId,
     required this.otherName,
+    this.otherProfileId,
     this.otherPhotoUrls = const [],
   });
 
   final String conversationId;
   final String otherName;
+  final String? otherProfileId;
   final List<String> otherPhotoUrls;
 
   @override
@@ -251,6 +255,16 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _openOtherProfile() async {
+    final id = widget.otherProfileId;
+    if (id == null || id.isEmpty) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfileDetailScreen(profileId: id),
+      ),
+    );
+  }
+
   Future<void> _revealPhone() async {
     try {
       final json =
@@ -259,12 +273,76 @@ class _ChatScreenState extends State<ChatScreen> {
                 {},
               )
               as Map<String, dynamic>;
-      final phone = json['revealed_phone'];
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Phone: ${phone ?? 'n/a'}')));
+      final phone = json['revealed_phone']?.toString().trim() ?? '';
+      if (!mounted) return;
+      if (phone.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This member has not shared a phone number.'),
+          ),
+        );
+        return;
       }
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  widget.otherName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Phone number',
+                  style: TextStyle(color: MangalamTheme.muted, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F3EE),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    phone,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: phone));
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Phone number copied')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Iconsax.copy),
+                  label: const Text('Copy number'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -279,7 +357,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: Row(
+        title: InkWell(
+          onTap: _openOtherProfile,
+          child: Row(
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
@@ -305,7 +385,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   const Text(
-                    'Tap to reveal phone',
+                    'View profile',
                     style: TextStyle(
                       fontSize: 11.5,
                       color: MangalamTheme.muted,
@@ -315,6 +395,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ],
+        ),
         ),
         actions: [
           IconButton(

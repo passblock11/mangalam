@@ -14,11 +14,14 @@ matchesRouter.get("/", async (c) => {
 
   if (tab === "shortlist") {
     const limit = Math.min(Number(c.req.query("limit")) || 50, 100);
+    // Shortlisted tab shows everyone this user has expressed interest in:
+    // explicit shortlists AND likes (pending or mutual). A like used to
+    // vanish from this tab because only status=shortlisted was queried.
     const { data: rows, error } = await sb
       .from("interactions")
-      .select("to_profile_id,updated_at")
+      .select("to_profile_id,updated_at,status")
       .eq("from_profile_id", uid)
-      .eq("status", "shortlisted")
+      .in("status", ["shortlisted", "pending", "mutual"])
       .order("updated_at", { ascending: false })
       .limit(limit);
     if (error) return c.json({ error: error.message }, 500);

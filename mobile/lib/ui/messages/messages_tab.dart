@@ -212,6 +212,7 @@ class _MessagesTabState extends State<MessagesTab>
                       builder: (_) => ChatScreen(
                         conversationId: id,
                         otherName: name,
+                        otherProfileId: other['id']?.toString(),
                         otherPhotoUrls: photoUrls,
                       ),
                     ),

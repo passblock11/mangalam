@@ -99,6 +99,7 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
         builder: (_) => ChatScreen(
           conversationId: args['conversation_id'] as String? ?? '',
           otherName: args['other_name'] as String? ?? 'Member',
+          otherProfileId: args['other_profile_id'] as String?,
         ),
       );
     case '/profile':

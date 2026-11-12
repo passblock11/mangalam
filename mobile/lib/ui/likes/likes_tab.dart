@@ -208,25 +208,17 @@ class _LikesTabState extends State<LikesTab>
             builder: (_) => ChatScreen(
               conversationId: cid,
               otherName: name,
+              otherProfileId: id,
               otherPhotoUrls: photoUrls,
             ),
           ),
         );
         if (mounted) setState(() => _reloadKey++);
       }
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'You need a mutual match to start chat — open profile to connect.',
-          ),
-        ),
-      );
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ProfileDetailScreen(profileId: id),
-        ),
+        SnackBar(content: Text(e.toString())),
       );
     }
   }
@@ -277,8 +269,13 @@ class _ConnectionRow extends StatelessWidget {
     }
 
     return MangalamCard(
-      padding: const EdgeInsets.all(10),
-      child: Row(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onView,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(14),
@@ -394,6 +391,8 @@ class _ConnectionRow extends StatelessWidget {
             ],
           ),
         ],
+          ),
+        ),
       ),
     );
   }

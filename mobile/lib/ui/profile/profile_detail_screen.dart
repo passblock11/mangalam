@@ -148,6 +148,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
             builder: (_) => ChatScreen(
               conversationId: cid,
               otherName: name.toString(),
+              otherProfileId: widget.profileId,
               otherPhotoUrls: photoUrls,
             ),
           ),
@@ -157,7 +158,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Chat needs mutual match: $e')));
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }

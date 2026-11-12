@@ -37,12 +37,54 @@ class ApiClient {
   static const _jsonHeaders = {'Content-Type': 'application/json'};
 
   Future<Map<String, String>> _authHeaders() async {
+    await _refreshIfExpiring();
     final session = Supabase.instance.client.auth.currentSession;
     final token = session?.accessToken;
     if (token == null || token.isEmpty) {
       throw ApiException(401, 'Not signed in');
     }
     return {..._jsonHeaders, 'Authorization': 'Bearer $token'};
+  }
+
+  /// Refresh the Supabase session when the access token is missing or
+  /// within 90 seconds of expiry, so API calls don't fail with
+  /// "Invalid or expired token" while a refresh token is still valid.
+  Future<void> _refreshIfExpiring() async {
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) return;
+    final exp = session.expiresAt;
+    if (exp == null) return;
+    final expires = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
+    if (expires.difference(DateTime.now()) > const Duration(seconds: 90)) {
+      return;
+    }
+    await _refreshOnce();
+  }
+
+  static Future<bool>? _refreshInFlight;
+
+  Future<bool> _refreshOnce() {
+    final existing = _refreshInFlight;
+    if (existing != null) return existing;
+    final fut = Supabase.instance.client.auth
+        .refreshSession()
+        .then((res) => res.session != null)
+        .catchError((_) => false);
+    _refreshInFlight = fut;
+    return fut.whenComplete(() {
+      if (identical(_refreshInFlight, fut)) _refreshInFlight = null;
+    });
+  }
+
+  Future<http.Response> _send(
+    Future<http.Response> Function() request,
+  ) async {
+    var res = await request();
+    if (res.statusCode == 401) {
+      final ok = await _refreshOnce();
+      if (ok) res = await request();
+    }
+    return res;
   }
 
   /// Unauthenticated POST (e.g. login OTP send/verify).
@@ -64,9 +106,8 @@ class ApiClient {
       final hit = _Cache.read(path);
       if (hit != null) return hit;
     }
-    final res = await http.get(
-      _uri(path, query),
-      headers: await _authHeaders(),
+    final res = await _send(
+      () async => http.get(_uri(path, query), headers: await _authHeaders()),
     );
     final decoded = _decode(res);
     if (query == null && _cacheablePaths.contains(path)) {
@@ -83,19 +124,23 @@ class ApiClient {
 
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
-    final res = await http.post(
-      _uri(path),
-      headers: await _authHeaders(),
-      body: jsonEncode(body),
+    final res = await _send(
+      () async => http.post(
+        _uri(path),
+        headers: await _authHeaders(),
+        body: jsonEncode(body),
+      ),
     );
     return _decode(res);
   }
 
   Future<dynamic> patch(String path, Map<String, dynamic> body) async {
-    final res = await http.patch(
-      _uri(path),
-      headers: await _authHeaders(),
-      body: jsonEncode(body),
+    final res = await _send(
+      () async => http.patch(
+        _uri(path),
+        headers: await _authHeaders(),
+        body: jsonEncode(body),
+      ),
     );
     return _decode(res);
   }

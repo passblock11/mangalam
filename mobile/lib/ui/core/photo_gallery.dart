@@ -220,47 +220,117 @@ class _FullScreenViewerState extends State<_FullScreenViewer> {
     super.dispose();
   }
 
+  void _go(int delta) {
+    final next = _index + delta;
+    if (next < 0 || next >= widget.urls.length) return;
+    _controller.animateToPage(
+      next,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final many = widget.urls.length > 1;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(
-          '${_index + 1} / ${widget.urls.length}',
-          style: const TextStyle(fontSize: 14),
-        ),
-        leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: PageView.builder(
-        controller: _controller,
-        itemCount: widget.urls.length,
-        onPageChanged: (i) => setState(() => _index = i),
-        itemBuilder: (context, i) => InteractiveViewer(
-          maxScale: 4,
-          minScale: 1,
-          child: Center(
-            child: Image.network(
-              widget.urls[i],
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return const Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: MangalamTheme.maroon,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: widget.urls.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (context, i) => InteractiveViewer(
+              maxScale: 4,
+              minScale: 1,
+              child: Center(
+                child: Image.network(
+                  widget.urls[i],
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Icon(Iconsax.gallery, color: Colors.white, size: 40),
                   ),
-                );
-              },
-              errorBuilder: (_, __, ___) => const Center(
-                child: Icon(Iconsax.gallery, color: Colors.white54, size: 40),
+                ),
               ),
             ),
           ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            left: 8,
+            child: _roundBtn(
+              Iconsax.arrow_left,
+              () => Navigator.of(context).pop(),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 12,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${_index + 1} / ${widget.urls.length}',
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (many && _index > 0)
+            Positioned(
+              left: 10,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _roundBtn(Icons.chevron_left, () => _go(-1)),
+              ),
+            ),
+          if (many && _index < widget.urls.length - 1)
+            Positioned(
+              right: 10,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _roundBtn(Icons.chevron_right, () => _go(1)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _roundBtn(IconData icon, VoidCallback onTap) {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(icon, color: Colors.black, size: 22),
         ),
       ),
     );

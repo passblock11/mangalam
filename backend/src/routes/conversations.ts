@@ -151,23 +151,21 @@ conversationsRouter.post("/", async (c) => {
 
   const sb = getSupabaseAdmin();
 
-  const { data: m1 } = await sb
-    .from("interactions")
-    .select("id")
-    .eq("status", "mutual")
-    .eq("from_profile_id", uid)
-    .eq("to_profile_id", other)
+  // Anyone can message another member. Blocked pairs are still refused.
+  const { data: blk1 } = await sb
+    .from("blocks")
+    .select("blocker_id")
+    .eq("blocker_id", uid)
+    .eq("blocked_id", other)
     .maybeSingle();
-  const { data: m2 } = await sb
-    .from("interactions")
-    .select("id")
-    .eq("status", "mutual")
-    .eq("from_profile_id", other)
-    .eq("to_profile_id", uid)
+  const { data: blk2 } = await sb
+    .from("blocks")
+    .select("blocker_id")
+    .eq("blocker_id", other)
+    .eq("blocked_id", uid)
     .maybeSingle();
-
-  if (!m1 && !m2) {
-    return c.json({ error: "Mutual match required to start chat" }, 403);
+  if (blk1 || blk2) {
+    return c.json({ error: "You cannot message this member." }, 403);
   }
 
   const { data: existingA } = await sb
@@ -320,7 +318,7 @@ conversationsRouter.post("/:id/messages", async (c) => {
   return c.json({ message: data });
 });
 
-/** Spend one contact credit and record phone reveal for the other member */
+/** Reveal the other member's phone. Paid + verified viewers only. */
 conversationsRouter.post("/:id/reveal-phone", async (c) => {
   const uid = c.get("userId");
   const id = c.req.param("id");
@@ -336,12 +334,46 @@ conversationsRouter.post("/:id/reveal-phone", async (c) => {
   const target = ids.find((x) => x !== uid);
   if (!target) return c.json({ error: "Invalid conversation" }, 400);
 
+  const { data: me } = await sb
+    .from("profiles")
+    .select("is_verified")
+    .eq("id", uid)
+    .maybeSingle();
   const { data: wallet, error: wErr } = await sb
     .from("wallets")
-    .select("contact_credits")
+    .select("contact_credits,premium_until")
     .eq("profile_id", uid)
-    .single();
+    .maybeSingle();
   if (wErr || !wallet) return c.json({ error: "Wallet not found" }, 500);
+
+  const premiumUntil = wallet.premium_until
+    ? new Date(wallet.premium_until as string).getTime()
+    : 0;
+  const paid = Number.isFinite(premiumUntil) && premiumUntil > Date.now();
+  const verified = me?.is_verified === true;
+  if (!verified || !paid) {
+    return c.json(
+      {
+        error:
+          "Phone numbers are shown only to verified members with an active premium plan.",
+      },
+      403
+    );
+  }
+
+  const { data: targetProfile } = await sb
+    .from("profiles")
+    .select("id,phone,phone_visible")
+    .eq("id", target)
+    .single();
+  const phone = (targetProfile?.phone ?? "").toString().trim();
+  if (!phone || targetProfile?.phone_visible === false) {
+    return c.json(
+      { error: "This member has not shared a phone number." },
+      404
+    );
+  }
+
   if (wallet.contact_credits < 1) {
     return c.json({ error: "Insufficient contact credits" }, 402);
   }
@@ -361,14 +393,8 @@ conversationsRouter.post("/:id/reveal-phone", async (c) => {
     target_id: target,
   });
 
-  const { data: targetProfile } = await sb
-    .from("profiles")
-    .select("id,phone,phone_visible")
-    .eq("id", target)
-    .single();
-
   return c.json({
-    revealed_phone: targetProfile?.phone ?? null,
+    revealed_phone: phone,
     contact_credits_remaining: wallet.contact_credits - 1,
   });
 });
