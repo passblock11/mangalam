@@ -89,6 +89,43 @@ function basicAuthHeader(keyId: string, keySecret: string): string {
   return `Basic ${btoa(pair)}`;
 }
 
+/**
+ * Safely read a Razorpay (or any fetch) response body as JSON. Razorpay
+ * occasionally returns an empty body (e.g. 401/403 with no body) or a
+ * non-JSON error page, which would otherwise make `await res.json()` throw
+ * "Unexpected end of JSON input" and crash the request into a generic 500.
+ * Returns { data, text } so the caller can build a meaningful error message.
+ */
+async function readRazorpay(
+  res: Response
+): Promise<{ data: Record<string, unknown> | null; text: string; status: number }> {
+  const text = await res.text();
+  let data: Record<string, unknown> | null = null;
+  if (text) {
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      data = null;
+    }
+  }
+  return { data, text, status: res.status };
+}
+
+/** Extract a human-readable description from a Razorpay error payload. */
+function razorpayErrorDescription(
+  data: Record<string, unknown> | null,
+  text: string,
+  status: number
+): string {
+  const err = data?.error;
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object") {
+    const e = err as { description?: string; message?: string; code?: string };
+    return e.description ?? e.message ?? e.code ?? `HTTP ${status}`;
+  }
+  return text || `HTTP ${status}`;
+}
+
 type RazorpayOrder = {
   id: string;
   amount: number;
@@ -145,6 +182,13 @@ paymentsRouter.post("/razorpay/order", async (c) => {
     creditGrant = credits as number;
   }
 
+  if (!Number.isFinite(amountPaise) || amountPaise < 100) {
+    return c.json(
+      { error: `This plan has an invalid price (${amountPaise}). Please edit the plan in admin settings.` },
+      400
+    );
+  }
+
   const res = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: {
@@ -165,10 +209,21 @@ paymentsRouter.post("/razorpay/order", async (c) => {
     }),
   });
 
-  const data = (await res.json()) as Record<string, unknown>;
+  const { data, text, status } = await readRazorpay(res);
   if (!res.ok) {
+    const desc = razorpayErrorDescription(data, text, status);
+    console.error("[razorpay/order] upstream error", {
+      status,
+      amountPaise,
+      planCodeNote,
+      body: text.slice(0, 500),
+    });
+    return c.json({ error: `Razorpay order failed: ${desc}` }, 502);
+  }
+  if (!data) {
+    console.error("[razorpay/order] empty upstream body", { status });
     return c.json(
-      { error: (data.error as { description?: string } | undefined)?.description ?? "Razorpay order failed" },
+      { error: `Razorpay returned an empty response (HTTP ${status}). Check the API keys in admin settings.` },
       502
     );
   }
@@ -212,9 +267,17 @@ paymentsRouter.post("/razorpay/verify", async (c) => {
       headers: { Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret) },
     }
   );
-  const payment = (await payRes.json()) as RazorpayPayment & Record<string, unknown>;
+  const payRead = await readRazorpay(payRes);
+  const payment = (payRead.data ?? {}) as RazorpayPayment & Record<string, unknown>;
   if (!payRes.ok) {
-    return c.json({ error: "Could not load payment from Razorpay" }, 502);
+    console.error("[razorpay/verify] payment fetch error", {
+      status: payRead.status,
+      body: payRead.text.slice(0, 500),
+    });
+    return c.json(
+      { error: `Could not load payment from Razorpay: ${razorpayErrorDescription(payRead.data, payRead.text, payRead.status)}` },
+      502
+    );
   }
   if (payment.status !== "captured" && payment.status !== "authorized") {
     return c.json({ error: `Payment not successful (${payment.status})` }, 400);
@@ -229,9 +292,17 @@ paymentsRouter.post("/razorpay/verify", async (c) => {
       headers: { Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret) },
     }
   );
-  const order = (await ordRes.json()) as RazorpayOrder & { notes?: Record<string, string> };
+  const ordRead = await readRazorpay(ordRes);
+  const order = (ordRead.data ?? {}) as RazorpayOrder & { notes?: Record<string, string> };
   if (!ordRes.ok) {
-    return c.json({ error: "Could not load order from Razorpay" }, 502);
+    console.error("[razorpay/verify] order fetch error", {
+      status: ordRead.status,
+      body: ordRead.text.slice(0, 500),
+    });
+    return c.json(
+      { error: `Could not load order from Razorpay: ${razorpayErrorDescription(ordRead.data, ordRead.text, ordRead.status)}` },
+      502
+    );
   }
   const notesProfile = order.notes?.profile_id;
   const notesCredits = order.notes?.credits;
