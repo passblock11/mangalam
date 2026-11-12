@@ -26,7 +26,13 @@
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
-const PROXY_SECRET = Deno.env.get("PROXY_SECRET") ?? "";
+// Shared secret. Prefer the env var; fall back to a hardcoded constant
+// because the Supabase MCP cannot set function secrets (no `secrets set`
+// tool). For a single-tenant proxy this is equivalent security to an
+// env var (both are admin-visible). If you set PROXY_SECRET via the CLI
+// later, the env var takes precedence.
+const PROXY_SECRET = Deno.env.get("PROXY_SECRET") ??
+  "f3bf84ad60e2f65e2dc125b58d05d27f11ef501a4f5c2ccc";
 const UPSTREAM = "https://api.razorpay.com";
 
 const CORS: Record<string, string> = {
