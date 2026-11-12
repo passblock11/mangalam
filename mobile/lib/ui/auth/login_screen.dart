@@ -57,6 +57,16 @@ class _LoginScreenState extends State<LoginScreen> {
     if (raw.contains('canceled') || raw.contains('Cancelled')) {
       return 'Sign-in was cancelled.';
     }
+    if (raw.contains('SocketException') ||
+        raw.contains('HandshakeException') ||
+        raw.contains('Failed host lookup') ||
+        raw.contains('network') ||
+        raw.contains('Connection refused') ||
+        raw.contains('Connection timed out')) {
+      return 'Network error. Check your connection and try again.';
+    }
+    // ApiException.toString() already returns a clean message; just strip
+    // any leftover wrapper for non-API exceptions.
     return raw.replaceFirst('ApiException(', '').replaceAll('): ', ': ');
   }
 

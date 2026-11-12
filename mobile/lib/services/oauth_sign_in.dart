@@ -87,11 +87,15 @@ class OAuthSignIn {
       );
     }
 
-    await Supabase.instance.client.auth.signInWithIdToken(
-      provider: OAuthProvider.google,
-      idToken: idToken,
-      accessToken: authorization.accessToken,
-    );
+    try {
+      await Supabase.instance.client.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: authorization.accessToken,
+      );
+    } on AuthException catch (e) {
+      throw OAuthConfigException(_friendlyAuthMessage(e));
+    }
     await _syncProfileName(googleUser.displayName);
   }
 
@@ -103,6 +107,44 @@ class OAuthSignIn {
           '(run `cd mobile && ./scripts/android_sha1.sh`).';
     }
     return detail;
+  }
+
+  /// Map a Supabase AuthException (from signInWithIdToken) to a clean,
+  /// user-readable message. Supabase returns codes like `user_banned`,
+  /// `invalid_credentials`, etc.
+  static String _friendlyAuthMessage(AuthException e) {
+    final code = e.code;
+    final msg = e.message.toLowerCase();
+    switch (code) {
+      case 'user_banned':
+        return 'Your account has been suspended. If you believe this is a '
+            'mistake, please contact support.';
+      case 'email_not_confirmed':
+        return 'Please confirm your email address before signing in.';
+      case 'invalid_credentials':
+      case 'invalid':
+        return 'Google sign-in failed. Please try again.';
+      case 'rate_limit_exceeded':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'over_request_rate_limit':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'request_rate_limit_exceeded':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'reauthentication_needed':
+        return 'Your session expired. Please sign in again.';
+      case 'email_address_not_authorized':
+        return 'This email address is not authorized to sign in.';
+      case 'user_not_found':
+        return 'No account found for this email. Please sign up first.';
+      default:
+        if (msg.contains('network') ||
+            msg.contains('failed to fetch') ||
+            msg.contains('connection') ||
+            msg.contains('timeout')) {
+          return 'Network error. Check your connection and try again.';
+        }
+        return 'Sign-in failed. Please try again.';
+    }
   }
 
   static Future<void> _syncProfileName(String? name) async {

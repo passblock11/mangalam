@@ -7,6 +7,7 @@ import {
   fetchPaymentMethods,
   upsertPaymentMethod,
   deletePaymentMethod,
+  updateAppSettings,
 } from "../../settings-actions";
 import { Badge, Button, Card, EmptyState } from "../shared";
 
@@ -159,7 +160,157 @@ export function PaymentSettings() {
           saving={saving}
         />
       )}
+
+      <RazorpayCredentials
+        settings={settings}
+        onSaved={() => void load()}
+      />
     </div>
+  );
+}
+
+function RazorpayCredentials({
+  settings,
+  onSaved,
+}: {
+  settings: Record<string, any>;
+  onSaved: () => void;
+}) {
+  const [keyId, setKeyId] = useState("");
+  const [keySecret, setKeySecret] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
+  const [showWebhook, setShowWebhook] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  // Load existing values once when settings arrive.
+  useEffect(() => {
+    setKeyId((settings.razorpay_key_id as string) ?? "");
+    setKeySecret((settings.razorpay_key_secret as string) ?? "");
+    setWebhookSecret((settings.razorpay_webhook_secret as string) ?? "");
+  }, [settings.razorpay_key_id, settings.razorpay_key_secret, settings.razorpay_webhook_secret]);
+
+  async function save() {
+    setSaving(true);
+    setMsg(null);
+    const res = await updateAppSettings({
+      razorpay_key_id: keyId.trim(),
+      razorpay_key_secret: keySecret.trim(),
+      razorpay_webhook_secret: webhookSecret.trim(),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setMsg({ kind: "ok", text: "Razorpay credentials saved." });
+      onSaved();
+    } else {
+      setMsg({ kind: "err", text: res.error });
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-[var(--maroon)]">
+          <KeyIcon />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-[var(--ink)]">Razorpay API credentials</p>
+          <p className="text-xs text-[var(--muted)]">
+            Server-side keys used by the backend to create orders &amp; verify payments.
+            The Key Secret is never sent to the mobile app.
+          </p>
+        </div>
+      </div>
+
+      {msg && (
+        <div
+          className={`mb-3 rounded-lg border px-3 py-2 text-sm ${
+            msg.kind === "ok"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {msg.text}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase text-[var(--muted)]">
+            Key ID (public)
+          </span>
+          <input
+            type="text"
+            value={keyId}
+            onChange={(e) => setKeyId(e.target.value)}
+            placeholder="rzp_test_… / rzp_live_…"
+            className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[var(--maroon)]"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase text-[var(--muted)]">
+            Key Secret (secret — stored server-side only)
+          </span>
+          <div className="flex gap-2">
+            <input
+              type={showSecret ? "text" : "password"}
+              value={keySecret}
+              onChange={(e) => setKeySecret(e.target.value)}
+              placeholder="••••••••••••"
+              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[var(--maroon)]"
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              onClick={() => setShowSecret((v) => !v)}
+            >
+              {showSecret ? "Hide" : "Show"}
+            </Button>
+          </div>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase text-[var(--muted)]">
+            Webhook Secret (optional — for signature verification)
+          </span>
+          <div className="flex gap-2">
+            <input
+              type={showWebhook ? "text" : "password"}
+              value={webhookSecret}
+              onChange={(e) => setWebhookSecret(e.target.value)}
+              placeholder="••••••••••••"
+              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[var(--maroon)]"
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              onClick={() => setShowWebhook((v) => !v)}
+            >
+              {showWebhook ? "Hide" : "Show"}
+            </Button>
+          </div>
+        </label>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <Button size="sm" disabled={saving} onClick={() => void save()}>
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          Save credentials
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function KeyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 2l-2 2m-7.5 7.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 0L15 6m-3.5 3.5L18 3" />
+    </svg>
   );
 }
 
