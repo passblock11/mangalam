@@ -5,6 +5,7 @@ import '../../services/api_client.dart';
 import '../../services/oauth_sign_in.dart';
 import '../core/mangalam_theme.dart';
 import '../core/notifications_bell.dart';
+import '../core/photo_gallery.dart';
 import '../profile/profile_detail_screen.dart';
 
 class DiscoverTab extends StatefulWidget {
@@ -76,6 +77,7 @@ class _DiscoverTabState extends State<DiscoverTab>
     showDialog<void>(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (ctx) => const PopScope(
         canPop: false,
         child: Center(
@@ -287,43 +289,46 @@ class _ProfileCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AspectRatio(
-                aspectRatio: 4 / 3.4,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ProfilePhoto(name: name, photoUrls: photoUrls),
-                    // Top badges
-                    Positioned(
-                      top: 10,
-                      left: 10,
-                      child: Row(
-                        children: [
-                          if (verified)
-                            MangalamBadge(
-                              label: 'Verified',
-                              icon: Iconsax.verify,
-                              color: Colors.white,
-                              background: Colors.white.withValues(alpha: 0.22),
-                              foreground: Colors.white,
-                            ),
-                          if (verified) const SizedBox(width: 6),
-                          if (active)
-                            MangalamBadge(
-                              label: 'Active',
-                              icon: Iconsax.tick_circle,
-                              color: const Color(0xFF2E7D32),
-                              background: Colors.white.withValues(alpha: 0.2),
-                              foreground: Colors.white,
-                            ),
-                        ],
-                      ),
+              Stack(
+                children: [
+                  PhotoGallery(
+                    name: name,
+                    photoUrls: photoUrls,
+                    aspectRatio: 4 / 3.4,
+                    showCountBadge: true,
+                  ),
+                  // Top badges
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Row(
+                      children: [
+                        if (verified)
+                          MangalamBadge(
+                            label: 'Verified',
+                            icon: Iconsax.verify,
+                            color: Colors.white,
+                            background: Colors.white.withValues(alpha: 0.22),
+                            foreground: Colors.white,
+                          ),
+                        if (verified) const SizedBox(width: 6),
+                        if (active)
+                          MangalamBadge(
+                            label: 'Active',
+                            icon: Iconsax.tick_circle,
+                            color: const Color(0xFF2E7D32),
+                            background: Colors.white.withValues(alpha: 0.2),
+                            foreground: Colors.white,
+                          ),
+                      ],
                     ),
-                    // Bottom scrim
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
+                  ),
+                  // Bottom scrim (ignore pointer so photo swipe/tap still work)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
                       child: Container(
                         padding: const EdgeInsets.fromLTRB(16, 28, 16, 14),
                         decoration: BoxDecoration(
@@ -381,8 +386,8 @@ class _ProfileCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),

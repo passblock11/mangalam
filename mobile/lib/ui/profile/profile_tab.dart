@@ -80,6 +80,7 @@ class _ProfileTabState extends State<ProfileTab> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (ctx) => const PopScope(
         canPop: false,
         child: Center(
@@ -690,7 +691,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         if (_wallet?['premium_until'] != null) ...[
                           const SizedBox(height: 8),
                           Text(
-                            'Valid till ${formatDate(_wallet!['premium_until'] as String?)}',
+                            'Valid till ${formatDate(_wallet!['premium_until'])}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: MangalamTheme.muted,

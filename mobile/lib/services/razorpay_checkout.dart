@@ -50,8 +50,8 @@ class RazorpayCheckout {
     void onError(PaymentFailureResponse r) {
       if (!completer.isCompleted) {
         // Razorpay fires EVENT_PAYMENT_ERROR when the user dismisses the
-        // checkout (code PAYMENT_CANCELLED) and for real failures. Map to a
-        // typed, user-friendly message instead of leaking "Exception: ...".
+        // checkout (numeric code 2 = PAYMENT_CANCELLED) and for real
+        // failures. Map to a typed message — never leak "Exception: Undefined".
         final code = r.code?.toString() ?? '';
         final message = (r.message ?? '').toString();
         completer.completeError(_PaymentCancelException(code, message));
@@ -71,11 +71,30 @@ class RazorpayCheckout {
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, onExternal);
 
     try {
-      final order =
-          await _api.post('/v1/payments/razorpay/order', {
-                'plan_code': planCode,
-              })
-              as Map<String, dynamic>;
+      // Loader while the order is created (proxy round-trip can take ~1–2s).
+      if (context.mounted) {
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          useRootNavigator: true,
+          builder: (ctx) => const PopScope(
+            canPop: false,
+            child: Center(
+              child: CircularProgressIndicator(color: MangalamTheme.maroon),
+            ),
+          ),
+        );
+      }
+      Map<String, dynamic> order;
+      try {
+        order = await _api.post('/v1/payments/razorpay/order', {
+              'plan_code': planCode,
+            }) as Map<String, dynamic>;
+      } finally {
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      }
 
       final keyId = order['key_id'] as String?;
       final orderId = order['order_id'] as String?;
@@ -112,11 +131,12 @@ class RazorpayCheckout {
 
       if (!context.mounted) return false;
 
-      // P3: show a loader while the backend verifies & credits the plan —
+      // Loader while the backend verifies & credits the plan —
       // otherwise the user sees nothing happening for a few seconds.
       showDialog<void>(
         context: context,
         barrierDismissible: false,
+        useRootNavigator: true,
         builder: (ctx) => const PopScope(
           canPop: false,
           child: Center(
@@ -181,21 +201,34 @@ class _PaymentCancelException implements Exception {
   final String code;
   final String rawMessage;
 
-  bool get isCancelled =>
-      code == 'PAYMENT_CANCELLED' ||
-      rawMessage.toLowerCase().contains('cancel');
+  bool get isCancelled {
+    final c = code.trim().toUpperCase();
+    final m = rawMessage.trim().toLowerCase();
+    // razorpay_flutter uses int codes: 2 = PAYMENT_CANCELLED.
+    // Dismiss often arrives as code=2 with message "Undefined"/empty.
+    if (c == '2' || c == 'PAYMENT_CANCELLED' || m.contains('cancel')) {
+      return true;
+    }
+    // Treat bare "Undefined"/empty with no real error code as a dismiss.
+    final looksUndefined = m.isEmpty || m == 'undefined';
+    final noRealCode = c.isEmpty || c == 'null' || c == 'undefined';
+    return looksUndefined && noRealCode;
+  }
 
   String get friendlyMessage {
     if (isCancelled) return 'Payment cancelled.';
-    switch (code) {
+    switch (code.trim().toUpperCase()) {
+      case '0':
+      case 'NETWORK_ERROR':
+        return 'Network error during payment. Check your connection.';
+      case '1':
+      case 'INVALID_OPTIONS':
       case 'BAD_REQUEST_ERROR':
         return 'Payment failed: invalid request. Please try again.';
       case 'PAYMENT_ERROR':
         return 'Payment could not be completed. Please try again.';
       case 'INVALID_VPA':
         return 'Invalid UPI ID. Please check and retry.';
-      case 'NETWORK_ERROR':
-        return 'Network error during payment. Check your connection.';
       default:
         final m = rawMessage.trim();
         if (m.isNotEmpty && m.toLowerCase() != 'undefined') return m;

@@ -47,27 +47,53 @@ conversationsRouter.get("/", async (c) => {
   const convIds = [...new Set((memberships ?? []).map((m) => m.conversation_id))];
   if (convIds.length === 0) return c.json({ conversations: [] });
 
-  const { data: lastMessages, error: lmErr } = await sb
-    .from("messages")
-    .select("id,conversation_id,body,created_at,sender_id")
-    .in("conversation_id", convIds)
-    .order("created_at", { ascending: false });
-  if (lmErr) return c.json({ error: lmErr.message }, 500);
+  // Prefer attachment metadata for previews; fall back if migration 0012
+  // has not been applied yet (columns missing).
+  let lastMessages: Array<Record<string, unknown>> | null = null;
+  {
+    const withAttach = await sb
+      .from("messages")
+      .select(
+        "id,conversation_id,body,created_at,sender_id,attachment_type,attachment_name"
+      )
+      .in("conversation_id", convIds)
+      .order("created_at", { ascending: false });
+    if (withAttach.error) {
+      const fallback = await sb
+        .from("messages")
+        .select("id,conversation_id,body,created_at,sender_id")
+        .in("conversation_id", convIds)
+        .order("created_at", { ascending: false });
+      if (fallback.error) return c.json({ error: fallback.error.message }, 500);
+      lastMessages = (fallback.data ?? []) as Array<Record<string, unknown>>;
+    } else {
+      lastMessages = (withAttach.data ?? []) as Array<Record<string, unknown>>;
+    }
+  }
 
   const seenConv = new Set<string>();
   const preview: {
     conversation_id: string;
-    last: { body: string; created_at: string; sender_id: string } | null;
+    last: {
+      body: string;
+      created_at: string;
+      sender_id: string;
+      attachment_type?: string | null;
+      attachment_name?: string | null;
+    } | null;
   }[] = [];
   for (const row of lastMessages ?? []) {
-    if (seenConv.has(row.conversation_id)) continue;
-    seenConv.add(row.conversation_id);
+    const conversationId = String(row.conversation_id ?? "");
+    if (!conversationId || seenConv.has(conversationId)) continue;
+    seenConv.add(conversationId);
     preview.push({
-      conversation_id: row.conversation_id,
+      conversation_id: conversationId,
       last: {
-        body: row.body,
-        created_at: row.created_at,
-        sender_id: row.sender_id,
+        body: String(row.body ?? ""),
+        created_at: String(row.created_at ?? ""),
+        sender_id: String(row.sender_id ?? ""),
+        attachment_type: (row.attachment_type as string | null) ?? null,
+        attachment_name: (row.attachment_name as string | null) ?? null,
       },
     });
   }
@@ -89,7 +115,7 @@ conversationsRouter.get("/", async (c) => {
   const { data: profiles } = await sb
     .from("profiles")
     .select(
-      "id,display_name,is_verified,community,mother_tongue,city,state"
+      "id,display_name,is_verified,community,mother_tongue,city,state,photo_urls"
     )
     .in("id", otherIds);
 
@@ -104,13 +130,12 @@ conversationsRouter.get("/", async (c) => {
     };
   });
 
+  // Primary = full inbox (all chats), matching matrimonial/dating UX.
+  // Sent = chats where you sent the latest message (outbound filter).
+  // Previously Primary hid chats you started (last msg from you), which
+  // made the Messages tab look empty right after opening a conversation.
   if (folder === "sent") {
     conversations = conversations.filter((x) => x.last_message?.sender_id === uid);
-  } else {
-    conversations = conversations.filter(
-      (x) =>
-        x.last_message == null || x.last_message.sender_id !== uid
-    );
   }
 
   return c.json({ conversations });
@@ -208,7 +233,7 @@ conversationsRouter.get("/:id/messages", async (c) => {
     .maybeSingle();
   if (!mem) return c.json({ error: "Forbidden" }, 403);
 
-  const { data, error } = await sb
+  const withAttach = await sb
     .from("messages")
     .select(
       "id,sender_id,body,created_at,attachment_url,attachment_type,attachment_name,attachment_mime,attachment_size"
@@ -216,8 +241,17 @@ conversationsRouter.get("/:id/messages", async (c) => {
     .eq("conversation_id", id)
     .order("created_at", { ascending: true })
     .limit(200);
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ messages: data ?? [] });
+  if (withAttach.error) {
+    const fallback = await sb
+      .from("messages")
+      .select("id,sender_id,body,created_at")
+      .eq("conversation_id", id)
+      .order("created_at", { ascending: true })
+      .limit(200);
+    if (fallback.error) return c.json({ error: fallback.error.message }, 500);
+    return c.json({ messages: fallback.data ?? [] });
+  }
+  return c.json({ messages: withAttach.data ?? [] });
 });
 
 conversationsRouter.post("/:id/messages", async (c) => {

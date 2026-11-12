@@ -16,12 +16,15 @@ class PhotoGallery extends StatefulWidget {
     this.photoUrls = const [],
     this.aspectRatio = 0.95,
     this.showCountBadge = true,
+    /// Extra top inset for the count badge (e.g. under a transparent AppBar).
+    this.badgeTopInset = 0,
   });
 
   final String name;
   final List<String> photoUrls;
   final double aspectRatio;
   final bool showCountBadge;
+  final double badgeTopInset;
 
   @override
   State<PhotoGallery> createState() => _PhotoGalleryState();
@@ -103,7 +106,7 @@ class _PhotoGalleryState extends State<PhotoGallery> {
           // Photo count badge
           if (widget.showCountBadge && urls.length > 1)
             Positioned(
-              top: MediaQuery.paddingOf(context).top + 56,
+              top: 10 + widget.badgeTopInset,
               right: 12,
               child: Container(
                 padding:

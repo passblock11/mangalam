@@ -106,24 +106,43 @@ matchesRouter.get("/", async (c) => {
     }
   }
 
+  // Soft location preference (NOT a hard filter): same-state profiles are
+  // ranked first, but profiles from other states still appear. A hard
+  // `eq("state", me.state)` emptied Discover whenever test/seed users lived
+  // in different states — unlike other matrimonial apps that keep showing
+  // profiles nationwide.
   let q = sb
     .from("profiles")
     .select(
-      "id,display_name,date_of_birth,gender,community,mother_tongue,city,state,is_verified,updated_at,photo_urls"
+      "id,display_name,date_of_birth,gender,community,mother_tongue,city,state,diet,is_verified,updated_at,photo_urls"
     )
     .neq("id", uid)
-    .limit(limit);
+    .not("display_name", "is", null)
+    .eq("is_banned", false)
+    .limit(Math.min(limit * 3, 150));
 
-  if (me.state) q = q.eq("state", me.state);
   if (opposite) q = q.eq("gender", opposite);
 
   const { data: rows, error } = await q;
   if (error) return c.json({ error: error.message }, 500);
 
-  const filtered = (rows ?? []).filter((r) => !blocked.has(r.id) && !passed.has(r.id));
+  const filtered = (rows ?? []).filter(
+    (r) => !blocked.has(r.id) && !passed.has(r.id) && !!r.display_name
+  );
+
+  // Rank: same state first, then recently active, then others
+  const myState = (me.state ?? "").toString().toLowerCase();
+  filtered.sort((a, b) => {
+    const aSame = myState && (a.state ?? "").toString().toLowerCase() === myState ? 0 : 1;
+    const bSame = myState && (b.state ?? "").toString().toLowerCase() === myState ? 0 : 1;
+    if (aSame !== bSame) return aSame - bSame;
+    const aT = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+    const bT = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+    return bT - aT;
+  });
 
   const now = new Date();
-  const items = filtered.map((r) => {
+  const items = filtered.slice(0, limit).map((r) => {
     let age: number | null = null;
     if (r.date_of_birth) {
       const d = new Date(r.date_of_birth);
@@ -140,6 +159,7 @@ matchesRouter.get("/", async (c) => {
       mother_tongue: r.mother_tongue,
       city: r.city,
       state: r.state,
+      diet: r.diet ?? null,
       is_verified: r.is_verified,
       photo_urls: r.photo_urls ?? [],
       active_recent: r.updated_at

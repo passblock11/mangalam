@@ -13,11 +13,14 @@ String formatRelativeTime(String? iso) {
   return DateFormat.MMMd().format(t);
 }
 
-/// Human-readable calendar date, e.g. "11 Jan 2027". Accepts ISO 8601
-/// timestamps (with time/offset) or plain dates. Returns '' if unparseable.
-String formatDate(String? iso) {
-  if (iso == null || iso.isEmpty) return '';
+/// Human-readable calendar date, e.g. "Jan 11, 2027". Accepts ISO 8601
+/// timestamps (with time/offset) or plain dates. Never returns a raw
+/// technical timestamp. Returns '' if unparseable.
+String formatDate(Object? value) {
+  if (value == null) return '';
+  final iso = value.toString().trim();
+  if (iso.isEmpty) return '';
   final t = DateTime.tryParse(iso);
   if (t == null) return '';
-  return DateFormat('d MMM yyyy').format(t);
+  return DateFormat('MMM d, yyyy').format(t.toLocal());
 }

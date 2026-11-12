@@ -288,6 +288,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 name: name,
                 photoUrls: photoUrls,
                 aspectRatio: 0.95,
+                badgeTopInset: MediaQuery.paddingOf(context).top + 44,
               ),
               // Bottom scrim for app bar readability
               Positioned(

@@ -121,6 +121,7 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                 name: name,
                 photoUrls: photoUrls,
                 aspectRatio: 0.95,
+                badgeTopInset: MediaQuery.paddingOf(context).top + 44,
               ),
               Positioned(
                 top: 0,

@@ -119,32 +119,42 @@ class _LikesTabState extends State<LikesTab>
               subtitle: _emptySubtitle,
             );
           }
-          return ListView.separated(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              MediaQuery.of(context).padding.bottom + 120,
-            ),
-            itemCount: items.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, i) {
-              final row = items[i] as Map<String, dynamic>;
-              final profile = row['profile'] as Map<String, dynamic>? ?? {};
-              return _ConnectionRow(
-                profile: profile,
-                meta: row,
-                tabParam: _tabParam,
-                onMessage: () => _openChat(profile),
-                onView: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => ProfileDetailScreen(
-                      profileId: profile['id'] as String? ?? '',
+          return RefreshIndicator(
+            color: MangalamTheme.maroon,
+            onRefresh: () async {
+              if (!mounted) return;
+              setState(() => _reloadKey++);
+              // Give the FutureBuilder a tick to start the new fetch.
+              await Future<void>.delayed(const Duration(milliseconds: 50));
+            },
+            child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                12,
+                16,
+                MediaQuery.of(context).padding.bottom + 120,
+              ),
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                final row = items[i] as Map<String, dynamic>;
+                final profile = row['profile'] as Map<String, dynamic>? ?? {};
+                return _ConnectionRow(
+                  profile: profile,
+                  meta: row,
+                  tabParam: _tabParam,
+                  onMessage: () => _openChat(profile),
+                  onView: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ProfileDetailScreen(
+                        profileId: profile['id'] as String? ?? '',
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           );
         },
       ),
@@ -364,6 +374,9 @@ class _ConnectionRow extends StatelessWidget {
                 ),
               ),
               IconButton(
+                tooltip: phone != null && phone.isNotEmpty
+                    ? 'Call'
+                    : 'Open profile to unlock contact',
                 onPressed: phone != null && phone.isNotEmpty
                     ? () async {
                         final uri = Uri.parse(
@@ -371,7 +384,7 @@ class _ConnectionRow extends StatelessWidget {
                         );
                         if (await canLaunchUrl(uri)) await launchUrl(uri);
                       }
-                    : null,
+                    : onView,
                 icon: const Icon(Iconsax.call),
                 color: MangalamTheme.gold,
                 style: IconButton.styleFrom(

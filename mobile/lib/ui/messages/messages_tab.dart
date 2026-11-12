@@ -139,7 +139,19 @@ class _MessagesTabState extends State<MessagesTab>
               final other = row['other_profile'] as Map<String, dynamic>? ?? {};
               final name = other['display_name']?.toString() ?? 'Member';
               final last = row['last_message'] as Map<String, dynamic>?;
-              final body = last?['body'] as String? ?? '';
+              final rawBody = last?['body'] as String? ?? '';
+              final attachType = last?['attachment_type']?.toString();
+              final body = rawBody.trim().isNotEmpty
+                  ? rawBody
+                  : attachType == 'image'
+                      ? '📷 Photo'
+                      : attachType == 'video'
+                          ? '🎥 Video'
+                          : attachType == 'audio'
+                              ? '🎤 Voice message'
+                              : attachType != null
+                                  ? '📎 ${last?['attachment_name'] ?? 'File'}'
+                                  : '';
               final created = last?['created_at'] as String?;
               final verified = other['is_verified'] == true;
               final photoUrls =
@@ -179,7 +191,7 @@ class _MessagesTabState extends State<MessagesTab>
                   ],
                 ),
                 subtitle: Text(
-                  body,
+                  body.isEmpty ? 'Say hello' : body,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
