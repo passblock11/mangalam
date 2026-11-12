@@ -4,6 +4,47 @@ import { requireAuth } from "../auth.js";
 import { env } from "../env.js";
 import { getSupabaseAdmin } from "../supabase.js";
 
+/**
+ * Make a Razorpay API call. The Vercel Edge runtime's direct fetch to
+ * api.razorpay.com is intercepted and returns HTTP 406 with an empty
+ * body (confirmed for real keys, fake keys, and even a no-auth GET).
+ * To work around this, when RAZORPAY_PROXY_URL is set we route the call
+ * through a Supabase Edge Function proxy (Deno Deploy), which reaches
+ * Razorpay normally. The proxy requires X-Proxy-Secret and only
+ * forwards to api.razorpay.com (not an open proxy).
+ */
+async function razorpayFetch(
+  path: string,
+  init: { method: string; headers: Record<string, string>; body: string }
+): Promise<Response> {
+  const proxyUrl = env("RAZORPAY_PROXY_URL");
+  const proxySecret = env("RAZORPAY_PROXY_SECRET");
+  if (proxyUrl && proxySecret) {
+    const proxyHeaders: Record<string, string> = {
+      "x-proxy-secret": proxySecret,
+      "x-target-path": path,
+      "content-type": init.headers["Content-Type"] ?? "application/json",
+      "accept": init.headers["Accept"] ?? "application/json",
+      "user-agent": init.headers["User-Agent"] ?? "Mangalam-Backend/1.0",
+    };
+    if (init.headers["Authorization"]) {
+      proxyHeaders["authorization"] = init.headers["Authorization"];
+    }
+    return fetch(proxyUrl, {
+      method: init.method,
+      headers: proxyHeaders,
+      body: init.method === "GET" || init.method === "HEAD" ? undefined : init.body,
+    });
+  }
+  // Fallback: direct (will 406 from Edge, but keeps the path working
+  // for local dev / non-Vercel environments).
+  return fetch(`https://api.razorpay.com${path}`, {
+    method: init.method,
+    headers: init.headers,
+    body: init.method === "GET" || init.method === "HEAD" ? undefined : init.body,
+  });
+}
+
 const orderBodySchema = z
   .object({
     credits: z.number().int().min(1).max(500).optional(),
@@ -166,7 +207,7 @@ paymentsRouter.get("/razorpay/diagnose", async (c) => {
   };
   let res: Response;
   try {
-    res = await fetch("https://api.razorpay.com/v1/orders", {
+    res = await razorpayFetch("/v1/orders", {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(reqBody),
@@ -308,7 +349,7 @@ paymentsRouter.post("/razorpay/order", async (c) => {
     );
   }
 
-  const res = await fetch("https://api.razorpay.com/v1/orders", {
+  const res = await razorpayFetch("/v1/orders", {
     method: "POST",
     headers: {
       Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret),
@@ -387,10 +428,12 @@ paymentsRouter.post("/razorpay/verify", async (c) => {
     return c.json({ error: "Invalid payment signature" }, 400);
   }
 
-  const payRes = await fetch(
-    `https://api.razorpay.com/v1/payments/${encodeURIComponent(razorpay_payment_id)}`,
+  const payRes = await razorpayFetch(
+    `/v1/payments/${encodeURIComponent(razorpay_payment_id)}`,
     {
+      method: "GET",
       headers: { Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret) },
+      body: "",
     }
   );
   const payRead = await readRazorpay(payRes);
@@ -412,10 +455,12 @@ paymentsRouter.post("/razorpay/verify", async (c) => {
     return c.json({ error: "Payment does not match order" }, 400);
   }
 
-  const ordRes = await fetch(
-    `https://api.razorpay.com/v1/orders/${encodeURIComponent(razorpay_order_id)}`,
+  const ordRes = await razorpayFetch(
+    `/v1/orders/${encodeURIComponent(razorpay_order_id)}`,
     {
+      method: "GET",
       headers: { Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret) },
+      body: "",
     }
   );
   const ordRead = await readRazorpay(ordRes);
