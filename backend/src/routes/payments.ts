@@ -177,6 +177,31 @@ paymentsRouter.get("/razorpay/diagnose", async (c) => {
   const text = await res.text();
   const respHeaders: Record<string, string> = {};
   res.headers.forEach((v, k) => { respHeaders[k] = v; });
+
+  // Second fetch with a FAKE secret to isolate whether the 406 is
+  // caused by the real secret value or by the Vercel Edge network path.
+  let fakeRes: Response | null = null;
+  let fakeText = "";
+  let fakeStatus = 0;
+  let fakeHeaders: Record<string, string> = {};
+  try {
+    fakeRes = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        Authorization: basicAuthHeader(cfg.keyId, "fake_secret_for_comparison"),
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mangalam-Backend/1.0",
+      },
+      body: JSON.stringify({ ...reqBody, receipt: `mangalam_diag_fake_${Date.now()}` }),
+    });
+    fakeText = await fakeRes.text();
+    fakeStatus = fakeRes.status;
+    fakeRes.headers.forEach((v, k) => { fakeHeaders[k] = v; });
+  } catch (e) {
+    fakeText = `fetchError: ${(e as Error).message}`;
+  }
+
   return c.json({
     request: {
       url: "https://api.razorpay.com/v1/orders",
@@ -190,7 +215,15 @@ paymentsRouter.get("/razorpay/diagnose", async (c) => {
       headers: respHeaders,
       body: text.slice(0, 2000),
     },
+    comparisonWithFakeSecret: {
+      status: fakeStatus,
+      headers: fakeHeaders,
+      body: fakeText.slice(0, 500),
+    },
     keyId: cfg.keyId,
+    keySecretLength: cfg.keySecret.length,
+    keySecretFirst4: cfg.keySecret.slice(0, 4),
+    keySecretLast4: cfg.keySecret.slice(-4),
   });
 });
 
