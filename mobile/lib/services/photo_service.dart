@@ -121,4 +121,63 @@ class PhotoService {
   /// Create a short-lived signed URL for a verification doc (admin preview).
   static String publicUrlFor(String path) =>
       _sb.storage.from(_verifBucket).getPublicUrl(path);
+
+  // ---- Chat attachments (public bucket) ----
+
+  static const _chatBucket = 'chat-attachments';
+
+  /// Upload a chat attachment (image / video / file) and return its public
+  /// URL. Path layout: {conversationId}/{senderId}/{timestamp}.{ext}.
+  static Future<({String url, String type, String mime, String name, int size})>
+      uploadChatAttachment({
+    required String conversationId,
+    required XFile file,
+    required String type, // image | video | file | audio
+  }) async {
+    final uid = _uid;
+    if (uid.isEmpty) throw StateError('Not signed in');
+    final mime = file.mimeType ?? 'application/octet-stream';
+    final ext = _extFor(mime, file.name);
+    final path =
+        '$conversationId/$uid/${DateTime.now().millisecondsSinceEpoch}$ext';
+    final bytes = await file.readAsBytes();
+    await _sb.storage.from(_chatBucket).uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: mime, upsert: false),
+        );
+    final url = _sb.storage.from(_chatBucket).getPublicUrl(path);
+    return (
+      url: url,
+      type: type,
+      mime: mime,
+      name: file.name,
+      size: bytes.length,
+    );
+  }
+
+  static String _extFor(String mime, String name) {
+    final fromName = name.contains('.') ? '.${name.split('.').last}' : '';
+    if (fromName.length <= 6) return fromName;
+    switch (mime) {
+      case 'image/jpeg':
+        return '.jpg';
+      case 'image/png':
+        return '.png';
+      case 'image/gif':
+        return '.gif';
+      case 'image/webp':
+        return '.webp';
+      case 'video/mp4':
+        return '.mp4';
+      case 'audio/mpeg':
+        return '.mp3';
+      case 'audio/mp4':
+        return '.m4a';
+      case 'application/pdf':
+        return '.pdf';
+      default:
+        return '';
+    }
+  }
 }

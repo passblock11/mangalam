@@ -3,6 +3,7 @@ import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../core/mangalam_theme.dart';
+import '../core/photo_gallery.dart';
 import 'profile_widgets.dart';
 
 /// Read-only preview of how the signed-in user's profile appears to other
@@ -116,9 +117,10 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
         SliverToBoxAdapter(
           child: Stack(
             children: [
-              AspectRatio(
+              PhotoGallery(
+                name: name,
+                photoUrls: photoUrls,
                 aspectRatio: 0.95,
-                child: ProfilePhoto(name: name, photoUrls: photoUrls),
               ),
               Positioned(
                 top: 0,
@@ -138,40 +140,6 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                   ),
                 ),
               ),
-              if (photoUrls.isNotEmpty)
-                Positioned(
-                  bottom: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Iconsax.gallery,
-                          color: Colors.white,
-                          size: 13,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${photoUrls.length} photo${photoUrls.length == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

@@ -75,7 +75,7 @@ matchesRouter.get("/", async (c) => {
         ? "male"
         : null;
 
-  const limit = Math.min(Number(c.req.query("limit")) || 20, 50);
+  const limit = Math.min(Number(c.req.query("limit")) || 50, 100);
 
   const { data: blockedRows } = await sb
     .from("blocks")
@@ -90,13 +90,20 @@ matchesRouter.get("/", async (c) => {
 
   const { data: interacted } = await sb
     .from("interactions")
-    .select("to_profile_id,from_profile_id")
+    .select("to_profile_id,from_profile_id,status")
     .or(`from_profile_id.eq.${uid},to_profile_id.eq.${uid}`);
 
-  const seen = new Set<string>([uid]);
+  // Only hide profiles the current user has explicitly PASSED on (so they
+  // don't keep re-seeing people they rejected). Likes, shortlists, mutual
+  // matches, and incoming likes from others stay visible in Discover —
+  // matching the behaviour of other matrimonial apps, where a profile
+  // remains discoverable even after you've liked/matched.
+  // (interaction_status enum: pending | mutual | passed | shortlisted)
+  const passed = new Set<string>([uid]);
   for (const row of interacted ?? []) {
-    seen.add(row.from_profile_id);
-    seen.add(row.to_profile_id);
+    if (row.from_profile_id === uid && row.status === "passed") {
+      passed.add(row.to_profile_id);
+    }
   }
 
   let q = sb
@@ -113,7 +120,7 @@ matchesRouter.get("/", async (c) => {
   const { data: rows, error } = await q;
   if (error) return c.json({ error: error.message }, 500);
 
-  const filtered = (rows ?? []).filter((r) => !blocked.has(r.id) && !seen.has(r.id));
+  const filtered = (rows ?? []).filter((r) => !blocked.has(r.id) && !passed.has(r.id));
 
   const now = new Date();
   const items = filtered.map((r) => {

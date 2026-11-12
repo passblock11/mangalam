@@ -180,6 +180,8 @@ class _LikesTabState extends State<LikesTab>
   Future<void> _openChat(Map<String, dynamic> profile) async {
     final id = profile['id'] as String? ?? '';
     final name = profile['display_name']?.toString() ?? 'Member';
+    final photoUrls =
+        (profile['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
     try {
       final res =
           await _api.post('/v1/conversations', {
@@ -193,7 +195,11 @@ class _LikesTabState extends State<LikesTab>
       if (cid != null) {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => ChatScreen(conversationId: cid, otherName: name),
+            builder: (_) => ChatScreen(
+              conversationId: cid,
+              otherName: name,
+              otherPhotoUrls: photoUrls,
+            ),
           ),
         );
         if (mounted) setState(() => _reloadKey++);

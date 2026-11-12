@@ -59,6 +59,105 @@ configRouter.get("/legal/:slug", async (c) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Legal page rendered as a full HTML document (public). Used for Play Store
+// listing URLs AND loaded in the app's in-app WebView (instead of a plain
+// Text screen). The body is Markdown authored in the admin panel; it is
+// rendered client-side via markdown-it from a CDN so the Edge runtime
+// doesn't need a markdown dependency.
+// ─────────────────────────────────────────────────────────────────────────────
+configRouter.get("/legal/:slug/html", async (c) => {
+  const slug = c.req.param("slug");
+  const sb = getSupabaseAdmin();
+  const { data, error } = await sb
+    .from("legal_pages")
+    .select("slug,title,body,version,updated_at,is_published")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data) {
+    return c.html(_legalShell("Not found", "", new Date().toISOString(), true), 404);
+  }
+  const body = (data.body as string) ?? "";
+  const updated = (data.updated_at as string) ?? new Date().toISOString();
+  return c.html(_legalShell(data.title ?? slug, body, updated, !data.is_published));
+});
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function _legalShell(
+  title: string,
+  markdownBody: string,
+  updatedAt: string,
+  draft: boolean
+): string {
+  const updatedDate = updatedAt.substring(0, 10);
+  const draftBanner = draft
+    ? `<div class="draft">Draft — not published</div>`
+    : "";
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>${escapeHtml(title)}</title>
+<script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1f1f1f;
+    background: #fffdf8;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 20px calc(28px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 28px; margin: 0 0 6px; color: #B71C1C; letter-spacing: -0.3px; }
+  .updated { font-size: 13px; color: #8a8a8a; margin-bottom: 22px; }
+  .draft { background: #fff3cd; color: #8a6d00; border: 1px solid #ffe69c; padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 18px; }
+  .content h2 { font-size: 19px; margin: 24px 0 8px; color: #B71C1C; }
+  .content h3 { font-size: 16px; margin: 18px 0 6px; }
+  .content p { margin: 0 0 12px; font-size: 15px; }
+  .content ul, .content ol { margin: 0 0 12px; padding-left: 22px; }
+  .content li { margin: 0 0 6px; font-size: 15px; }
+  .content a { color: #B71C1C; }
+  .content code { background: #f3e9df; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .content hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+  .content blockquote { border-left: 3px solid #C9A227; margin: 0 0 12px; padding: 2px 14px; color: #555; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>${escapeHtml(title)}</h1>
+    <div class="updated">Last updated ${escapeHtml(updatedDate)}</div>
+    ${draftBanner}
+    <div class="content" id="content"></div>
+  </div>
+  <script>
+    (function () {
+      var raw = ${JSON.stringify(markdownBody)};
+      if (window.markdownit) {
+        var md = window.markdownit({ html: false, linkify: true, breaks: true });
+        document.getElementById("content").innerHTML = md.render(raw);
+      } else {
+        var el = document.getElementById("content");
+        el.textContent = raw;
+      }
+    })();
+  </script>
+</body>
+</html>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // All legal pages (public) — list with slug + title only
 // ─────────────────────────────────────────────────────────────────────────────
 configRouter.get("/legal", async (c) => {

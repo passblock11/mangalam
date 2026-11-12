@@ -49,9 +49,12 @@ class RazorpayCheckout {
 
     void onError(PaymentFailureResponse r) {
       if (!completer.isCompleted) {
-        completer.completeError(
-          Exception(r.message ?? r.code ?? 'Payment failed'),
-        );
+        // Razorpay fires EVENT_PAYMENT_ERROR when the user dismisses the
+        // checkout (code PAYMENT_CANCELLED) and for real failures. Map to a
+        // typed, user-friendly message instead of leaking "Exception: ...".
+        final code = r.code?.toString() ?? '';
+        final message = (r.message ?? '').toString();
+        completer.completeError(_PaymentCancelException(code, message));
       }
     }
 
@@ -109,11 +112,29 @@ class RazorpayCheckout {
 
       if (!context.mounted) return false;
 
-      await _api.post('/v1/payments/razorpay/verify', {
-        'razorpay_order_id': res.orderId,
-        'razorpay_payment_id': res.paymentId,
-        'razorpay_signature': res.signature,
-      });
+      // P3: show a loader while the backend verifies & credits the plan —
+      // otherwise the user sees nothing happening for a few seconds.
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: CircularProgressIndicator(color: MangalamTheme.maroon),
+          ),
+        ),
+      );
+      try {
+        await _api.post('/v1/payments/razorpay/verify', {
+          'razorpay_order_id': res.orderId,
+          'razorpay_payment_id': res.paymentId,
+          'razorpay_signature': res.signature,
+        });
+      } finally {
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      }
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -130,17 +151,65 @@ class RazorpayCheckout {
         ).showSnackBar(const SnackBar(content: Text('Payment timed out')));
       }
       return false;
+    } on _PaymentCancelException catch (e) {
+      // P2: user dismissed the Razorpay checkout — no scary error toast.
+      // Only surface a message for genuine (non-cancel) failures.
+      if (!e.isCancelled && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.friendlyMessage)),
+        );
+      }
+      return false;
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_friendlyPaymentError(e))),
+        );
       }
       return false;
     } finally {
       _razorpay.clear();
     }
   }
+}
+
+/// Typed Razorpay failure so we can distinguish a user-initiated cancel
+/// from a real payment error and avoid showing "Exception: Undefined".
+class _PaymentCancelException implements Exception {
+  const _PaymentCancelException(this.code, this.rawMessage);
+
+  final String code;
+  final String rawMessage;
+
+  bool get isCancelled =>
+      code == 'PAYMENT_CANCELLED' ||
+      rawMessage.toLowerCase().contains('cancel');
+
+  String get friendlyMessage {
+    if (isCancelled) return 'Payment cancelled.';
+    switch (code) {
+      case 'BAD_REQUEST_ERROR':
+        return 'Payment failed: invalid request. Please try again.';
+      case 'PAYMENT_ERROR':
+        return 'Payment could not be completed. Please try again.';
+      case 'INVALID_VPA':
+        return 'Invalid UPI ID. Please check and retry.';
+      case 'NETWORK_ERROR':
+        return 'Network error during payment. Check your connection.';
+      default:
+        final m = rawMessage.trim();
+        if (m.isNotEmpty && m.toLowerCase() != 'undefined') return m;
+        return 'Payment failed. Please try again.';
+    }
+  }
+}
+
+String _friendlyPaymentError(Object e) {
+  final s = e.toString().replaceFirst('Exception: ', '').trim();
+  if (s.isEmpty || s.toLowerCase() == 'undefined') {
+    return 'Payment failed. Please try again.';
+  }
+  return s;
 }
 
 class _PlanPickerSheet extends StatelessWidget {

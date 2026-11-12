@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/api_client.dart';
 import '../core/mangalam_theme.dart';
+import '../core/photo_gallery.dart';
 import '../messages/chat_screen.dart';
 import 'profile_widgets.dart';
 import 'report_user_screen.dart';
@@ -133,6 +134,8 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   Future<void> _openChat() async {
     try {
       final name = _data?['display_name'] ?? 'Member';
+      final photoUrls =
+          (_data?['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
       final res =
           await _api.post('/v1/conversations', {
                 'other_profile_id': widget.profileId,
@@ -142,8 +145,11 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       if (cid != null && mounted) {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) =>
-                ChatScreen(conversationId: cid, otherName: name.toString()),
+            builder: (_) => ChatScreen(
+              conversationId: cid,
+              otherName: name.toString(),
+              otherPhotoUrls: photoUrls,
+            ),
           ),
         );
       }
@@ -278,9 +284,10 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         SliverToBoxAdapter(
           child: Stack(
             children: [
-              AspectRatio(
+              PhotoGallery(
+                name: name,
+                photoUrls: photoUrls,
                 aspectRatio: 0.95,
-                child: ProfilePhoto(name: name, photoUrls: photoUrls),
               ),
               // Bottom scrim for app bar readability
               Positioned(
@@ -311,40 +318,6 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   child: const Icon(Iconsax.heart),
                 ),
               ),
-              if (photoUrls.isNotEmpty)
-                Positioned(
-                  bottom: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Iconsax.gallery,
-                          color: Colors.white,
-                          size: 13,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${photoUrls.length} photo${photoUrls.length == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_client.dart';
 import '../../services/oauth_sign_in.dart';
 import '../../services/razorpay_checkout.dart';
+import '../../utils/formatting.dart';
 import '../auth/onboarding_data.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_picker_section.dart';
@@ -69,6 +70,29 @@ class _ProfileTabState extends State<ProfileTab> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _signOut(BuildContext context) async {
+    // Show a non-dismissible loader while the network sign-out calls run,
+    // so the user sees immediate feedback instead of a frozen 1–2s gap
+    // before the auth gate redirects to login.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const PopScope(
+        canPop: false,
+        child: Center(
+          child: CircularProgressIndicator(color: MangalamTheme.maroon),
+        ),
+      ),
+    );
+    try {
+      await OAuthSignIn.signOutCompletely();
+    } finally {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
     }
   }
 
@@ -266,7 +290,7 @@ class _ProfileTabState extends State<ProfileTab> {
         title: const Text('Profile'),
         actions: [
           IconButton(
-            onPressed: () => OAuthSignIn.signOutCompletely(),
+            onPressed: () => _signOut(context),
             icon: const Icon(Iconsax.logout),
             tooltip: 'Sign out',
           ),
@@ -666,7 +690,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         if (_wallet?['premium_until'] != null) ...[
                           const SizedBox(height: 8),
                           Text(
-                            'Valid till ${_wallet!['premium_until']}',
+                            'Valid till ${formatDate(_wallet!['premium_until'] as String?)}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: MangalamTheme.muted,

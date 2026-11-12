@@ -11,7 +11,22 @@ const createSchema = z
   })
   .strict();
 
-const messageSchema = z.object({ body: z.string().min(1).max(4000) }).strict();
+const messageSchema = z
+  .object({
+    body: z.string().max(4000).optional().default(""),
+    attachment_url: z.string().url().max(2048).optional(),
+    attachment_type: z
+      .enum(["image", "video", "file", "audio"])
+      .optional(),
+    attachment_name: z.string().max(255).optional(),
+    attachment_mime: z.string().max(255).optional(),
+    attachment_size: z.number().int().min(0).max(104857600).optional(),
+  })
+  .strict()
+  .refine(
+    (v) => (v.body ?? "").length > 0 || v.attachment_url,
+    "Provide a body or an attachment"
+  );
 
 export const conversationsRouter = new Hono();
 
@@ -195,7 +210,9 @@ conversationsRouter.get("/:id/messages", async (c) => {
 
   const { data, error } = await sb
     .from("messages")
-    .select("id,sender_id,body,created_at")
+    .select(
+      "id,sender_id,body,created_at,attachment_url,attachment_type,attachment_name,attachment_mime,attachment_size"
+    )
     .eq("conversation_id", id)
     .order("created_at", { ascending: true })
     .limit(200);
@@ -223,7 +240,12 @@ conversationsRouter.post("/:id/messages", async (c) => {
     .insert({
       conversation_id: id,
       sender_id: uid,
-      body: parsed.data.body,
+      body: parsed.data.body ?? "",
+      attachment_url: parsed.data.attachment_url ?? null,
+      attachment_type: parsed.data.attachment_type ?? null,
+      attachment_name: parsed.data.attachment_name ?? null,
+      attachment_mime: parsed.data.attachment_mime ?? null,
+      attachment_size: parsed.data.attachment_size ?? null,
     })
     .select()
     .single();
@@ -239,11 +261,21 @@ conversationsRouter.post("/:id/messages", async (c) => {
     .find((pid) => pid !== uid);
   if (recipientId) {
     const senderName = await getProfileName(uid);
+    const notifBody =
+      (parsed.data.body ?? "").length > 0
+        ? parsed.data.body
+        : parsed.data.attachment_type === "image"
+          ? "📷 Photo"
+          : parsed.data.attachment_type === "video"
+            ? "🎥 Video"
+            : parsed.data.attachment_type === "audio"
+              ? "🎤 Voice message"
+              : "📎 File";
     await notify({
       profile_id: recipientId,
       type: "message",
       title: senderName,
-      body: parsed.data.body,
+      body: notifBody,
       data: {
         conversation_id: id,
         from_profile_id: uid,

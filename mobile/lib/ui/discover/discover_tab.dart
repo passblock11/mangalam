@@ -72,6 +72,26 @@ class _DiscoverTabState extends State<DiscoverTab>
     }
   }
 
+  Future<void> _signOut(BuildContext context) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const PopScope(
+        canPop: false,
+        child: Center(
+          child: CircularProgressIndicator(color: MangalamTheme.maroon),
+        ),
+      ),
+    );
+    try {
+      await OAuthSignIn.signOutCompletely();
+    } finally {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+  }
+
   Future<void> _interaction(String id, String action) async {
     try {
       await _api.post('/v1/interactions', {
@@ -115,7 +135,7 @@ class _DiscoverTabState extends State<DiscoverTab>
         actions: [
           const NotificationsBell(),
           IconButton(
-            onPressed: () => OAuthSignIn.signOutCompletely(),
+            onPressed: () => _signOut(context),
             icon: const Icon(Iconsax.logout),
             tooltip: 'Sign out',
           ),

@@ -56,12 +56,31 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, [Map<String, String>? query]) async {
+    // P9: short-lived in-memory cache for stable public config endpoints
+    // to cut redundant network calls when navigating between tabs. These
+    // responses change rarely (admin-managed), so a 60s TTL is safe and
+    // never affects user-specific data.
+    if (query == null && _cacheablePaths.contains(path)) {
+      final hit = _Cache.read(path);
+      if (hit != null) return hit;
+    }
     final res = await http.get(
       _uri(path, query),
       headers: await _authHeaders(),
     );
-    return _decode(res);
+    final decoded = _decode(res);
+    if (query == null && _cacheablePaths.contains(path)) {
+      _Cache.write(path, decoded);
+    }
+    return decoded;
   }
+
+  /// Paths safe to cache briefly (public, admin-managed, rarely change).
+  static const _cacheablePaths = <String>{
+    '/v1/config',
+    '/v1/config/plans',
+  };
+
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     final res = await http.post(
@@ -165,4 +184,35 @@ class ApiClient {
         return 'Request failed. Please try again.';
     }
   }
+}
+
+/// Tiny per-process GET cache with a TTL. Used only for the small set of
+/// stable, public config endpoints listed in [_cacheablePaths]. Keeping
+/// this static means every ApiClient instance shares one cache, so
+/// navigating between tabs doesn't refetch the same plans/config.
+class _Cache {
+  _Cache._();
+
+  static const _ttl = Duration(seconds: 60);
+  static final _store = <String, _CacheEntry>{};
+
+  static dynamic read(String path) {
+    final e = _store[path];
+    if (e == null) return null;
+    if (DateTime.now().difference(e.at) > _ttl) {
+      _store.remove(path);
+      return null;
+    }
+    return e.value;
+  }
+
+  static void write(String path, dynamic value) {
+    _store[path] = _CacheEntry(value, DateTime.now());
+  }
+}
+
+class _CacheEntry {
+  const _CacheEntry(this.value, this.at);
+  final dynamic value;
+  final DateTime at;
 }

@@ -197,8 +197,11 @@ class _MessagesTabState extends State<MessagesTab>
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) =>
-                          ChatScreen(conversationId: id, otherName: name),
+                      builder: (_) => ChatScreen(
+                        conversationId: id,
+                        otherName: name,
+                        otherPhotoUrls: photoUrls,
+                      ),
                     ),
                   );
                   if (mounted) setState(() => _key++);
