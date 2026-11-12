@@ -142,17 +142,16 @@ type RazorpayPayment = {
 
 export const paymentsRouter = new Hono();
 
-paymentsRouter.use("*", requireAuth);
-
-// Diagnostic endpoint (auth required) — returns the full upstream
-// response so we can see exactly what Razorpay sends back. Does NOT
-// create a real order (uses a throwaway receipt + minimal body).
+// Diagnostic endpoint — TEMPORARILY PUBLIC to capture the full upstream
+// response from the Vercel Edge environment. Does NOT create a real
+// order (uses a throwaway receipt + minimal ₹1 body). No secrets are
+// exposed in the response (auth header is masked).
 paymentsRouter.get("/razorpay/diagnose", async (c) => {
   const cfg = await razorpayConfigAsync();
   if ("error" in cfg) {
     return c.json({ error: cfg.error }, 503);
   }
-  const uid = c.get("userId");
+  const uid = c.get("userId") ?? "diag-anon";
   const reqBody = {
     amount: 100,
     currency: "INR",
@@ -194,6 +193,8 @@ paymentsRouter.get("/razorpay/diagnose", async (c) => {
     keyId: cfg.keyId,
   });
 });
+
+paymentsRouter.use("*", requireAuth);
 
 paymentsRouter.post("/razorpay/order", async (c) => {
   const cfg = await razorpayConfigAsync();
