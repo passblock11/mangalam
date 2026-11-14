@@ -16,7 +16,8 @@ export type NotificationType =
   | "view"
   | "system"
   | "verification"
-  | "report";
+  | "report"
+  | "support";
 
 type CreateNotificationInput = {
   profile_id: string;
@@ -46,7 +47,8 @@ export async function notify(input: CreateNotificationInput): Promise<void> {
     await sendPushToProfile(input.profile_id, {
       title: input.title,
       body: input.body,
-      data: serializeData(input.data),
+      type: input.type,
+      data: serializeData({ ...(input.data ?? {}), type: input.type }),
     });
   } catch {
     // ignore

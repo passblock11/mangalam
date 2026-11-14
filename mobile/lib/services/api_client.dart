@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config.dart';
+import '../l10n/app_locale.dart';
+import 'ban_session.dart';
+import 'payload_crypto.dart';
 
 class ApiException implements Exception {
   ApiException(this.statusCode, this.message);
@@ -13,6 +16,24 @@ class ApiException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Turns a known database error into a sentence the member can act on.
+String userFacingError(Object error) {
+  var raw = error.toString().trim();
+  if (raw.contains('profiles_phone_key') || raw.contains('profile_phone_key')) {
+    return 'This phone number is already registered with another account.';
+  }
+  if (raw.contains('PathNotFound') || raw.contains('No such file')) {
+    return 'One of the photos could not be attached.';
+  }
+  for (final prefix in ['Exception: ', 'StateError: ', 'Bad state: ']) {
+    if (raw.startsWith(prefix)) raw = raw.substring(prefix.length).trim();
+  }
+  return raw;
+}
+
+/// The same sentence, in the language the member selected.
+String tError(Object error) => t(userFacingError(error));
 
 /// Thrown when the backend rejects the token because the user is banned.
 /// Carries the admin-supplied ban reason so the app can show it.
@@ -87,12 +108,20 @@ class ApiClient {
     return res;
   }
 
+  /// Public GET. Splash and login call this before a member is signed in.
+  Future<dynamic> getPublic(String path) async {
+    final prepared = await _prepare(auth: false);
+    final res = await http.get(_uri(path), headers: prepared.headers);
+    return _decode(res);
+  }
+
   /// Unauthenticated POST (e.g. login OTP send/verify).
   Future<dynamic> postPublic(String path, Map<String, dynamic> body) async {
+    final prepared = await _prepare(auth: false, jsonBody: body);
     final res = await http.post(
       _uri(path),
-      headers: _jsonHeaders,
-      body: jsonEncode(body),
+      headers: prepared.headers,
+      body: prepared.body,
     );
     return _decode(res);
   }
@@ -106,10 +135,14 @@ class ApiClient {
       final hit = _Cache.read(path);
       if (hit != null) return hit;
     }
-    final res = await _send(
-      () async => http.get(_uri(path, query), headers: await _authHeaders()),
-    );
-    final decoded = _decode(res);
+    final res = await _send(() async {
+      final prepared = await _prepare(auth: true, query: query);
+      return http.get(
+        _uri(path, prepared.query),
+        headers: prepared.headers,
+      );
+    });
+    final decoded = await _decode(res);
     if (query == null && _cacheablePaths.contains(path)) {
       _Cache.write(path, decoded);
     }
@@ -124,29 +157,76 @@ class ApiClient {
 
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
-    final res = await _send(
-      () async => http.post(
+    final res = await _send(() async {
+      final prepared = await _prepare(auth: true, jsonBody: body);
+      return http.post(
         _uri(path),
-        headers: await _authHeaders(),
-        body: jsonEncode(body),
-      ),
-    );
+        headers: prepared.headers,
+        body: prepared.body,
+      );
+    });
     return _decode(res);
   }
 
   Future<dynamic> patch(String path, Map<String, dynamic> body) async {
-    final res = await _send(
-      () async => http.patch(
+    final res = await _send(() async {
+      final prepared = await _prepare(auth: true, jsonBody: body);
+      return http.patch(
         _uri(path),
-        headers: await _authHeaders(),
-        body: jsonEncode(body),
-      ),
-    );
+        headers: prepared.headers,
+        body: prepared.body,
+      );
+    });
     return _decode(res);
   }
 
-  dynamic _decode(http.Response res) {
-    final text = res.body;
+  Future<dynamic> delete(String path) async {
+    final res = await _send(() async {
+      final prepared = await _prepare(auth: true);
+      return http.delete(_uri(path), headers: prepared.headers);
+    });
+    return _decode(res);
+  }
+
+  Future<_Prepared> _prepare({
+    required bool auth,
+    Map<String, String>? query,
+    Map<String, dynamic>? jsonBody,
+  }) async {
+    final headers = auth
+        ? await _authHeaders()
+        : Map<String, String>.from(_jsonHeaders);
+    var sendQuery = query;
+    List<int>? body;
+    if (PayloadCrypto.enabled) {
+      headers['X-Mangalam-Enc'] = '1';
+      if (query != null && query.isNotEmpty) {
+        final sealed = await PayloadCrypto.sealHeader(jsonEncode(query));
+        if (sealed.length <= 7000) {
+          headers['X-Mangalam-Q'] = sealed;
+          sendQuery = null;
+        }
+      }
+      if (jsonBody != null) {
+        body = await PayloadCrypto.sealBytes(jsonEncode(jsonBody));
+        headers['Content-Type'] = 'application/octet-stream';
+      }
+    } else if (jsonBody != null) {
+      body = utf8.encode(jsonEncode(jsonBody));
+    }
+    return _Prepared(headers: headers, query: sendQuery, body: body);
+  }
+
+  Future<dynamic> _decode(http.Response res) async {
+    late final String text;
+    try {
+      text = await PayloadCrypto.openIfSealed(res.bodyBytes);
+    } catch (_) {
+      throw ApiException(
+        res.statusCode == 0 ? 400 : res.statusCode,
+        'Could not read the server response.',
+      );
+    }
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (text.isEmpty) return null;
       return jsonDecode(text);
@@ -156,6 +236,7 @@ class ApiClient {
       try {
         final body = jsonDecode(text) as Map<String, dynamic>;
         if (body['banned'] == true) {
+          await closeBannedSession();
           throw BannedException(reason: body['ban_reason']?.toString());
         }
       } catch (e) {
@@ -260,4 +341,11 @@ class _CacheEntry {
   const _CacheEntry(this.value, this.at);
   final dynamic value;
   final DateTime at;
+}
+
+class _Prepared {
+  const _Prepared({required this.headers, required this.query, this.body});
+  final Map<String, String> headers;
+  final Map<String, String>? query;
+  final List<int>? body;
 }

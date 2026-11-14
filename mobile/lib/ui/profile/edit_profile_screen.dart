@@ -1,12 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../l10n/app_locale.dart';
 import '../../services/api_client.dart';
 import '../auth/onboarding_data.dart';
+import '../core/birth_time_field.dart';
 import '../core/city_search_field.dart';
+import '../core/community_dropdown.dart';
 import '../core/mangalam_theme.dart'
     show MangalamCard, MangalamSectionHeader, MangalamTheme;
 import '../core/photo_picker_section.dart';
+
+/// Digits of an Indian mobile, without +91 or a leading 0.
+String nationalMobile(String raw) {
+  var digits = raw.replaceAll(RegExp(r'\D'), '');
+  if (digits.length == 12 && digits.startsWith('91')) {
+    digits = digits.substring(2);
+  } else if (digits.length == 11 && digits.startsWith('0')) {
+    digits = digits.substring(1);
+  }
+  return digits;
+}
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -51,6 +66,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   String? _gender;
   bool _phoneVisible = false;
+  bool _photosVisible = true;
+  Map<String, dynamic> _preferences = {};
   bool _loading = true;
   bool _saving = false;
   List<String> _photoUrls = const [];
@@ -112,10 +129,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _bio.text = p['bio']?.toString() ?? '';
       _gender = p['gender'] as String?;
       _phoneVisible = p['phone_visible'] == true;
+      final prefs = p['preferences'];
+      _preferences = prefs is Map
+          ? prefs.map((key, value) => MapEntry(key.toString(), value))
+          : {};
+      _photosVisible = _preferences['photos_visible'] != false;
       _occupation.text = p['occupation']?.toString() ?? '';
       _education.text = p['education_level']?.toString() ?? '';
       _salary.text = p['monthly_salary']?.toString() ?? '';
-      _phone.text = p['phone']?.toString() ?? '';
+      _phone.text = nationalMobile(p['phone']?.toString() ?? '');
       _whatsapp.text = p['whatsapp_number']?.toString() ?? '';
       _mangal.text = p['mangal_dosh']?.toString() ?? '';
       _birthTime.text = p['birth_time']?.toString() ?? '';
@@ -152,6 +174,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _save() async {
     if (!mounted) return;
+    final phone = nationalMobile(_phone.text);
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t('Phone number is required.'))),
+      );
+      return;
+    }
+    if (phone.length != 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t('Enter a 10-digit mobile number.'))),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final h = int.tryParse(_height.text.trim());
@@ -175,9 +210,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (bio.isNotEmpty) body['bio'] = bio;
       if (_gender != null) body['gender'] = _gender;
       body['phone_visible'] = _phoneVisible;
-      final phone = _phone.text.trim();
+      body['preferences'] = {
+        ..._preferences,
+        'photos_visible': _photosVisible,
+      };
       final whatsapp = _whatsapp.text.trim();
-      if (phone.isNotEmpty) body['phone'] = phone;
+      body['phone'] = '+91$phone';
       if (whatsapp.isNotEmpty) body['whatsapp_number'] = whatsapp;
       if (_photoUrls.isNotEmpty) body['photo_urls'] = _photoUrls;
 
@@ -218,14 +256,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Saved')));
+        ).showSnackBar(SnackBar(content: Text(t('Saved'))));
         Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: Text(t(userFacingError(e)))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -235,7 +273,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit profile')),
+      appBar: AppBar(title: Text(t('Edit profile'))),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: MangalamTheme.maroon),
@@ -251,6 +289,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       photoUrls: _photoUrls,
                       onChanged: (urls) => setState(() => _photoUrls = urls),
                     ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(t('Share my photos')),
+                      subtitle: Text(
+                        t('If this is off, other members only see a blurred photo. They can ask you in chat.'),
+                        style: const TextStyle(fontSize: 12, color: MangalamTheme.muted),
+                      ),
+                      value: _photosVisible,
+                      onChanged: (v) => setState(() => _photosVisible = v),
+                    ),
                   ],
                 ),
                 _section(
@@ -261,17 +309,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: _gender,
-                      decoration: const InputDecoration(
-                        labelText: 'Gender',
+                      decoration: InputDecoration(
+                        labelText: t('Gender'),
                         prefixIcon: Icon(Iconsax.user),
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'male', child: Text('Male')),
+                      items: [
+                        DropdownMenuItem(value: 'male', child: Text(t('Male'))),
                         DropdownMenuItem(
                           value: 'female',
-                          child: Text('Female'),
+                          child: Text(t('Female')),
                         ),
-                        DropdownMenuItem(value: 'other', child: Text('Other')),
+                        DropdownMenuItem(value: 'other', child: Text(t('Other'))),
                       ],
                       onChanged: (v) => setState(() => _gender = v),
                     ),
@@ -287,7 +335,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   icon: Iconsax.book_1,
                   title: 'Community',
                   children: [
-                    _field(_community, 'Community', icon: Iconsax.people),
+                    CommunityDropdown(
+                      label: 'Community',
+                      value: _community.text.trim().isEmpty
+                          ? null
+                          : _community.text.trim(),
+                      onChanged: (v) =>
+                          setState(() => _community.text = v ?? ''),
+                    ),
                     const SizedBox(height: 12),
                     _dropdown(
                       label: 'Mother tongue',
@@ -389,16 +444,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       controller: _mangal,
                     ),
                     const SizedBox(height: 12),
-                    _field(
-                      _birthTime,
-                      'Birth time (HH:MM)',
-                      icon: Iconsax.clock,
+                    BirthTimeField(
+                      controller: _birthTime,
+                      label: 'Birth time',
                     ),
                     const SizedBox(height: 12),
-                    _field(
-                      _birthPlace,
-                      'Place of birth',
+                    CitySearchField(
+                      label: 'Place of birth',
                       icon: Iconsax.location,
+                      includeStateInValue: true,
+                      initialCity: _birthPlace.text,
+                      onSelected: (v) => setState(() => _birthPlace.text = v),
                     ),
                   ],
                 ),
@@ -413,15 +469,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: DropdownButtonFormField<int>(
                             initialValue: _pAgeMin,
                             isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Age min',
+                            decoration: InputDecoration(
+                              labelText: t('Age min'),
                               prefixIcon: Icon(Iconsax.arrow_up),
                             ),
                             items: OnboardingData.ageOptions
                                 .map(
                                   (a) => DropdownMenuItem(
                                     value: a,
-                                    child: Text('$a years'),
+                                    child: Text(tf('{n} years', {'n': '$a'})),
                                   ),
                                 )
                                 .toList(),
@@ -433,8 +489,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: DropdownButtonFormField<int>(
                             initialValue: _pAgeMax,
                             isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Age max',
+                            decoration: InputDecoration(
+                              labelText: t('Age max'),
                               prefixIcon: Icon(Iconsax.arrow_down),
                             ),
                             items: OnboardingData.ageOptions
@@ -444,7 +500,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 .map(
                                   (a) => DropdownMenuItem(
                                     value: a,
-                                    child: Text('$a years'),
+                                    child: Text(tf('{n} years', {'n': '$a'})),
                                   ),
                                 )
                                 .toList(),
@@ -530,7 +586,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   icon: Iconsax.call,
                   title: 'Contact details',
                   children: [
-                    _field(_phone, 'Phone number', icon: Iconsax.call),
+                    Text(
+                      '${t('Email')}: ${Supabase.instance.client.auth.currentUser?.email ?? t('Not added')}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _phone,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: t('Phone number *'),
+                        prefixText: '+91 ',
+                        prefixIcon: const Icon(Iconsax.call),
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     _field(
                       _whatsapp,
@@ -538,8 +610,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       icon: Iconsax.message,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Sharing is off by default. Only verified + Premium members can view these when you opt in.',
+                    Text(t('Your number stays hidden until you turn sharing on. Your email is never shown to other members.'),
                       style: TextStyle(
                         fontSize: 12,
                         color: MangalamTheme.muted,
@@ -550,11 +621,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 const SizedBox(height: 8),
                 SwitchListTile(
-                  title: const Text(
-                    'Share my contact with verified, paid members',
+                  title: Text(t('Share my phone number'),
                   ),
-                  subtitle: const Text(
-                    'Only verified & Premium members will see your phone / WhatsApp.',
+                  subtitle: Text(t('If this is off, other members can only ask for your number in chat.'),
                     style: TextStyle(fontSize: 12, color: MangalamTheme.muted),
                   ),
                   value: _phoneVisible,
@@ -572,7 +641,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Save changes'),
+                      : Text(t('Save changes')),
                 ),
               ],
             ),
@@ -612,7 +681,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       keyboardType: number ? TextInputType.number : null,
       maxLines: maxLines,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: t(label),
         prefixIcon: icon != null ? Icon(icon) : null,
       ),
     );
@@ -639,21 +708,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       initialValue: current,
       isExpanded: true,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: t(label),
         prefixIcon: Icon(icon),
       ),
       items: [
         DropdownMenuItem(
           value: '',
           child: Text(
-            placeholder,
+            t(placeholder),
             style: const TextStyle(color: MangalamTheme.muted),
           ),
         ),
         ...options.map(
           (o) => DropdownMenuItem(
             value: o,
-            child: Text(display != null ? display(o) : o),
+            child: Text(t(display != null ? display(o) : o)),
           ),
         ),
       ],

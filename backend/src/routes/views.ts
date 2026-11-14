@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
+import { getProfileName, notify } from "../notify.js";
 import { getSupabaseAdmin } from "../supabase.js";
 
 const bodySchema = z.object({ viewed_id: z.string().uuid() }).strict();
@@ -22,5 +23,13 @@ viewsRouter.post("/", async (c) => {
     viewed_id: parsed.data.viewed_id,
   });
   if (error) return c.json({ error: error.message }, 500);
+  const name = await getProfileName(uid);
+  await notify({
+    profile_id: parsed.data.viewed_id,
+    type: "view",
+    title: "Someone viewed your profile",
+    body: `${name} viewed your profile.`,
+    data: { from_profile_id: uid },
+  });
   return c.json({ ok: true });
 });

@@ -37,16 +37,24 @@ class CitySearchService {
   static const _countrycodes = 'in'; // India
   static const _limit = 6;
 
-  static Timer? _debounce;
+  static final _timers = <Object, Timer>{};
+  static final _tokens = <Object, int>{};
+  static const _shared = Object();
 
   /// Search Indian cities matching [query]. Returns at most 6 results.
   /// Debounced by 600ms to respect Nominatim's 1 req/sec policy.
+  ///
+  /// [owner] keeps two fields on the same screen from cancelling each other.
   static void search(
     String query, {
+    Object? owner,
     required void Function(List<CityResult>) onResults,
     required void Function(bool loading) onLoading,
   }) {
-    _debounce?.cancel();
+    final key = owner ?? _shared;
+    final token = (_tokens[key] ?? 0) + 1;
+    _tokens[key] = token;
+    _timers.remove(key)?.cancel();
     final q = query.trim();
     if (q.length < 2) {
       onLoading(false);
@@ -54,7 +62,7 @@ class CitySearchService {
       return;
     }
     onLoading(true);
-    _debounce = Timer(const Duration(milliseconds: 600), () async {
+    _timers[key] = Timer(const Duration(milliseconds: 600), () async {
       try {
         final uri = Uri.parse(_endpoint).replace(
           queryParameters: {
@@ -76,6 +84,7 @@ class CitySearchService {
             )
             .timeout(const Duration(seconds: 5));
 
+        if (_tokens[key] != token) return;
         if (res.statusCode != 200) {
           onLoading(false);
           onResults(const []);
@@ -97,6 +106,7 @@ class CitySearchService {
                       addr['state_district'])
                   ?.toString();
           final state = (addr['state'] ?? addr['region'])?.toString();
+          if (_tokens[key] != token) return;
           if (city == null) continue;
           results.add(
             CityResult(
@@ -108,17 +118,28 @@ class CitySearchService {
             ),
           );
         }
+        if (_tokens[key] != token) return;
         onLoading(false);
         onResults(results);
       } catch (_) {
+        if (_tokens[key] != token) return;
         onLoading(false);
         onResults(const []);
       }
     });
   }
 
-  /// Cancel any pending debounced search.
-  static void cancel() {
-    _debounce?.cancel();
+  /// Cancel a pending search. With no [owner], every search is cancelled.
+  static void cancel([Object? owner]) {
+    if (owner == null) {
+      for (final timer in _timers.values) {
+        timer.cancel();
+      }
+      _timers.clear();
+      _tokens.clear();
+      return;
+    }
+    _tokens[owner] = (_tokens[owner] ?? 0) + 1;
+    _timers.remove(owner)?.cancel();
   }
 }

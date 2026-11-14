@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../l10n/app_locale.dart';
 import '../../services/api_client.dart';
+import '../../services/face_photo.dart';
+import '../../services/image_crop.dart';
 import '../../services/photo_service.dart';
 import '../core/mangalam_theme.dart';
 
@@ -50,7 +53,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() => _error = userFacingError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -59,16 +62,24 @@ class _VerificationScreenState extends State<VerificationScreen> {
   Future<void> _pickSelfie() async {
     final file = await PhotoService.pickFromCamera();
     if (file == null) return;
+    final cropped = await ImageCrop.one(file, ImageCropKind.selfie);
+    if (cropped == null || !mounted) return;
     setState(() => _submitting = true);
     try {
-      final path = await PhotoService.uploadVerificationDoc(file, 'selfie');
+      final problem = await rejectUnclearFacePhoto(cropped);
+      if (problem != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t(problem))));
+        return;
+      }
+      final path = await PhotoService.uploadVerificationDoc(cropped, 'selfie');
       if (!mounted) return;
       setState(() => _selfiePath = path);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Selfie upload failed: $e')));
+        ).showSnackBar(SnackBar(content: Text(tf('Selfie upload failed: {error}', {'error': tError(e)}))));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -76,15 +87,16 @@ class _VerificationScreenState extends State<VerificationScreen> {
   }
 
   Future<void> _pickGovtId() async {
-    final file = await PhotoService.pickFromCamera();
+    var file = await PhotoService.pickFromCamera();
     if (file == null) {
-      // fallback to gallery
+      // Camera was dismissed, so offer the gallery.
       final list = await PhotoService.pickFromGallery(remaining: 1);
       if (list.isEmpty) return;
-      await _uploadGovtId(list.first);
-      return;
+      file = list.first;
     }
-    await _uploadGovtId(file);
+    final cropped = await ImageCrop.one(file, ImageCropKind.document);
+    if (cropped == null) return;
+    await _uploadGovtId(cropped);
   }
 
   Future<void> _uploadGovtId(XFile file) async {
@@ -97,7 +109,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('ID upload failed: $e')));
+        ).showSnackBar(SnackBar(content: Text(tf('ID upload failed: {error}', {'error': tError(e)}))));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -107,7 +119,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
   Future<void> _submit() async {
     if (_selfiePath == null || _govtIdPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add both a selfie and a government ID.')),
+        SnackBar(content: Text(t('Add both a selfie and a government ID.'))),
       );
       return;
     }
@@ -121,12 +133,12 @@ class _VerificationScreenState extends State<VerificationScreen> {
       setState(() => _status = 'pending');
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Submitted for review.')));
+      ).showSnackBar(SnackBar(content: Text(t('Submitted for review.'))));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: Text(tError(e))));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -136,7 +148,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile verification')),
+      appBar: AppBar(title: Text(t('Profile verification'))),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: MangalamTheme.maroon),
@@ -181,12 +193,10 @@ class _VerificationScreenState extends State<VerificationScreen> {
                             ),
                           )
                         : const Icon(Iconsax.tick_square),
-                    label: const Text('Submit for review'),
+                    label: Text(t('Submit for review')),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Your documents are private. Only our review team can see them, '
-                    'and they are never shown to other members.',
+                  Text(t('Your documents are private. Only our review team can see them, and they are never shown to other members.'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
@@ -198,7 +208,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Text(
-                    _error!,
+                    t(_error!),
                     style: const TextStyle(
                       color: MangalamTheme.maroon,
                       fontSize: 12,
@@ -265,7 +275,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  t(title),
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
@@ -276,8 +286,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 if (_status == 'rejected' &&
                     _note != null &&
                     _note!.isNotEmpty) ...[
-                  const Text(
-                    'Reason from our review team',
+                  Text(t('Reason from our review team'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -310,7 +319,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                   ),
                 ] else
                   Text(
-                    subtitle,
+                    t(subtitle),
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: MangalamTheme.muted,
@@ -334,8 +343,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
             children: [
               const Icon(Iconsax.shield, color: MangalamTheme.maroon, size: 20),
               const SizedBox(width: 8),
-              const Text(
-                'Why verify?',
+              Text(t('Why verify?'),
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
               ),
             ],
@@ -361,7 +369,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              text,
+              t(text),
               style: const TextStyle(
                 fontSize: 13,
                 color: MangalamTheme.ink,
@@ -414,7 +422,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    t(title),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
@@ -422,7 +430,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    subtitle,
+                    t(subtitle),
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: MangalamTheme.muted,

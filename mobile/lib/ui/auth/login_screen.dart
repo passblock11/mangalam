@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/config.dart';
 import '../../core/google_auth_config.dart';
+import '../../services/app_branding.dart';
 import '../../services/oauth_sign_in.dart';
+import '../core/brand_widgets.dart';
 import '../core/mangalam_theme.dart';
 import '../profile/legal_screen.dart';
+import '../../l10n/app_locale.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,11 +23,23 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _busy = false;
   String? _error;
   bool _googleReady = GoogleAuthConfig.isReadyForNative;
+  bool _photoVisible = false;
 
   @override
   void initState() {
     super.initState();
+    AppBranding.instance.addListener(_onBrand);
     unawaited(_primeGoogle());
+  }
+
+  void _onBrand() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AppBranding.instance.removeListener(_onBrand);
+    super.dispose();
   }
 
   Future<void> _primeGoogle() async {
@@ -76,6 +91,24 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     final googleReady = _googleReady;
     final canSignIn = !_busy && AppConfig.hasSupabase && googleReady;
+    final look = AppBranding.instance.look;
+    final photos = look.custom ? look.loginImages : const <String>[];
+    final headline = look.custom && look.headline.isNotEmpty
+        ? look.headline
+        : t('Find your\nperfect match.');
+    final support = look.custom && look.subheadline.isNotEmpty
+        ? look.subheadline
+        : t('Trusted by thousands of families to\nfind meaningful, verified alliances.');
+    final welcome = look.custom && look.welcomeTitle.isNotEmpty
+        ? look.welcomeTitle
+        : t('Welcome');
+    final welcomeLine = look.custom && look.welcomeSubtitle.isNotEmpty
+        ? look.welcomeSubtitle
+        : t('Sign in to continue your journey.');
+    final sheet = look.custom ? look.sheetColor : MangalamTheme.cream;
+    final showMandala = photos.isEmpty || !_photoVisible
+        ? (!look.custom || look.showMandala)
+        : false;
 
     return Scaffold(
       body: SafeArea(
@@ -85,12 +118,21 @@ class _LoginScreenState extends State<LoginScreen> {
             Expanded(
               flex: 5,
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Container(
-                    decoration: const BoxDecoration(
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
                       gradient: MangalamTheme.heroGradient,
                     ),
                   ),
+                  if (photos.isNotEmpty)
+                    LoginPhotoBackdrop(
+                      urls: photos,
+                      onVisible: (visible) {
+                        if (_photoVisible == visible || !mounted) return;
+                        setState(() => _photoVisible = visible);
+                      },
+                    ),
                   SafeArea(
                     bottom: false,
                     child: Padding(
@@ -103,41 +145,48 @@ class _LoginScreenState extends State<LoginScreen> {
                         children: [
                           Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.25),
+                              if (look.logoUrl.isNotEmpty)
+                                BrandMark(size: 42, iconSize: 22, ring: Colors.white, padding: 0)
+                              else
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.25),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Iconsax.heart,
+                                    color: Colors.white,
+                                    size: 22,
                                   ),
                                 ),
-                                child: const Icon(
-                                  Iconsax.heart,
-                                  color: Colors.white,
-                                  size: 22,
-                                ),
-                              ),
                               const SizedBox(width: 10),
-                              Text(
-                                'Mangalam',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
+                              Flexible(
+                                child: Text(
+                                  look.nameOr(t('Mangalam')),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                           const Spacer(),
-                          // Mandala-ish decorative ring
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: _Mandala(),
-                          ),
+                          if (showMandala)
+                            const Align(
+                              alignment: Alignment.centerLeft,
+                              child: _Mandala(),
+                            ),
                           const Spacer(),
                           Text(
-                            'Find your\nperfect match.',
+                            headline,
                             style: theme.textTheme.displaySmall?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -147,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            'Trusted by thousands of families to\nfind meaningful, verified alliances.',
+                            support,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: Colors.white.withValues(alpha: 0.85),
                               height: 1.45,
@@ -164,9 +213,9 @@ class _LoginScreenState extends State<LoginScreen> {
             Expanded(
               flex: 4,
               child: Container(
-                decoration: const BoxDecoration(
-                  color: MangalamTheme.cream,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                decoration: BoxDecoration(
+                  color: sheet,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
@@ -174,7 +223,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Welcome',
+                        welcome,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.4,
@@ -182,7 +231,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Sign in to continue your journey.',
+                        welcomeLine,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: MangalamTheme.muted,
                         ),
@@ -226,7 +275,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  _error!,
+                                  t(_error!),
                                   style: TextStyle(
                                     color: MangalamTheme.maroon,
                                     height: 1.35,
@@ -244,8 +293,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           alignment: WrapAlignment.center,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Text(
-                              'By continuing you agree to our ',
+                            Text(t('By continuing you agree to our '),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: MangalamTheme.muted,
                                 height: 1.4,
@@ -260,8 +308,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
-                              child: Text(
-                                'Terms',
+                              child: Text(t('Terms'),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: MangalamTheme.maroon,
                                   fontWeight: FontWeight.w700,
@@ -270,8 +317,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
-                            Text(
-                              ' and ',
+                            Text(t(' and '),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: MangalamTheme.muted,
                                 height: 1.4,
@@ -286,8 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
-                              child: Text(
-                                'Privacy Policy',
+                              child: Text(t('Privacy Policy'),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: MangalamTheme.maroon,
                                   fontWeight: FontWeight.w700,
@@ -381,6 +426,8 @@ class _GoogleButton extends StatelessWidget {
 
 /// Decorative mandala-like ring in the hero.
 class _Mandala extends StatelessWidget {
+  const _Mandala();
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(

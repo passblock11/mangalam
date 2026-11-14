@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { requireAuth } from "../auth.js";
+import { viewerCanSeeContact, viewerContactCosts } from "../contact-access.js";
+import { presentOtherMember, type CreditCosts } from "../public-profile.js";
 import { getSupabaseAdmin } from "../supabase.js";
 
 function profileSelectDetailed() {
@@ -8,7 +10,9 @@ function profileSelectDetailed() {
     "display_name",
     "date_of_birth",
     "phone",
+    "whatsapp_number",
     "phone_visible",
+    "preferences",
     "community",
     "mother_tongue",
     "city",
@@ -27,11 +31,8 @@ function ageFromDob(dob: string | null): number | null {
   return Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000));
 }
 
-// Strip direct contact fields from list responses — contact is only exposed
-// via the gated /v1/profiles/:id endpoint (verified + paid + owner opt-in).
-function stripContact<T extends Record<string, unknown>>(p: T): T {
-  const { phone: _ph, whatsapp_number: _wa, phone_visible: _pv, ...rest } = p;
-  return rest as T;
+function presentProfile(p: ProfileRow, canSee: boolean, costs: CreditCosts) {
+  return presentOtherMember(p, { canAttemptContact: canSee, costs });
 }
 
 type ProfileRow = {
@@ -46,11 +47,15 @@ export const likesRouter = new Hono();
 
 likesRouter.use("*", requireAuth);
 
-/** tab=mutual|views|contacts */
+/** tab=liked|mutual|views|contacts. liked = people who liked this member. */
 likesRouter.get("/", async (c) => {
   const uid = c.get("userId");
   const tab = c.req.query("tab") ?? "mutual";
   const sb = getSupabaseAdmin();
+  const [canSeeContact, costs] = await Promise.all([
+    viewerCanSeeContact(uid),
+    viewerContactCosts(uid),
+  ]);
 
   if (tab === "views") {
     const { data, error } = await sb
@@ -70,7 +75,7 @@ likesRouter.get("/", async (c) => {
     return c.json({
       items: list.map((p) => ({
         profile: {
-          ...stripContact(p),
+          ...presentProfile(p, canSeeContact, costs),
           age: ageFromDob(p.date_of_birth ?? null),
         },
         viewed_at: (data ?? []).find((d) => d.viewer_id === p.id)?.viewed_at,
@@ -118,7 +123,7 @@ likesRouter.get("/", async (c) => {
     return c.json({
       items: contactList.map((p) => ({
         profile: {
-          ...stripContact(p),
+          ...presentProfile(p, canSeeContact, costs),
           age: ageFromDob(p.date_of_birth ?? null),
         },
         contacted_at: latestByOther.get(p.id),
@@ -126,17 +131,18 @@ likesRouter.get("/", async (c) => {
     });
   }
 
-  // ── liked: profiles I sent a like to (pending — not yet matched) ───────────
+  // People who liked me and are not a match yet. Discover → Shortlisted
+  // stays the list of people this member liked.
   if (tab === "liked") {
     const { data: rows, error } = await sb
       .from("interactions")
-      .select("to_profile_id,updated_at")
-      .eq("from_profile_id", uid)
-      .eq("status", "pending")
+      .select("from_profile_id,updated_at")
+      .eq("to_profile_id", uid)
+      .in("status", ["pending", "shortlisted"])
       .order("updated_at", { ascending: false })
       .limit(100);
     if (error) return c.json({ error: error.message }, 500);
-    const ids = (rows ?? []).map((r) => r.to_profile_id);
+    const ids = (rows ?? []).map((r) => r.from_profile_id);
     if (ids.length === 0) return c.json({ items: [] });
     const { data: profiles } = await sb
       .from("profiles")
@@ -146,10 +152,10 @@ likesRouter.get("/", async (c) => {
     return c.json({
       items: list.map((p) => ({
         profile: {
-          ...stripContact(p),
+          ...presentProfile(p, canSeeContact, costs),
           age: ageFromDob(p.date_of_birth ?? null),
         },
-        liked_at: (rows ?? []).find((r) => r.to_profile_id === p.id)?.updated_at,
+        liked_at: (rows ?? []).find((r) => r.from_profile_id === p.id)?.updated_at,
       })),
     });
   }
@@ -181,7 +187,7 @@ likesRouter.get("/", async (c) => {
   const mutualList = (profiles ?? []) as unknown as ProfileRow[];
   const items = mutualList.map((p) => ({
     profile: {
-      ...stripContact(p),
+      ...presentProfile(p, canSeeContact, costs),
       age: ageFromDob(p.date_of_birth ?? null),
     },
     matched_at: (mutualRows ?? []).find(

@@ -90,8 +90,31 @@ async function getAccessToken(): Promise<string | null> {
 type PushPayload = {
   title: string;
   body?: string;
+  type?: string;
   data?: Record<string, string>;
 };
+
+function channelFor(type: string): string {
+  if (type === "message") return "mangalam_messages";
+  if (type === "system" || type === "verification" || type === "report" || type === "support") {
+    return "mangalam_updates";
+  }
+  return "mangalam_activity";
+}
+
+function fcmErrorCode(body: unknown): string {
+  if (!body || typeof body !== "object") return "";
+  const error = (body as { error?: { status?: string; details?: unknown[] } }).error;
+  if (!error) return "";
+  const details = Array.isArray(error.details) ? error.details : [];
+  for (const item of details) {
+    if (item && typeof item === "object" && "errorCode" in item) {
+      const code = (item as { errorCode?: unknown }).errorCode;
+      if (typeof code === "string") return code;
+    }
+  }
+  return error.status ?? "";
+}
 
 /** Send a push to every registered FCM token for a profile. Best-effort. */
 export async function sendPushToProfile(
@@ -113,6 +136,14 @@ export async function sendPushToProfile(
   const fcmTokens = (tokens ?? []).map((t) => t.fcm_token).filter(Boolean);
   if (fcmTokens.length === 0) return;
 
+  const type = payload.type || payload.data?.type || "system";
+  const data: Record<string, string> = {
+    ...(payload.data ?? {}),
+    type,
+    title: payload.title,
+    body: payload.body ?? "",
+  };
+
   await Promise.all(
     fcmTokens.map(async (token) => {
       try {
@@ -131,9 +162,20 @@ export async function sendPushToProfile(
                   title: payload.title,
                   body: payload.body ?? "",
                 },
-                data: payload.data ?? {},
-                android: { priority: "high" },
+                data,
+                android: {
+                  priority: "HIGH",
+                  notification: {
+                    channel_id: channelFor(type),
+                    sound: "default",
+                    notification_priority: "PRIORITY_HIGH",
+                    default_vibrate_timings: true,
+                    icon: "ic_stat_mangalam",
+                    color: "#B71C1C",
+                  },
+                },
                 apns: {
+                  headers: { "apns-priority": "10" },
                   payload: {
                     aps: { sound: "default", badge: 1 },
                   },
@@ -142,12 +184,12 @@ export async function sendPushToProfile(
             }),
           }
         );
-        // 404 = unregistered/stale token — prune it.
-        if (res.status === 404 || res.status === 400) {
-          await sb
-            .from("notification_tokens")
-            .delete()
-            .eq("fcm_token", token);
+        if (res.ok) return;
+        const errBody = await res.json().catch(() => null);
+        const code = fcmErrorCode(errBody);
+        // A bad payload is a 400 too. Only drop tokens Firebase says are dead.
+        if (code === "UNREGISTERED" || code === "NOT_FOUND") {
+          await sb.from("notification_tokens").delete().eq("fcm_token", token);
         }
       } catch {
         // network error — ignore, push is best-effort

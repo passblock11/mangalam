@@ -14,6 +14,7 @@ export const ADMIN_FEATURES = [
   "payments",
   "settings",
   "admins",
+  "support",
 ] as const;
 
 export type AdminFeature = (typeof ADMIN_FEATURES)[number];

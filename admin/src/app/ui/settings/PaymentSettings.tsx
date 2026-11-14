@@ -10,6 +10,7 @@ import {
   updateAppSettings,
 } from "../../settings-actions";
 import { Badge, Button, Card, EmptyState } from "../shared";
+import { useAdminLiveReload } from "../admin-live";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -32,19 +33,22 @@ export function PaymentSettings() {
   const [editing, setEditing] = useState<Method | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     const [m, s] = await Promise.all([fetchPaymentMethods(), fetchAppSettings()]);
     if (m.ok) setMethods(m.data);
-    else setError(m.error);
+    else if (!silent) setError(m.error);
     if (s.ok) setSettings(s.data);
-    else setError(s.error);
-    setLoading(false);
+    else if (!silent) setError(s.error);
+    if (m.ok && s.ok && !silent) setError(null);
+    if (!silent) setLoading(false);
   }
   useEffect(() => {
-    void load();
+    void load(false);
   }, []);
+  useAdminLiveReload("settings", () => {
+    if (!editing && !saving) void load(true);
+  });
 
   async function save(method: Method) {
     setSaving(true);

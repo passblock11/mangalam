@@ -4,6 +4,7 @@ import 'package:iconsax_flutter/iconsax_flutter.dart';
 import '../../services/notification_service.dart';
 import '../core/mangalam_theme.dart';
 import '../notifications/notifications_screen.dart';
+import '../../l10n/app_locale.dart';
 
 /// Bell icon button with a live unread badge. Drop into any AppBar actions.
 /// Reads from [NotificationService.instance.unreadCount].
@@ -22,7 +23,7 @@ class NotificationsBell extends StatelessWidget {
           children: [
             IconButton(
               icon: Icon(Iconsax.notification, color: color),
-              tooltip: 'Notifications',
+              tooltip: t('Notifications'),
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(

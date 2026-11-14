@@ -7,7 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config.dart';
+import '../../services/payload_crypto.dart';
 import '../core/mangalam_theme.dart';
+import '../../l10n/app_locale.dart';
 
 /// Admin-authored legal page (Privacy, Terms, Refund, About).
 ///
@@ -46,11 +48,13 @@ class _LegalScreenState extends State<LegalScreen> {
     final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/$'), '');
     final uri = Uri.parse('$base/v1/config/legal/${widget.slug}');
     try {
-      final res = await http.get(uri).timeout(const Duration(seconds: 20));
+      final res = await http
+          .get(uri, headers: PayloadCrypto.requestHeaders())
+          .timeout(const Duration(seconds: 20));
       if (res.statusCode < 200 || res.statusCode >= 300) {
         throw Exception('Could not load this page.');
       }
-      final decoded = jsonDecode(res.body);
+      final decoded = jsonDecode(await PayloadCrypto.openIfSealed(res.bodyBytes));
       final page = decoded is Map ? decoded['page'] : null;
       if (page is! Map) throw Exception('This page is not available yet.');
       final updatedRaw = page['updated_at']?.toString();
@@ -81,7 +85,7 @@ class _LegalScreenState extends State<LegalScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFFDF8),
-      appBar: AppBar(title: Text(_title)),
+      appBar: AppBar(title: Text(t(_title))),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: MangalamTheme.maroon),
@@ -99,12 +103,12 @@ class _LegalScreenState extends State<LegalScreen> {
                           color: MangalamTheme.maroon,
                         ),
                         const SizedBox(height: 10),
-                        Text(_error!, textAlign: TextAlign.center),
+                        Text(t(_error!), textAlign: TextAlign.center),
                         const SizedBox(height: 12),
                         OutlinedButton.icon(
                           onPressed: _load,
                           icon: const Icon(Iconsax.refresh),
-                          label: const Text('Retry'),
+                          label: Text(t('Retry')),
                         ),
                       ],
                     ),
@@ -126,7 +130,7 @@ class _LegalScreenState extends State<LegalScreen> {
                     if (_updated.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
-                        'Last updated $_updated',
+                        tf('Last updated {date}', {'date': _updated}),
                         style: const TextStyle(
                           fontSize: 13,
                           color: MangalamTheme.muted,

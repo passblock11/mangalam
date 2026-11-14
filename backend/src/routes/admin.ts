@@ -13,6 +13,7 @@ import {
   type AdminFeature,
 } from "../admin-auth.js";
 import { getSupabaseAdmin } from "../supabase.js";
+import { notify, type NotificationType } from "../notify.js";
 
 export const adminRouter = new Hono();
 
@@ -298,6 +299,73 @@ adminRouter.patch("/reports/:id", requireAdmin("reports"), async (c) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const banSchema = z.object({
   reason: z.string().min(1).max(2000).optional(),
+});
+
+const adminNotifySchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  body: z.string().trim().min(1).max(400),
+  type: z
+    .enum(["like", "match", "message", "shortlist", "view", "system", "verification", "report", "support"])
+    .default("system"),
+  profile_id: z.string().uuid().optional(),
+  all: z.boolean().optional(),
+  audience: z.enum(["all", "female", "female_unpaid"]).optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** Insert the in-app row and send the Firebase push. */
+adminRouter.post("/notify", requireAdmin(), async (c) => {
+  const parsed = adminNotifySchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  const { title, body, type, profile_id, all, audience, data } = parsed.data;
+  const who = audience ?? (all ? "all" : undefined);
+  if (!who && !profile_id) return c.json({ error: "Choose a member." }, 400);
+
+  const sb = getSupabaseAdmin();
+  const ids: string[] = [];
+  if (who === "all" || who === "female" || who === "female_unpaid") {
+    for (let from = 0; from < 20000; from += 500) {
+      let query = sb.from("profiles").select("id,is_banned,gender");
+      if (who !== "all") query = query.ilike("gender", "female");
+      const { data: page, error } = await query.range(from, from + 499);
+      if (error) return c.json({ error: error.message }, 500);
+      const rows = page ?? [];
+      for (const row of rows) {
+        if (row.is_banned === true) continue;
+        ids.push(row.id as string);
+      }
+      if (rows.length < 500) break;
+    }
+    if (who === "female_unpaid" && ids.length > 0) {
+      const paid = new Set<string>();
+      for (let i = 0; i < ids.length; i += 100) {
+        const slice = ids.slice(i, i + 100);
+        const { data: wallets, error } = await sb
+          .from("wallets")
+          .select("profile_id,premium_until")
+          .in("profile_id", slice);
+        if (error) return c.json({ error: error.message }, 500);
+        for (const wallet of wallets ?? []) {
+          const until = wallet.premium_until ? new Date(wallet.premium_until as string).getTime() : 0;
+          if (Number.isFinite(until) && until > Date.now()) paid.add(wallet.profile_id as string);
+        }
+      }
+      ids.splice(0, ids.length, ...ids.filter((id) => !paid.has(id)));
+    }
+  } else if (profile_id) {
+    ids.push(profile_id);
+  }
+
+  for (const id of ids) {
+    await notify({
+      profile_id: id,
+      type: type as NotificationType,
+      title,
+      body,
+      data: data ?? {},
+    });
+  }
+  return c.json({ ok: true, sent: ids.length });
 });
 
 adminRouter.post("/users/:id/ban", requireAdmin("users"), async (c) => {

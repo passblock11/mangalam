@@ -8,8 +8,11 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Configure Firebase before the Flutter engine starts so FCM is ready.
-    FirebaseApp.configure()
+    // Configure Firebase only when the iOS config file is in the app.
+    // A missing file must not stop the app from opening.
+    if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+      FirebaseApp.configure()
+    }
 
     // Required for firebase_messaging to show notifications while app is in
     // the foreground and to handle background/terminated message taps.

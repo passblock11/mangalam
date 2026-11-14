@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, Save, Loader2, Percent, IndianRupee } from "lucide-react";
 import { fetchCoupons, upsertCoupon, deleteCoupon } from "../../settings-actions";
 import { Badge, Button, Card, EmptyState, fmtDate } from "../shared";
+import { useAdminLiveReload } from "../admin-live";
 
 type Coupon = {
   id: string;
@@ -26,16 +27,23 @@ export function CouponsSettings() {
   const [editing, setEditing] = useState<Coupon | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     const res = await fetchCoupons();
-    if (!res.ok) setError(res.error);
-    else setItems(res.data);
-    setLoading(false);
+    if (!res.ok) {
+      if (!silent) setError(res.error);
+    } else {
+      setItems(res.data);
+      if (!silent) setError(null);
+    }
+    if (!silent) setLoading(false);
   }
   useEffect(() => {
-    void load();
+    void load(false);
   }, []);
+  useAdminLiveReload("settings", () => {
+    if (!editing && !saving) void load(true);
+  });
 
   async function save(c: Coupon) {
     setSaving(true);

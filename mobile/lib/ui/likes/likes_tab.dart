@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../l10n/app_locale.dart';
 import '../../services/api_client.dart';
 import '../../utils/formatting.dart';
 import '../core/mangalam_theme.dart';
 import '../messages/chat_screen.dart';
 import '../profile/profile_detail_screen.dart';
+import '../profile/profile_widgets.dart';
 
 class LikesTab extends StatefulWidget {
   const LikesTab({super.key});
@@ -58,7 +60,7 @@ class _LikesTabState extends State<LikesTab>
   String get _emptySubtitle {
     switch (_controller.index) {
       case 0:
-        return 'Profiles you liked will appear here until they like you back.';
+        return 'People who liked you are here. Like them back and they move to Matches.';
       case 1:
         return 'Your mutual matches will appear here.';
       case 2:
@@ -78,16 +80,16 @@ class _LikesTabState extends State<LikesTab>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Connections'),
+        title: Text(t('Connections')),
         bottom: TabBar(
           controller: _controller,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Liked'),
-            Tab(text: 'Matches'),
-            Tab(text: 'Views'),
-            Tab(text: 'Contacts'),
+          tabs: [
+            Tab(text: t('Like')),
+            Tab(text: t('Matches')),
+            Tab(text: t('Views')),
+            Tab(text: t('Contacts')),
           ],
         ),
       ),
@@ -107,7 +109,7 @@ class _LikesTabState extends State<LikesTab>
               subtitle: snap.error.toString(),
               action: FilledButton(
                 onPressed: () => setState(() => _reloadKey++),
-                child: const Text('Retry'),
+                child: Text(t('Retry')),
               ),
             );
           }
@@ -189,15 +191,17 @@ class _LikesTabState extends State<LikesTab>
 
   Future<void> _openChat(Map<String, dynamic> profile) async {
     final id = profile['id'] as String? ?? '';
-    final name = profile['display_name']?.toString() ?? 'Member';
+    final name = profile['display_name']?.toString() ?? t('Member');
     final photoUrls =
         (profile['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
     try {
       final res =
           await _api.post('/v1/conversations', {
                 'other_profile_id': id,
-                'first_message':
-                    'Hi $name, I saw your profile and wanted to connect.',
+                'first_message': tf(
+                  'Hi {name}, I saw your profile and wanted to connect.',
+                  {'name': name},
+                ),
               })
               as Map<String, dynamic>;
       final cid = res['conversation_id'] as String?;
@@ -210,6 +214,8 @@ class _LikesTabState extends State<LikesTab>
               otherName: name,
               otherProfileId: id,
               otherPhotoUrls: photoUrls,
+              photosLocked: profile['photos_locked'] == true,
+              contactLocked: profile['contact_locked'] == true,
             ),
           ),
         );
@@ -217,9 +223,7 @@ class _LikesTabState extends State<LikesTab>
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      showMessageCreditFailure(context, e);
     }
   }
 }
@@ -241,7 +245,7 @@ class _ConnectionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = profile['display_name']?.toString() ?? 'Member';
+    final name = profile['display_name']?.toString() ?? t('Member');
     final community = profile['community']?.toString() ?? '';
     final lang = profile['mother_tongue']?.toString() ?? '';
     final city = profile['city']?.toString() ?? '';
@@ -259,13 +263,13 @@ class _ConnectionRow extends StatelessWidget {
 
     String? line3;
     if (tabParam == 'liked' && likedAt != null) {
-      line3 = 'Liked ${formatRelativeTime(likedAt)}';
+      line3 = tf('Liked {when}', {'when': formatRelativeTime(likedAt)});
     } else if (tabParam == 'mutual' && matchedAt != null) {
-      line3 = 'Matched ${formatRelativeTime(matchedAt)}';
+      line3 = tf('Matched {when}', {'when': formatRelativeTime(matchedAt)});
     } else if (tabParam == 'views' && viewedAt != null) {
-      line3 = 'Seen ${formatRelativeTime(viewedAt)}';
+      line3 = tf('Seen {when}', {'when': formatRelativeTime(viewedAt)});
     } else if (tabParam == 'contacts' && contactedAt != null) {
-      line3 = 'Contacted ${formatRelativeTime(contactedAt)}';
+      line3 = tf('Contacted {when}', {'when': formatRelativeTime(contactedAt)});
     }
 
     return MangalamCard(
@@ -282,7 +286,11 @@ class _ConnectionRow extends StatelessWidget {
             child: SizedBox(
               width: 60,
               height: 60,
-              child: ProfilePhoto(name: name, photoUrls: photoUrls),
+              child: ProfilePhoto(
+                name: name,
+                photoUrls: photoUrls,
+                locked: profile['photos_locked'] == true,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -292,29 +300,29 @@ class _ConnectionRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text(
                         name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 16,
                         ),
                       ),
                     ),
-                    if (verified)
-                      const Icon(
-                        Iconsax.verify,
-                        size: 16,
-                        color: MangalamTheme.gold,
-                      ),
+                    if (verified) ...[
+                      const SizedBox(width: 6),
+                      const VerifiedBadge(compact: true),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 3),
                 Text(
                   [
-                    if (age != null) '$age yrs',
+                    if (age != null) tf('{n} yrs', {'n': '$age'}),
                     if (community.isNotEmpty) community,
-                    if (lang.isNotEmpty) lang,
+                    if (lang.isNotEmpty) t(lang),
                   ].join(' · '),
                   style: const TextStyle(
                     fontSize: 12.5,
@@ -334,7 +342,7 @@ class _ConnectionRow extends StatelessWidget {
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
-                            '$city, $state',
+                            '$city, ${t(state)}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: MangalamTheme.muted,

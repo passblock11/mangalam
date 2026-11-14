@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
+import '../../l10n/app_locale.dart';
 import '../../services/notification_service.dart';
 import '../core/mangalam_theme.dart';
 import '../discover/discover_tab.dart';
@@ -22,14 +23,20 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    AppLocale.instance.addListener(_onLocale);
     // Refresh the unread badge when the home shell first mounts.
     NotificationService.instance.onAppResumed();
   }
 
   @override
   void dispose() {
+    AppLocale.instance.removeListener(_onLocale);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _onLocale() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -49,7 +56,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           children: [DiscoverTab(), LikesTab(), MessagesTab(), ProfileTab()],
         ),
         extendBody: true,
-        bottomNavigationBar: const _GlassNavBar(),
+        bottomNavigationBar: _GlassNavBar(language: AppLocale.instance.code),
       ),
     );
   }
@@ -58,7 +65,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 /// Glassmorphism bottom navigation bar — translucent with backdrop blur,
 /// subtle gradient overlay, and outlined Iconsax icons.
 class _GlassNavBar extends StatelessWidget {
-  const _GlassNavBar();
+  const _GlassNavBar({required this.language});
+
+  /// Included so a language change produces a new bar. A const bar is reused
+  /// as-is and keeps the labels from the previous language.
+  final String language;
 
   @override
   Widget build(BuildContext context) {
@@ -110,11 +121,27 @@ class _GlassNavBar extends StatelessWidget {
                   height: 1.1,
                 ),
                 indicatorSize: TabBarIndicatorSize.tab,
-                tabs: const [
-                  _GlassTab(icon: Iconsax.heart_search, label: 'Discover'),
-                  _GlassTab(icon: Iconsax.heart, label: 'Likes'),
-                  _GlassTab(icon: Iconsax.message, label: 'Chats'),
-                  _GlassTab(icon: Iconsax.user, label: 'Profile'),
+                tabs: [
+                  _GlassTab(
+                    key: ValueKey('discover-$language'),
+                    icon: Iconsax.heart_search,
+                    label: 'Discover',
+                  ),
+                  _GlassTab(
+                    key: ValueKey('likes-$language'),
+                    icon: Iconsax.heart,
+                    label: 'Likes',
+                  ),
+                  _GlassTab(
+                    key: ValueKey('chats-$language'),
+                    icon: Iconsax.message,
+                    label: 'Chats',
+                  ),
+                  _GlassTab(
+                    key: ValueKey('profile-$language'),
+                    icon: Iconsax.user,
+                    label: 'Profile',
+                  ),
                 ],
               ),
             ),
@@ -126,7 +153,7 @@ class _GlassNavBar extends StatelessWidget {
 }
 
 class _GlassTab extends StatelessWidget {
-  const _GlassTab({required this.icon, required this.label});
+  const _GlassTab({super.key, required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -136,7 +163,7 @@ class _GlassTab extends StatelessWidget {
     return Tab(
       iconMargin: const EdgeInsets.only(bottom: 4),
       icon: Icon(icon, size: 22),
-      text: label,
+      text: t(label),
     );
   }
 }

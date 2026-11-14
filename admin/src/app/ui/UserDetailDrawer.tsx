@@ -8,6 +8,7 @@ import {
   Wallet,
   ShieldCheck,
   Phone,
+  Mail,
   MessageCircle,
   MapPin,
   Calendar,
@@ -16,6 +17,7 @@ import {
   Sparkles,
   Heart,
   Flag,
+  Bell,
   ZoomIn,
   X,
 } from "lucide-react";
@@ -26,8 +28,10 @@ import {
   setContactCredits,
   setProfileVerified,
   banUser,
+  sendUserUpdate,
 } from "../actions";
 import { Avatar, Badge, Button, fmtDate, fmtDateTime, timeAgo } from "./shared";
+import { useAdminRevision } from "./admin-live";
 
 export function UserDetailDrawer({
   profileId,
@@ -43,21 +47,31 @@ export function UserDetailDrawer({
   const [premiumDays, setPremiumDays] = useState("30");
   const [credits, setCredits] = useState("5");
   const [busy, setBusy] = useState<string | null>(null);
+  const rev = useAdminRevision(["users", "verifications"]);
 
-  async function load() {
+  async function load(silent = false) {
     if (!profileId) return;
-    setLoading(true);
-    setError(null);
+    if (!silent) setLoading(true);
     const res = await fetchUserDetail(profileId);
-    if (!res.ok) setError(res.error);
-    else setData(res.data);
-    setLoading(false);
+    if (!res.ok) {
+      if (!silent) setError(res.error);
+    } else {
+      setData(res.data);
+      if (!silent) setError(null);
+    }
+    if (!silent) setLoading(false);
   }
 
   useEffect(() => {
-    if (profileId) void load();
+    if (profileId) void load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId]);
+
+  useEffect(() => {
+    if (!profileId || rev === 0) return;
+    void load(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rev, profileId]);
 
   useEffect(() => {
     if (!profileId) return;
@@ -77,6 +91,7 @@ export function UserDetailDrawer({
   const p = (data ?? {}) as {
     display_name: string | null;
     phone: string | null;
+    email: string | null;
     whatsapp_number: string | null;
     phone_visible: boolean | null;
     date_of_birth: string | null;
@@ -173,6 +188,8 @@ export function UserDetailDrawer({
 
           {data && !loading && (
             <div className="space-y-6">
+              <UserUpdateCard key={profileId} profileId={profileId} />
+
               {/* Photos */}
               {photoUrls.length > 0 && (
                 <Section title="Photos">
@@ -318,6 +335,7 @@ export function UserDetailDrawer({
               <Section title="Contact" icon={Phone}>
                 <div className="space-y-1.5 text-sm">
                   <Row label="Phone" value={p.phone} icon={Phone} />
+                  <Row label="Email" value={p.email} icon={Mail} />
                   <Row label="WhatsApp" value={p.whatsapp_number} icon={MessageCircle} />
                   <Row
                     label="Sharing opt-in"
@@ -407,6 +425,72 @@ export function UserDetailDrawer({
         </div>
       )}
     </div>
+  );
+}
+
+function UserUpdateCard({ profileId }: { profileId: string }) {
+  const [title, setTitle] = useState("Mangalam");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function send() {
+    setBusy(true);
+    setMessage(null);
+    setFailed(false);
+    const res = await sendUserUpdate({ profileId, title, body });
+    setBusy(false);
+    if (!res.ok) {
+      setFailed(true);
+      setMessage(res.error);
+      return;
+    }
+    setBody("");
+    setMessage("Sent. It appears in their notification bar.");
+  }
+
+  return (
+    <Section title="Send an update" icon={Bell}>
+      <p className="text-xs text-[var(--muted)]">
+        This member sees this in the phone notification bar and in the app notification list.
+      </p>
+      <label className="mt-3 block">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+          Title
+        </span>
+        <input
+          value={title}
+          maxLength={80}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)]"
+        />
+      </label>
+      <label className="mt-3 block">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+          Message
+        </span>
+        <textarea
+          value={body}
+          maxLength={240}
+          rows={3}
+          onChange={(e) => setBody(e.target.value)}
+          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)]"
+        />
+      </label>
+      {message && (
+        <p className={`mt-2 text-xs ${failed ? "text-red-700" : "text-emerald-700"}`}>{message}</p>
+      )}
+      <div className="mt-3">
+        <Button
+          size="sm"
+          onClick={() => void send()}
+          disabled={busy || !title.trim() || !body.trim()}
+        >
+          {busy ? "Sending…" : "Send to this member"}
+        </Button>
+      </div>
+    </Section>
   );
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, Save, Loader2, Crown, Coins, Zap } from "lucide-react";
 import { fetchPlansAdmin, upsertPlan, deletePlan } from "../../settings-actions";
 import { Badge, Button, Card, EmptyState } from "../shared";
+import { useAdminLiveReload } from "../admin-live";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -16,6 +17,8 @@ type Plan = {
   price_paise: number;
   credits: number;
   duration_days: number | null;
+  billing_period: string;
+  total_cycles: number;
   is_active: boolean;
   sort_order: number;
 };
@@ -27,20 +30,44 @@ export function PlansSettings() {
   const [editing, setEditing] = useState<Plan | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     const res = await fetchPlansAdmin();
-    if (!res.ok) setError(res.error);
-    else setPlans(res.data);
-    setLoading(false);
+    if (!res.ok) {
+      if (!silent) setError(res.error);
+    } else {
+      setPlans(
+        (res.data as Plan[]).map((p) => ({
+          ...p,
+          description: p.description ?? "",
+          billing_period: p.billing_period || "monthly",
+          total_cycles: p.total_cycles || 12,
+        }))
+      );
+      if (!silent) setError(null);
+    }
+    if (!silent) setLoading(false);
   }
   useEffect(() => {
-    void load();
+    void load(false);
   }, []);
+  useAdminLiveReload("settings", () => {
+    if (!editing && !saving) void load(true);
+  });
 
   async function save(p: Plan) {
     setSaving(true);
     setError(null);
+    if (p.plan_type === "credits" && p.credits < 1) {
+      setSaving(false);
+      setError("A contact-credit pack needs at least 1 credit.");
+      return;
+    }
+    if (p.price_paise < 100) {
+      setSaving(false);
+      setError("Price must be at least ₹1.");
+      return;
+    }
     const res = await upsertPlan({
       id: p.id || undefined,
       code: p.code,
@@ -49,7 +76,9 @@ export function PlansSettings() {
       plan_type: p.plan_type,
       price_paise: p.price_paise,
       credits: p.credits,
-      duration_days: p.duration_days,
+      duration_days: p.plan_type === "credits" ? null : p.duration_days,
+      billing_period: p.plan_type === "subscription" ? p.billing_period || "monthly" : "monthly",
+      total_cycles: p.plan_type === "subscription" ? Math.min(60, Math.max(1, Number(p.total_cycles) || 12)) : 12,
       is_active: p.is_active,
       sort_order: p.sort_order,
     });
@@ -70,39 +99,110 @@ export function PlansSettings() {
 
   if (loading) return <p className="text-sm text-[var(--muted)]">Loading…</p>;
 
+  const memberships = plans.filter((p) => p.plan_type !== "credits");
+  const creditPacks = plans.filter((p) => p.plan_type === "credits");
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-[var(--ink)]">Plans ({plans.length})</h3>
-        <Button
-          size="sm"
-          onClick={() =>
-            setEditing({
-              id: "",
-              code: "",
-              name: "",
-              description: "",
-              plan_type: "subscription",
-              price_paise: 0,
-              credits: 0,
-              duration_days: 30,
-              is_active: true,
-              sort_order: plans.length,
-            })
-          }
-        >
-          <Plus size={14} /> Add plan
+      <PlanGroup
+        title="Membership plans"
+        hint="These renew by UPI or card, or are a one-time Premium purchase. They appear under Choose membership."
+        empty="No membership plans yet."
+        addLabel="Add membership"
+        plans={memberships}
+        onAdd={() =>
+          setEditing({
+            id: "",
+            code: "",
+            name: "",
+            description: "",
+            plan_type: "subscription",
+            price_paise: 49900,
+            credits: 0,
+            duration_days: 30,
+            billing_period: "monthly",
+            total_cycles: 12,
+            is_active: true,
+            sort_order: plans.length,
+          })
+        }
+        onEdit={setEditing}
+        onRemove={(id) => void remove(id)}
+      />
+
+      <PlanGroup
+        title="Contact credit packs"
+        hint="Separate one-time packs. They appear only under Buy contact credits and do not start or renew a membership."
+        empty="No credit packs yet. Add one to sell contact credits in the app."
+        addLabel="Add credit pack"
+        plans={creditPacks}
+        onAdd={() =>
+          setEditing({
+            id: "",
+            code: "",
+            name: "",
+            description: "",
+            plan_type: "credits",
+            price_paise: 9900,
+            credits: 10,
+            duration_days: null,
+            billing_period: "monthly",
+            total_cycles: 12,
+            is_active: true,
+            sort_order: plans.length,
+          })
+        }
+        onEdit={setEditing}
+        onRemove={(id) => void remove(id)}
+      />
+
+      {editing && (
+        <PlanEditor plan={editing} onClose={() => setEditing(null)} onSave={(p) => void save(p)} saving={saving} />
+      )}
+    </div>
+  );
+}
+
+function PlanGroup({
+  title,
+  hint,
+  empty,
+  addLabel,
+  plans,
+  onAdd,
+  onEdit,
+  onRemove,
+}: {
+  title: string;
+  hint: string;
+  empty: string;
+  addLabel: string;
+  plans: Plan[];
+  onAdd: () => void;
+  onEdit: (p: Plan) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-[var(--ink)]">
+            {title} ({plans.length})
+          </h3>
+          <p className="mt-1 max-w-xl text-xs text-[var(--muted)]">{hint}</p>
+        </div>
+        <Button size="sm" onClick={onAdd}>
+          <Plus size={14} /> {addLabel}
         </Button>
       </div>
-
       {plans.length === 0 ? (
-        <EmptyState>No plans yet. Click &ldquo;Add plan&rdquo;.</EmptyState>
+        <EmptyState>{empty}</EmptyState>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {plans.map((p) => (
@@ -122,17 +222,17 @@ export function PlansSettings() {
               </div>
               <p className="mt-2 text-xs text-[var(--muted)]">
                 {p.plan_type === "subscription"
-                  ? `Premium for ${p.duration_days ?? 0} days`
+                  ? `Renews ${p.billing_period || "monthly"} · ${p.total_cycles || 12} charges · ${p.duration_days ?? 30} days access · ${p.credits} credits each renewal`
                   : p.plan_type === "credits"
-                    ? `${p.credits} contact credits`
-                    : "One-time purchase"}
+                    ? `${p.credits} contact credits · one-time pack`
+                    : `One-time premium for ${p.duration_days ?? 0} days`}
               </p>
               {p.description && (
                 <p className="mt-2 text-xs text-[var(--ink)]">{p.description}</p>
               )}
               <div className="mt-3 flex gap-2 border-t border-[var(--border)] pt-3">
-                <Button size="sm" variant="secondary" onClick={() => setEditing(p)}>Edit</Button>
-                <Button size="sm" variant="ghost" onClick={() => void remove(p.id)}>
+                <Button size="sm" variant="secondary" onClick={() => onEdit(p)}>Edit</Button>
+                <Button size="sm" variant="ghost" onClick={() => onRemove(p.id)}>
                   <Trash2 size={14} />
                 </Button>
               </div>
@@ -140,11 +240,7 @@ export function PlansSettings() {
           ))}
         </div>
       )}
-
-      {editing && (
-        <PlanEditor plan={editing} onClose={() => setEditing(null)} onSave={(p) => void save(p)} saving={saving} />
-      )}
-    </div>
+    </section>
   );
 }
 
@@ -167,26 +263,83 @@ function PlanEditor({
   const [p, setP] = useState<Plan>(plan);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <Card className="w-full max-w-lg p-5">
+      <Card className="max-h-[85vh] w-full max-w-lg overflow-y-auto p-5">
         <h3 className="mb-4 text-base font-bold text-[var(--ink)]">
-          {plan.id ? "Edit plan" : "Add plan"}
+          {p.plan_type === "credits"
+            ? plan.id
+              ? "Edit credit pack"
+              : "Add credit pack"
+            : plan.id
+              ? "Edit membership"
+              : "Add membership"}
         </h3>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <In label="Code" value={p.code} onChange={(v) => setP({ ...p, code: v })} mono />
             <In label="Name" value={p.name} onChange={(v) => setP({ ...p, name: v })} />
           </div>
-          <Sel
-            label="Plan type"
-            value={p.plan_type}
-            onChange={(v) => setP({ ...p, plan_type: v })}
-            options={["subscription", "one_time", "credits"]}
-          />
-          <div className="grid grid-cols-3 gap-3">
-            <In label="Price (₹)" value={String(p.price_paise / 100)} onChange={(v) => setP({ ...p, price_paise: Math.round(Number(v) * 100) })} type="number" />
-            <In label="Credits" value={String(p.credits)} onChange={(v) => setP({ ...p, credits: Number(v) || 0 })} type="number" />
-            <In label="Duration (days)" value={String(p.duration_days ?? 0)} onChange={(v) => setP({ ...p, duration_days: v ? Number(v) : null })} type="number" />
-          </div>
+          {p.plan_type === "credits" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <In label="Price (₹)" value={String(p.price_paise / 100)} onChange={(v) => setP({ ...p, price_paise: Math.round(Number(v) * 100) })} type="number" />
+              <In label="Contact credits" value={String(p.credits)} onChange={(v) => setP({ ...p, credits: Number(v) || 0 })} type="number" />
+            </div>
+          ) : (
+            <>
+              <Sel
+                label="Plan type"
+                value={p.plan_type === "one_time" ? "one_time" : "subscription"}
+                onChange={(v) => setP({ ...p, plan_type: v })}
+                options={["subscription", "one_time"]}
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <In label="Price (₹)" value={String(p.price_paise / 100)} onChange={(v) => setP({ ...p, price_paise: Math.round(Number(v) * 100) })} type="number" />
+                <In
+                  label={p.plan_type === "subscription" ? "Credits each renewal" : "Credits"}
+                  value={String(p.credits)}
+                  onChange={(v) => setP({ ...p, credits: Number(v) || 0 })}
+                  type="number"
+                />
+                <In
+                  label={p.plan_type === "subscription" ? "Access days per charge" : "Duration (days)"}
+                  value={String(p.duration_days ?? 0)}
+                  onChange={(v) => setP({ ...p, duration_days: v ? Number(v) : null })}
+                  type="number"
+                />
+              </div>
+            </>
+          )}
+          {p.plan_type === "subscription" && (
+            <div className="grid grid-cols-2 gap-3">
+              <Sel
+                label="Renews"
+                value={p.billing_period || "monthly"}
+                onChange={(v) =>
+                  setP({
+                    ...p,
+                    billing_period: v,
+                    duration_days: v === "yearly" ? 365 : v === "quarterly" ? 90 : 30,
+                  })
+                }
+                options={["monthly", "quarterly", "yearly"]}
+              />
+              <In
+                label="Charges (UPI needs a count)"
+                value={String(p.total_cycles || 12)}
+                onChange={(v) => setP({ ...p, total_cycles: Math.min(60, Math.max(1, Number(v) || 12)) })}
+                type="number"
+              />
+            </div>
+          )}
+          {p.plan_type === "subscription" && (
+            <p className="text-xs text-[var(--muted)]">
+              12 monthly charges is one year of UPI Autopay. Members can cancel anytime and keep access until the period they already paid. Changing the price creates a new Razorpay plan; people already subscribed stay on the old price.
+            </p>
+          )}
+          {p.plan_type === "credits" && (
+            <p className="text-xs text-[var(--muted)]">
+              This pack is charged once. The member’s contact-credit balance increases by the number above. It does not extend Premium.
+            </p>
+          )}
           <In label="Description" value={p.description} onChange={(v) => setP({ ...p, description: v })} />
           <div className="grid grid-cols-2 gap-3">
             <In label="Sort order" value={String(p.sort_order)} onChange={(v) => setP({ ...p, sort_order: Number(v) || 0 })} type="number" />

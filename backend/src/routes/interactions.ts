@@ -26,12 +26,12 @@ interactionsRouter.post("/", async (c) => {
     return c.json({ error: "Cannot interact with self" }, 400);
   }
 
-  const status =
-    action === "pass"
-      ? "passed"
-      : action === "shortlist"
-        ? "shortlisted"
-        : "pending";
+  // Like is the only interest action. It files the profile under Shortlisted.
+  // A like back (their row is pending or shortlisted) moves both sides to mutual,
+  // which is the Matches list. Shortlist is accepted as the same action so
+  // older app builds keep working. Pass is ignored by the app.
+  const isInterest = action === "like" || action === "shortlist";
+  const status = action === "pass" ? "passed" : "shortlisted";
 
   const sb = getSupabaseAdmin();
 
@@ -44,8 +44,10 @@ interactionsRouter.post("/", async (c) => {
 
   let finalStatus = status;
   let becameMutual = false;
-  if (
-    action === "like" &&
+  if (isInterest && reverse?.status === "mutual") {
+    finalStatus = "mutual";
+  } else if (
+    isInterest &&
     reverse &&
     (reverse.status === "pending" || reverse.status === "shortlisted")
   ) {
@@ -92,24 +94,18 @@ interactionsRouter.post("/", async (c) => {
       body: `${otherName} liked you back. You can now chat.`,
       data: { from_profile_id: to_profile_id, interaction_id: row.id },
     });
-  } else if (action === "like") {
+  } else if (isInterest) {
+    const shortlisted = action === "shortlist";
     await notify({
       profile_id: to_profile_id,
-      type: "like",
-      title: "You received a new like",
-      body: `${senderName} liked your profile.`,
-      data: { from_profile_id: uid, interaction_id: row.id },
-    });
-  } else if (action === "shortlist") {
-    await notify({
-      profile_id: to_profile_id,
-      type: "shortlist",
-      title: "You were shortlisted",
-      body: `${senderName} shortlisted your profile.`,
+      type: shortlisted ? "shortlist" : "like",
+      title: shortlisted ? "You were shortlisted" : "You received a new like",
+      body: shortlisted
+        ? `${senderName} shortlisted your profile.`
+        : `${senderName} liked your profile.`,
       data: { from_profile_id: uid, interaction_id: row.id },
     });
   }
-  // 'pass' produces no notification.
 
   return c.json({ interaction: row });
 });

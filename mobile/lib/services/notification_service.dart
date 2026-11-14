@@ -3,12 +3,12 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config.dart';
+import '../l10n/app_locale.dart';
 import 'api_client.dart';
 
 /// Centralised push + in-app notification manager.
@@ -32,7 +32,9 @@ class NotificationService with ChangeNotifier {
 
   String? _fcmToken;
   bool _initialized = false;
+  bool _localReady = false;
   StreamSubscription<AuthState>? _authSub;
+  final Map<String, DateTime> _recent = {};
 
   /// Call once at app start (after Supabase is initialised). Safe to call
   /// multiple times — guards against double init. Gracefully degrades if
@@ -51,8 +53,13 @@ class NotificationService with ChangeNotifier {
       debugPrint('[NotificationService] Firebase init failed (push disabled): $e');
     }
 
+    // The notification bar works even when Firebase is not configured.
+    await _setupLocalNotifications();
+    // Ask only after a frame has drawn. A request made before the Android
+    // activity is attached never shows a dialog, which is what the emulator
+    // was doing.
+    await _requestPlatformPermission();
     if (app != null) {
-      await _setupLocalNotifications();
       await _setupFcm();
     }
 
@@ -79,16 +86,95 @@ class NotificationService with ChangeNotifier {
 
   // ─── Local notifications (foreground display) ──────────────────────────────
   Future<void> _setupLocalNotifications() async {
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('ic_stat_mangalam');
     const ios = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
-    await _local.initialize(
-      const InitializationSettings(android: android, iOS: ios),
-      onDidReceiveNotificationResponse: _onLocalTap,
-    );
+    try {
+      await _local.initialize(
+        const InitializationSettings(android: android, iOS: ios),
+        onDidReceiveNotificationResponse: _onLocalTap,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] local init failed: $e');
+    }
+    final androidPlugin = _local
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    const channels = <AndroidNotificationChannel>[
+      AndroidNotificationChannel(
+        'mangalam_messages',
+        'Messages',
+        description: 'New chat messages',
+        importance: Importance.high,
+      ),
+      AndroidNotificationChannel(
+        'mangalam_activity',
+        'Activity',
+        description: 'Likes, matches, shortlists and profile views',
+        importance: Importance.high,
+      ),
+      AndroidNotificationChannel(
+        'mangalam_updates',
+        'Updates',
+        description: 'Verification, reports and announcements',
+        importance: Importance.high,
+      ),
+    ];
+    for (final channel in channels) {
+      await androidPlugin?.createNotificationChannel(channel);
+    }
+    _localReady = true;
+  }
+
+  /// System notification prompt. Android only shows this from a visible
+  /// activity, so this waits for the first frame and retries if the activity
+  /// is not attached yet.
+  Future<void> _requestPlatformPermission() async {
+    final binding = WidgetsBinding.instance;
+    final frame = Completer<void>();
+    binding.addPostFrameCallback((_) {
+      if (!frame.isCompleted) frame.complete();
+    });
+    await frame.future;
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    if (Platform.isAndroid) {
+      final androidPlugin = _local
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      for (var attempt = 0; attempt < 4; attempt++) {
+        try {
+          final granted = await androidPlugin?.requestNotificationsPermission();
+          debugPrint('[NotificationService] notification permission: $granted');
+          return;
+        } catch (e) {
+          debugPrint('[NotificationService] permission request failed: $e');
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        }
+      }
+      return;
+    }
+
+    if (Platform.isIOS) {
+      final iosPlugin = _local
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
+      try {
+        await iosPlugin?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      } catch (e) {
+        debugPrint('[NotificationService] iOS permission request failed: $e');
+      }
+    }
   }
 
   void _onLocalTap(NotificationResponse response) {
@@ -101,8 +187,12 @@ class NotificationService with ChangeNotifier {
   Future<void> _setupFcm() async {
     final messaging = FirebaseMessaging.instance;
 
-    // Request permission (iOS prompt; Android no-op until Android 13+).
-    await messaging.requestPermission(alert: true, badge: true, sound: true);
+    // Android already asked through the system dialog above. Asking again here
+    // runs off the main thread and can swallow that dialog. iOS still needs
+    // this call so FCM can register for alerts.
+    if (!Platform.isAndroid) {
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+    }
 
     // Foreground message handler — show a local notification.
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
@@ -139,30 +229,92 @@ class NotificationService with ChangeNotifier {
     final n = message.notification;
     final title = n?.title ?? message.data['title']?.toString() ?? 'Mangalam';
     final body = n?.body ?? message.data['body']?.toString() ?? '';
-    _showLocal(title, body, _payloadFromData(message.data));
+    final data = Map<String, dynamic>.from(message.data);
+    data['title'] ??= title;
+    data['body'] ??= body;
+    _showLocal(
+      title,
+      body,
+      _payloadFromData(data),
+      type: message.data['type']?.toString() ?? 'system',
+    );
   }
 
   void _handleTap(RemoteMessage message) {
-    _deepLink(_payloadFromData(message.data));
+    final data = Map<String, dynamic>.from(message.data);
+    data['title'] ??= message.notification?.title;
+    data['body'] ??= message.notification?.body;
+    _deepLink(_payloadFromData(data));
   }
 
-  Future<void> _showLocal(String title, String body, String payload) async {
-    const android = AndroidNotificationDetails(
-      'mangalam_notifications',
-      'Mangalam notifications',
-      channelDescription: 'Likes, matches and messages',
+  Future<void> _showLocal(
+    String title,
+    String body,
+    String payload, {
+    String type = 'system',
+  }) async {
+    if (!_localReady) return;
+    final key = '$type|$title|$body';
+    final now = DateTime.now();
+    _recent.removeWhere(
+      (_, at) => now.difference(at) > const Duration(seconds: 8),
+    );
+    if (_recent.containsKey(key)) return;
+    _recent[key] = now;
+    final channel = _channelFor(type);
+    final android = AndroidNotificationDetails(
+      channel.id,
+      channel.name,
+      channelDescription: channel.description,
       importance: Importance.high,
       priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
+      icon: 'ic_stat_mangalam',
+      playSound: true,
+      enableVibration: true,
+      styleInformation: BigTextStyleInformation(body),
     );
-    const ios = DarwinNotificationDetails();
-    await _local.show(
-      DateTime.now().millisecondsSinceEpoch.remainder(100000),
-      title,
-      body,
-      const NotificationDetails(android: android, iOS: ios),
-      payload: payload,
+    const ios = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
     );
+    try {
+      await _local.show(
+        now.millisecondsSinceEpoch.remainder(100000),
+        title,
+        body,
+        NotificationDetails(android: android, iOS: ios),
+        payload: payload,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] show failed: $e');
+    }
+  }
+
+  ({String id, String name, String description}) _channelFor(String type) {
+    switch (type) {
+      case 'message':
+        return (
+          id: 'mangalam_messages',
+          name: 'Messages',
+          description: 'New chat messages',
+        );
+      case 'system':
+      case 'verification':
+      case 'report':
+      case 'support':
+        return (
+          id: 'mangalam_updates',
+          name: 'Updates',
+          description: 'Verification, reports and announcements',
+        );
+      default:
+        return (
+          id: 'mangalam_activity',
+          name: 'Activity',
+          description: 'Likes, matches, shortlists and profile views',
+        );
+    }
   }
 
   String _payloadFromData(Map<String, dynamic> data) {
@@ -183,26 +335,34 @@ class NotificationService with ChangeNotifier {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
+  String? _pendingPayload;
+  int _linkAttempts = 0;
+
   void _deepLink(String payload) {
     if (payload.isEmpty) return;
-    final params = Uri.splitQueryString(payload);
-    final type = params['type'];
+    _pendingPayload = payload;
+    _linkAttempts = 0;
+    _openPending();
+  }
+
+  void _openPending() {
+    final payload = _pendingPayload;
+    if (payload == null || payload.isEmpty) return;
     final ctx = navigatorKey.currentContext;
-    if (ctx == null) return;
-    final conversationId = params['conversation_id'];
-    final fromProfileId = params['from_profile_id'];
-    if (type == 'message' && conversationId != null && conversationId.isNotEmpty) {
-      Navigator.of(ctx).pushNamed('/chat', arguments: {
-        'conversation_id': conversationId,
-        'other_name': params['title'] ?? 'Member',
-      });
-    } else if ((type == 'like' || type == 'match' || type == 'shortlist') &&
-        fromProfileId != null &&
-        fromProfileId.isNotEmpty) {
-      Navigator.of(ctx).pushNamed('/profile', arguments: {'id': fromProfileId});
-    } else {
-      Navigator.of(ctx).pushNamed('/notifications');
+    if (ctx == null) {
+      if (_linkAttempts++ > 40) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openPending());
+      return;
     }
+    _pendingPayload = null;
+    final params = Uri.splitQueryString(payload);
+    openNotificationTarget(
+      ctx,
+      type: params['type'] ?? 'system',
+      data: params,
+      title: params['title'],
+      body: params['body'],
+    );
   }
 
   // ─── Supabase Realtime (in-app badge + feed) ────────────────────────────────
@@ -231,14 +391,15 @@ class NotificationService with ChangeNotifier {
             final data = <String, dynamic>{};
             (row['data'] as Map?)?.forEach((k, v) => data[k.toString()] = v);
             data['type'] = type;
+            data['title'] = title;
+            data['body'] = body;
             if (row['conversation_id'] != null) {
               data['conversation_id'] = row['conversation_id'].toString();
             }
             if (row['from_profile_id'] != null) {
               data['from_profile_id'] = row['from_profile_id'].toString();
             }
-            // If FCM push didn't fire (app in foreground), show local notification.
-            _showLocal(title, body, _payloadFromData(data));
+            _showLocal(title, body, _payloadFromData(data), type: type);
           },
         )
         .subscribe();
@@ -296,6 +457,68 @@ class NotificationService with ChangeNotifier {
     _unsubscribeRealtime();
     super.dispose();
   }
+}
+
+/// Opens the screen a notification belongs to. Profile and chat taps include
+/// the other member so the header can show their photo and open their profile.
+void openNotificationTarget(
+  BuildContext context, {
+  required String type,
+  Map<String, dynamic> data = const {},
+  String? title,
+  String? body,
+}) {
+  final conversationId = data['conversation_id']?.toString() ?? '';
+  final fromProfileId = data['from_profile_id']?.toString() ?? '';
+  final otherName = (data['other_name'] ?? title ?? t('Member')).toString();
+  if (type == 'message' && conversationId.isNotEmpty) {
+    Navigator.of(context).pushNamed('/chat', arguments: {
+      'conversation_id': conversationId,
+      'other_profile_id': fromProfileId,
+      'other_name': otherName,
+    });
+    return;
+  }
+  if ((type == 'like' ||
+          type == 'match' ||
+          type == 'shortlist' ||
+          type == 'view') &&
+      fromProfileId.isNotEmpty) {
+    Navigator.of(context).pushNamed('/profile', arguments: {'id': fromProfileId});
+    return;
+  }
+  if (type == 'verification') {
+    Navigator.of(context).pushNamed('/verification');
+    return;
+  }
+  if (type == 'support') {
+    final ticketId = data['ticket_id']?.toString() ?? '';
+    if (ticketId.isNotEmpty) {
+      Navigator.of(context).pushNamed('/support-ticket', arguments: {'id': ticketId});
+    } else {
+      Navigator.of(context).pushNamed('/support');
+    }
+    return;
+  }
+  final heading = (title ?? data['title']?.toString() ?? '').trim();
+  final text = (body ?? data['body']?.toString() ?? '').trim();
+  if (heading.isEmpty && text.isEmpty) {
+    Navigator.of(context).pushNamed('/notifications');
+    return;
+  }
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(tNotice(heading.isEmpty ? 'Mangalam' : heading)),
+      content: text.isEmpty ? null : Text(tNotice(text)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text(t('OK')),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Top-level background isolate entry — must be a top-level function.

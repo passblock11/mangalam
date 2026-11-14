@@ -16,6 +16,7 @@ import {
   type AdminFeature,
 } from "@/lib/admin-session";
 import { Avatar, Badge, Button, Card, EmptyState, Modal } from "../shared";
+import { useAdminLiveReload } from "../admin-live";
 
 export function AdminsSettings({ session }: { session: AdminSession }) {
   const [admins, setAdmins] = useState<AdminAccount[]>([]);
@@ -25,17 +26,23 @@ export function AdminsSettings({ session }: { session: AdminSession }) {
   const [showCreate, setShowCreate] = useState(false);
   const [editFor, setEditFor] = useState<AdminAccount | null>(null);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     const res = await fetchAdminAccounts();
-    if (!res.ok) setError(res.error);
-    else setAdmins(res.data);
-    setLoading(false);
+    if (!res.ok) {
+      if (!silent) setError(res.error);
+    } else {
+      setAdmins(res.data);
+      if (!silent) setError(null);
+    }
+    if (!silent) setLoading(false);
   }
   useEffect(() => {
-    void load();
+    void load(false);
   }, []);
+  useAdminLiveReload("settings", () => {
+    if (!showCreate && !editFor && !busy) void load(true);
+  });
 
   async function toggleActive(a: AdminAccount) {
     setBusy(a.id);

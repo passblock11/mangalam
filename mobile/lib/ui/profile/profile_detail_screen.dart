@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../l10n/app_locale.dart';
 import '../../services/api_client.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_gallery.dart';
@@ -23,6 +24,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   Map<String, dynamic>? _data;
   String? _error;
   bool _loading = true;
+  bool _liking = false;
   bool _bioExpanded = false;
 
   @override
@@ -57,34 +59,48 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = userFacingError(e);
         _loading = false;
       });
     }
   }
 
   Future<void> _interaction(String action) async {
+    if (_liking) return;
+    setState(() => _liking = true);
     try {
-      await _api.post('/v1/interactions', {
-        'to_profile_id': widget.profileId,
-        'action': action,
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Sent: $action')));
-      }
+      final res =
+          await _api.post('/v1/interactions', {
+                'to_profile_id': widget.profileId,
+                'action': action,
+              })
+              as Map<String, dynamic>;
+      final interaction = res['interaction'] as Map<String, dynamic>?;
+      final mutual = interaction?['status'] == 'mutual';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            t(
+              mutual
+                  ? 'It\'s a match. They moved to Matches.'
+                  : 'Liked. They are in your Shortlisted tab.',
+            ),
+          ),
+        ),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tError(e))));
+    } finally {
+      if (mounted) setState(() => _liking = false);
     }
   }
 
   Future<void> _report() async {
-    final name = _data?['display_name']?.toString() ?? 'Member';
+    final name = _data?['display_name']?.toString() ?? t('Member');
     await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => ReportUserScreen(
@@ -99,16 +115,16 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Block'),
-        content: const Text('Block this profile?'),
+        title: Text(t('Block')),
+        content: Text(t('Block this profile?')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(t('Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Block'),
+            child: Text(t('Block')),
           ),
         ],
       ),
@@ -119,21 +135,21 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Blocked')));
+        ).showSnackBar(SnackBar(content: Text(t('Blocked'))));
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: Text(tError(e))));
       }
     }
   }
 
   Future<void> _openChat() async {
     try {
-      final name = _data?['display_name'] ?? 'Member';
+      final name = _data?['display_name'] ?? t('Member');
       final photoUrls =
           (_data?['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
       final res =
@@ -150,6 +166,8 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               otherName: name.toString(),
               otherProfileId: widget.profileId,
               otherPhotoUrls: photoUrls,
+              photosLocked: _data?['photos_locked'] == true,
+              contactLocked: _data?['contact_locked'] == true,
             ),
           ),
         );
@@ -158,23 +176,14 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: Text(tError(e))));
       }
     }
   }
 
   Future<void> _launchWa() async {
-    final wa = _data?['whatsapp_number'] as String?;
-    final phone = _data?['phone'] as String?;
-    final num = (wa != null && wa.isNotEmpty) ? wa : phone;
-    if (num == null || num.length < 8) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('WhatsApp number not available.')),
-        );
-      }
-      return;
-    }
+    final num = await _numberFor('whatsapp');
+    if (num == null || !mounted) return;
     final digits = num.replaceAll(RegExp(r'\D'), '');
     final uri = Uri.parse('https://wa.me/$digits');
     if (await canLaunchUrl(uri)) {
@@ -183,17 +192,64 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   }
 
   Future<void> _launchTel() async {
-    final phone = _data?['phone'] as String?;
-    if (phone == null || phone.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Phone number not available.')),
-        );
-      }
-      return;
-    }
+    final phone = await _numberFor('phone');
+    if (phone == null || !mounted) return;
     final uri = Uri.parse('tel:${phone.replaceAll(RegExp(r'\s'), '')}');
     if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
+
+  /// Returns a number the member has shared. Spends credits the first time.
+  Future<String?> _numberFor(String channel) async {
+    final key = channel == 'whatsapp' ? 'whatsapp_number' : 'phone';
+    final revealedKey = channel == 'whatsapp' ? 'whatsapp_revealed' : 'phone_revealed';
+    final existing = _data?[key]?.toString().trim() ?? '';
+    if (existing.length >= 8 && _data?[revealedKey] == true) return existing;
+
+    final costKey = channel == 'whatsapp' ? 'whatsapp_credit_cost' : 'phone_credit_cost';
+    final cost = (_data?[costKey] as num?)?.toInt() ?? 1;
+    if (!mounted) return null;
+    if (cost > 0) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t('View this number?')),
+        content: Text(tf('This uses {n} contact credits.', {'n': '$cost'})),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(t('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(t('View number')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return null;
+    }
+    try {
+      final json = await _api.post(
+        '/v1/profiles/${widget.profileId}/reveal-contact',
+        {'channel': channel, 'confirm': true},
+      ) as Map<String, dynamic>;
+      final value = json['value']?.toString().trim() ?? '';
+      if (value.isEmpty) return null;
+      if (mounted) {
+        setState(() {
+          _data?[key] = value;
+          _data?[revealedKey] = true;
+        });
+      }
+      return value;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tError(e))),
+        );
+      }
+      return null;
+    }
   }
 
   @override
@@ -209,38 +265,59 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Iconsax.heart),
-            onPressed: () => _interaction('like'),
-          ),
           PopupMenuButton<String>(
             icon: const Icon(Iconsax.more),
             onSelected: (v) {
               if (v == 'report') _report();
               if (v == 'block') _block();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'report', child: Text('Report')),
-              PopupMenuItem(value: 'block', child: Text('Block')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'report', child: Text(t('Report'))),
+              PopupMenuItem(value: 'block', child: Text(t('Block'))),
             ],
           ),
         ],
       ),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: MangalamTheme.maroon),
-            )
-          : _error != null
-          ? MangalamEmptyState(
-              icon: Iconsax.warning_2,
-              title: 'Could not load profile',
-              subtitle: _error,
-              action: FilledButton(
-                onPressed: _load,
-                child: const Text('Retry'),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: MangalamTheme.maroon,
+                    ),
+                  )
+                : _error != null
+                ? MangalamEmptyState(
+                    icon: Iconsax.warning_2,
+                    title: 'Could not load profile',
+                    subtitle: _error,
+                    action: FilledButton(
+                      onPressed: _load,
+                      child: Text(t('Retry')),
+                    ),
+                  )
+                : _buildScroll(context),
+          ),
+          if (_liking) ...[
+            const Positioned.fill(
+              child: AbsorbPointer(
+                child: ColoredBox(color: Color(0xA6FFF8F3)),
               ),
-            )
-          : _buildScroll(context),
+            ),
+            const Center(
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: CircularProgressIndicator(
+                  color: MangalamTheme.maroon,
+                  strokeWidth: 3,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
       bottomNavigationBar: _data == null
           ? null
           : _ContactBar(
@@ -254,7 +331,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
 
   Widget _buildScroll(BuildContext context) {
     final p = _data!;
-    final name = p['display_name']?.toString() ?? 'Member';
+    final name = p['display_name']?.toString() ?? t('Member');
     final age = p['age'];
     final community = p['community']?.toString() ?? '';
     final lang = p['mother_tongue']?.toString() ?? '';
@@ -290,6 +367,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 photoUrls: photoUrls,
                 aspectRatio: 0.95,
                 badgeTopInset: MediaQuery.paddingOf(context).top + 44,
+                locked: p['photos_locked'] == true,
               ),
               // Bottom scrim for app bar readability
               Positioned(
@@ -310,16 +388,6 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   ),
                 ),
               ),
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 8,
-                right: 16,
-                child: FloatingActionButton.small(
-                  backgroundColor: Colors.white,
-                  foregroundColor: MangalamTheme.maroon,
-                  onPressed: () => _interaction('like'),
-                  child: const Icon(Iconsax.heart),
-                ),
-              ),
             ],
           ),
         ),
@@ -332,13 +400,15 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
           ),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
-              // Name + verified
+              // Name + verified badge, kept together on the left
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(
+                  Flexible(
                     child: Text(
                       name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(
                             fontWeight: FontWeight.w800,
@@ -346,15 +416,10 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                           ),
                     ),
                   ),
-                  if (verified)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6, top: 4),
-                      child: const Icon(
-                        Iconsax.verify,
-                        color: MangalamTheme.gold,
-                        size: 24,
-                      ),
-                    ),
+                  if (verified) ...[
+                    const SizedBox(width: 8),
+                    const VerifiedBadge(),
+                  ],
                 ],
               ),
               if (activityLabel.isNotEmpty) ...[
@@ -363,6 +428,21 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   label: activityLabel,
                   icon: Iconsax.info_circle,
                   color: const Color(0xFF2E7D32),
+                ),
+              ],
+              if ((p['phone']?.toString().trim().isNotEmpty ?? false)) ...[
+                const SizedBox(height: 12),
+                Text(
+                  '${t('Phone')}: ${p['phone']}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+              ],
+              if ((p['whatsapp_number']?.toString().trim().isNotEmpty ?? false) &&
+                  p['whatsapp_number'] != p['phone']) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${t('WhatsApp')}: ${p['whatsapp_number']}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
               ],
               if (bio != null && bio.isNotEmpty) ...[
@@ -379,7 +459,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
                           Icon(
                             Iconsax.text_block,
@@ -387,8 +467,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                             color: MangalamTheme.maroon,
                           ),
                           SizedBox(width: 6),
-                          Text(
-                            'About',
+                          Text(t('About'),
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               color: MangalamTheme.maroon,
@@ -420,7 +499,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                     color: MangalamTheme.muted,
                   ),
                   const SizedBox(width: 6),
-                  Expanded(child: Text('$city, $state')),
+                  Expanded(child: Text('$city, ${t(state)}')),
                 ],
               ),
               const SizedBox(height: 6),
@@ -435,7 +514,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   Text(age != null ? '$age years' : '—'),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               DetailCardGrid(items: gridItems),
               const SizedBox(height: 20),
               SectionCard(
@@ -494,8 +573,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   children: [
                     DetailPair(
                       label: 'Age limit',
-                      value:
-                          '${partner['age_min']?.toString() ?? '—'} - ${partner['age_max']?.toString() ?? '—'}',
+                      value: partnerAgeRange(partner),
                     ),
                     DetailPair(
                       label: 'Location',
@@ -541,29 +619,9 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () => _interaction('like'),
+                      onPressed: _liking ? null : () => _interaction('like'),
                       icon: const Icon(Iconsax.heart),
-                      label: const Text('Like'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _interaction('pass'),
-                      icon: const Icon(Iconsax.close_circle),
-                      label: const Text('Pass'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.tonalIcon(
-                      onPressed: () => _interaction('shortlist'),
-                      icon: const Icon(Iconsax.star),
-                      label: const Text('Shortlist'),
+                      label: Text(t('Like')),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -571,7 +629,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                     child: FilledButton.tonalIcon(
                       onPressed: _openChat,
                       icon: const Icon(Iconsax.message),
-                      label: const Text('Message'),
+                      label: Text(t('Message')),
                     ),
                   ),
                 ],
@@ -602,9 +660,12 @@ class _ContactBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contactVisible = profile['contact_visible'] == true;
     final locked = profile['contact_locked'] == true;
     final ownerDisabled = profile['contact_owner_disabled'] == true;
+    final canRequest = !locked &&
+        !ownerDisabled &&
+        (profile['phone_available'] == true ||
+            profile['whatsapp_available'] == true);
 
     return Container(
       decoration: BoxDecoration(
@@ -629,30 +690,34 @@ class _ContactBar extends StatelessWidget {
             constraints: BoxConstraints(
               maxWidth: MediaQuery.sizeOf(context).width,
             ),
-            child: contactVisible
+            child: canRequest
                 ? Row(
                     children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: onWhatsApp,
-                          icon: const Icon(Iconsax.message),
-                          label: const Text('WhatsApp'),
+                      if (profile['whatsapp_available'] == true)
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: onWhatsApp,
+                            icon: const Icon(Iconsax.message),
+                            label: Text(t('WhatsApp')),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
+                      if (profile['whatsapp_available'] == true)
+                        const SizedBox(width: 10),
                       IconButton.outlined(
                         onPressed: onChat,
                         icon: const Icon(Iconsax.message),
                         color: MangalamTheme.maroon,
-                        tooltip: 'Message',
+                        tooltip: t('Message'),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton.outlined(
-                        onPressed: onPhone,
-                        icon: const Icon(Iconsax.call),
-                        color: MangalamTheme.maroon,
-                        tooltip: 'Call',
-                      ),
+                      if (profile['phone_available'] == true) ...[
+                        const SizedBox(width: 8),
+                        IconButton.outlined(
+                          onPressed: onPhone,
+                          icon: const Icon(Iconsax.call),
+                          color: MangalamTheme.maroon,
+                          tooltip: t('Call'),
+                        ),
+                      ],
                     ],
                   )
                 : _lockedRow(
@@ -678,6 +743,10 @@ class _ContactBar extends StatelessWidget {
       message = 'This member hasn\'t shared contact details. Chat to request.';
       icon = Iconsax.message_question;
       tint = MangalamTheme.muted;
+    } else if (locked && profile['contact_needs_verification'] == true) {
+      message = 'Verify your identity to view contact details.';
+      icon = Iconsax.lock;
+      tint = MangalamTheme.maroon;
     } else if (locked) {
       message =
           'Verify your identity & upgrade to Premium to view contact details.';
@@ -694,7 +763,7 @@ class _ContactBar extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            message,
+            t(message),
             style: TextStyle(
               fontSize: 12.5,
               color: tint,
@@ -708,7 +777,7 @@ class _ContactBar extends StatelessWidget {
           onPressed: onChat,
           icon: const Icon(Iconsax.message, size: 20),
           color: MangalamTheme.maroon,
-          tooltip: 'Chat',
+          tooltip: t('Chat'),
         ),
       ],
     );

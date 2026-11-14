@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
+import '../../l10n/app_locale.dart';
 import '../core/mangalam_theme.dart';
 
 /// Selectable card with icon + label. Used for single-choice onboarding steps.
@@ -66,7 +67,7 @@ class OptionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      label,
+                      t(label),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: selected
                             ? FontWeight.w700
@@ -76,7 +77,7 @@ class OptionCard extends StatelessWidget {
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
                       Text(
-                        subtitle!,
+                        t(subtitle!),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: MangalamTheme.muted,
                         ),
@@ -135,7 +136,7 @@ class StepHeader extends StatelessWidget {
           const SizedBox(height: 16),
         ],
         Text(
-          title,
+          t(title),
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w800,
             letterSpacing: -0.4,
@@ -145,7 +146,7 @@ class StepHeader extends StatelessWidget {
         if (subtitle != null) ...[
           const SizedBox(height: 8),
           Text(
-            subtitle!,
+            t(subtitle!),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: MangalamTheme.muted,
               height: 1.45,
@@ -198,7 +199,10 @@ class OnboardingProgress extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Step ${current + 1} of $total',
+                    tf('Step {current} of {total}', {
+                      'current': '${current + 1}',
+                      'total': '$total',
+                    }),
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: MangalamTheme.muted,
                       fontWeight: FontWeight.w700,

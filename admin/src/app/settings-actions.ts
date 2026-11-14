@@ -9,6 +9,8 @@ import {
   getBackendUrl,
 } from "@/lib/admin-session-server";
 import { type AdminFeature } from "@/lib/admin-session";
+import { BUILTIN_BRAND, sanitizeBrandCustom, type BrandCustom } from "./ui/settings/brand";
+import { notifyAudience } from "./actions";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -58,13 +60,79 @@ export async function updateAppSettings(
   const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
+  const { data: before } = await sb.from("app_settings").select("*").eq("id", 1).maybeSingle();
   const { error } = await sb
     .from("app_settings")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", 1);
   if (error) return { ok: false, error: mapErr(error.message) };
+  await announceSettingChanges((before ?? {}) as Record<string, unknown>, patch);
   revalidatePath("/");
   return { ok: true, data: undefined };
+}
+
+function sameAmount(left: unknown, right: unknown): boolean {
+  const a = Number(left);
+  const b = Number(right);
+  if (!Number.isFinite(a) && !Number.isFinite(b)) return true;
+  return Math.floor(a) === Math.floor(b);
+}
+
+/** Push only the members whose prices or membership access actually changed. */
+async function announceSettingChanges(
+  before: Record<string, unknown>,
+  patch: Record<string, unknown>
+) {
+  const changed = (key: string) => key in patch && !sameAmount(before[key], patch[key]);
+  const amount = (key: string) => Math.max(0, Math.floor(Number(patch[key]) || 0));
+  const lines: string[] = [];
+  if (changed("phone_credit_cost")) {
+    lines.push(`Viewing a phone number now uses ${amount("phone_credit_cost")} credits.`);
+  }
+  if (changed("whatsapp_credit_cost")) {
+    lines.push(`Viewing WhatsApp now uses ${amount("whatsapp_credit_cost")} credits.`);
+  }
+  if (changed("message_credit_cost")) {
+    lines.push(`Each message now uses ${amount("message_credit_cost")} credits.`);
+  }
+  if (changed("message_free_per_chat")) {
+    lines.push(`Each chat includes ${amount("message_free_per_chat")} free messages.`);
+  }
+  if (
+    "message_charge_replies" in patch &&
+    Boolean(before.message_charge_replies) !== Boolean(patch.message_charge_replies)
+  ) {
+    lines.push(
+      patch.message_charge_replies === false
+        ? "Replies no longer use credits."
+        : "Replies now use credits too."
+    );
+  }
+  if (lines.length > 0) {
+    await notifyAudience({
+      title: "Credit prices updated",
+      body: lines.join(" "),
+      audience: "all",
+    });
+  }
+  if (
+    "female_membership_free" in patch &&
+    Boolean(before.female_membership_free) !== Boolean(patch.female_membership_free)
+  ) {
+    if (patch.female_membership_free === true) {
+      await notifyAudience({
+        title: "Membership included",
+        body: "You can use Mangalam without buying a membership. Phone, WhatsApp and messages are included.",
+        audience: "female",
+      });
+    } else {
+      await notifyAudience({
+        title: "Membership is now required",
+        body: "A membership is required for paid features. Credit packs stay available after you subscribe.",
+        audience: "female_unpaid",
+      });
+    }
+  }
 }
 
 // ── Payment methods ──────────────────────────────────────────────────────────
@@ -163,21 +231,44 @@ export async function upsertPlan(plan: {
   price_paise: number;
   credits: number;
   duration_days?: number | null;
+  billing_period?: string;
+  total_cycles?: number;
   is_active: boolean;
   sort_order: number;
 }): Promise<ActionResult<void>> {
   const auth = await requireSettings();
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
+  let changed = true;
   if (plan.id) {
+    const { data: before } = await sb
+      .from("plans")
+      .select("name,description,price_paise,credits,duration_days,is_active")
+      .eq("id", plan.id)
+      .maybeSingle();
     const { error } = await sb
       .from("plans")
       .update({ ...plan, updated_at: new Date().toISOString() })
       .eq("id", plan.id);
     if (error) return { ok: false, error: mapErr(error.message) };
+    changed =
+      !before ||
+      before.name !== plan.name ||
+      (before.description ?? "") !== (plan.description ?? "") ||
+      before.price_paise !== plan.price_paise ||
+      before.credits !== plan.credits ||
+      before.duration_days !== (plan.duration_days ?? null) ||
+      before.is_active !== plan.is_active;
   } else {
     const { error } = await sb.from("plans").insert(plan);
     if (error) return { ok: false, error: mapErr(error.message) };
+  }
+  if (changed) {
+    await notifyAudience({
+      title: "Membership plans updated",
+      body: "Open My Membership to see the current plans.",
+      audience: "all",
+    });
   }
   revalidatePath("/");
   return { ok: true, data: undefined };
@@ -189,6 +280,11 @@ export async function deletePlan(id: string): Promise<ActionResult<void>> {
   const sb = supabaseAdmin();
   const { error } = await sb.from("plans").delete().eq("id", id);
   if (error) return { ok: false, error: mapErr(error.message) };
+  await notifyAudience({
+    title: "Membership plans updated",
+    body: "Open My Membership to see the current plans.",
+    audience: "all",
+  });
   revalidatePath("/");
   return { ok: true, data: undefined };
 }
@@ -381,6 +477,59 @@ export async function updateAdminAccount(
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg };
   }
+}
+
+export async function saveAppBranding(input: {
+  active: "default" | "custom";
+  custom: BrandCustom;
+}): Promise<ActionResult<void>> {
+  const auth = await requireSettings();
+  if (!auth.ok) return auth;
+  const branding = {
+    active: input.active === "custom" ? "custom" : "default",
+    builtin: BUILTIN_BRAND,
+    custom: sanitizeBrandCustom(input.custom),
+  };
+  const saved = await updateAppSettings({ branding });
+  if (!saved.ok && /branding|schema cache|column/i.test(saved.error ?? "")) {
+    return {
+      ok: false,
+      error: "Run supabase/migrations/0015_app_branding.sql in the behlr SQL editor, then save again.",
+    };
+  }
+  return saved;
+}
+
+export async function uploadBrandingImage(
+  formData: FormData
+): Promise<ActionResult<{ url: string }>> {
+  const auth = await requireSettings();
+  if (!auth.ok) return auth;
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { ok: false, error: "Choose an image." };
+  if (file.size <= 0) return { ok: false, error: "That image is empty." };
+  if (file.size > 4 * 1024 * 1024) return { ok: false, error: "Image must be under 4 MB." };
+  const type = file.type.toLowerCase();
+  const ext = type === "image/png" ? "png" : type === "image/webp" ? "webp" : type === "image/jpeg" ? "jpg" : "";
+  if (!ext) return { ok: false, error: "Use a JPG, PNG, or WebP image." };
+  const path = `branding/${crypto.randomUUID()}.${ext}`;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const sb = supabaseAdmin();
+  const { error } = await sb.storage.from("app-branding").upload(path, bytes, {
+    contentType: type,
+    upsert: false,
+  });
+  if (error) {
+    const missing = /bucket|not found/i.test(error.message);
+    return {
+      ok: false,
+      error: missing
+        ? "Run supabase/migrations/0015_app_branding.sql in the behlr SQL editor, then upload again."
+        : error.message,
+    };
+  }
+  const { data } = sb.storage.from("app-branding").getPublicUrl(path);
+  return { ok: true, data: { url: data.publicUrl } };
 }
 
 export async function deleteAdminAccount(id: string): Promise<ActionResult<void>> {

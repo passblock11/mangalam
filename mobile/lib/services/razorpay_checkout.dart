@@ -5,6 +5,8 @@ import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_locale.dart';
+import 'app_branding.dart';
 import 'api_client.dart';
 import '../ui/core/mangalam_theme.dart';
 
@@ -18,14 +20,30 @@ class RazorpayCheckout {
     _razorpay.clear();
   }
 
-  /// Opens the plan picker, then Razorpay. Returns `true` if payment verified.
-  Future<bool> rechargeContactCredits(BuildContext context) async {
-    // 1. Fetch admin-managed plans
+  /// Contact-credit packs only. Membership is a separate recurring checkout.
+  Future<bool> rechargeContactCredits(BuildContext context) {
+    return _openPlans(context, membership: false);
+  }
+
+  /// Recurring membership, or a one-time premium plan. Not a credit pack.
+  Future<bool> buyMembership(BuildContext context) {
+    return _openPlans(context, membership: true);
+  }
+
+  Future<bool> _openPlans(
+    BuildContext context, {
+    required bool membership,
+  }) async {
     List<Map<String, dynamic>> plans = [];
     try {
       final res = await _api.get('/v1/config/plans') as Map<String, dynamic>;
-      plans =
+      final all =
           (res['plans'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+      plans = all.where((p) {
+        final type = p['plan_type']?.toString() ?? 'credits';
+        if (membership) return type == 'subscription' || type == 'one_time';
+        return type == 'credits';
+      }).toList();
     } catch (_) {
       // ignore — fall back to empty
     }
@@ -33,7 +51,14 @@ class RazorpayCheckout {
     final selected = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       showDragHandle: true,
-      builder: (ctx) => _PlanPickerSheet(plans: plans),
+      isScrollControlled: true,
+      builder: (ctx) => _PlanPickerSheet(
+        plans: plans,
+        title: membership ? 'Choose a membership' : 'Buy contact credits',
+        subtitle: membership
+            ? 'Membership renews by UPI or card until you cancel. You keep access until the date you already paid for.'
+            : 'Credit packs are a one-time add-on. They do not renew.',
+      ),
     );
     if (selected == null || !context.mounted) return false;
 
@@ -41,6 +66,9 @@ class RazorpayCheckout {
     final planName = selected['name']?.toString() ?? 'Mangalam plan';
     final amountPaise = selected['price_paise'];
     if (planCode == null || amountPaise == null) return false;
+    if (selected['plan_type']?.toString() == 'subscription') {
+      return _startSubscription(context, planCode, planName);
+    }
 
     final completer = Completer<PaymentSuccessResponse>();
     void onSuccess(PaymentSuccessResponse r) {
@@ -61,7 +89,7 @@ class RazorpayCheckout {
     void onExternal(ExternalWalletResponse r) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('External wallet: ${r.walletName}')),
+        SnackBar(content: Text(tf('External wallet: {name}', {'name': r.walletName ?? ''}))),
       );
     }
 
@@ -108,7 +136,7 @@ class RazorpayCheckout {
         'key': keyId,
         'amount': order['amount_paise'] ?? amountPaise,
         'currency': currency,
-        'name': 'Mangalam',
+        'name': AppBranding.instance.look.nameOr('Mangalam'),
         'description': planName,
         'order_id': orderId,
         'prefill': {
@@ -158,8 +186,8 @@ class RazorpayCheckout {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment successful — your plan is now active'),
+          SnackBar(
+            content: Text(t('Payment successful — your plan is now active')),
           ),
         );
       }
@@ -168,7 +196,7 @@ class RazorpayCheckout {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Payment timed out')));
+        ).showSnackBar(SnackBar(content: Text(t('Payment timed out'))));
       }
       return false;
     } on _PaymentCancelException catch (e) {
@@ -176,14 +204,141 @@ class RazorpayCheckout {
       // Only surface a message for genuine (non-cancel) failures.
       if (!e.isCancelled && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.friendlyMessage)),
+          SnackBar(content: Text(t(e.friendlyMessage))),
         );
       }
       return false;
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendlyPaymentError(e))),
+          SnackBar(content: Text(t(_friendlyPaymentError(e)))),
+        );
+      }
+      return false;
+    } finally {
+      _razorpay.clear();
+    }
+  }
+
+  Future<bool> _startSubscription(
+    BuildContext context,
+    String planCode,
+    String planName,
+  ) async {
+    final completer = Completer<PaymentSuccessResponse>();
+    void onSuccess(PaymentSuccessResponse r) {
+      if (!completer.isCompleted) completer.complete(r);
+    }
+
+    void onError(PaymentFailureResponse r) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          _PaymentCancelException(r.code?.toString() ?? '', (r.message ?? '').toString()),
+        );
+      }
+    }
+
+    _razorpay.clear();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, onSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, onError);
+
+    try {
+      if (context.mounted) {
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          useRootNavigator: true,
+          builder: (ctx) => const PopScope(
+            canPop: false,
+            child: Center(
+              child: CircularProgressIndicator(color: MangalamTheme.maroon),
+            ),
+          ),
+        );
+      }
+      Map<String, dynamic> started;
+      try {
+        started = await _api.post('/v1/payments/razorpay/subscribe', {
+              'plan_code': planCode,
+            }) as Map<String, dynamic>;
+      } finally {
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      }
+      final keyId = started['key_id'] as String?;
+      final subscriptionId = started['subscription_id'] as String?;
+      if (keyId == null || subscriptionId == null) {
+        throw Exception('Invalid membership response');
+      }
+      final user = Supabase.instance.client.auth.currentUser;
+      _razorpay.open({
+        'key': keyId,
+        'subscription_id': subscriptionId,
+        'name': AppBranding.instance.look.nameOr('Mangalam'),
+        'description': planName,
+        'prefill': {
+          if (user?.email != null && user!.email!.isNotEmpty) 'email': user.email,
+          if (user?.phone != null && user!.phone!.isNotEmpty) 'contact': user.phone,
+        },
+        'theme': {'color': '#B71C1C'},
+      });
+      final res = await completer.future.timeout(
+        const Duration(minutes: 15),
+        onTimeout: () => throw TimeoutException('Payment was not completed'),
+      );
+      if (!context.mounted) return false;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        useRootNavigator: true,
+        builder: (ctx) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: CircularProgressIndicator(color: MangalamTheme.maroon),
+          ),
+        ),
+      );
+      final paymentId = res.paymentId;
+      final signature = res.signature;
+      try {
+        if (paymentId == null || paymentId.isEmpty || signature == null || signature.isEmpty) {
+          throw Exception('Payment was not confirmed');
+        }
+        await _api.post('/v1/payments/razorpay/verify-subscription', {
+          'razorpay_subscription_id': subscriptionId,
+          'razorpay_payment_id': paymentId,
+          'razorpay_signature': signature,
+        });
+      } finally {
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t('Membership is active. It renews automatically.'))),
+        );
+      }
+      return true;
+    } on TimeoutException catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t('Payment timed out'))),
+        );
+      }
+      return false;
+    } on _PaymentCancelException catch (e) {
+      if (!e.isCancelled && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(e.friendlyMessage))),
+        );
+      }
+      return false;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(t(_friendlyPaymentError(e)))),
         );
       }
       return false;
@@ -246,9 +401,15 @@ String _friendlyPaymentError(Object e) {
 }
 
 class _PlanPickerSheet extends StatelessWidget {
-  const _PlanPickerSheet({required this.plans});
+  const _PlanPickerSheet({
+    required this.plans,
+    required this.title,
+    required this.subtitle,
+  });
 
   final List<Map<String, dynamic>> plans;
+  final String title;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -264,15 +425,15 @@ class _PlanPickerSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Choose a plan',
+                t(title),
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Payments are processed securely by Razorpay.',
-                style: TextStyle(color: MangalamTheme.muted, fontSize: 13),
+              Text(
+                t(subtitle),
+                style: const TextStyle(color: MangalamTheme.muted, fontSize: 13, height: 1.35),
               ),
               const SizedBox(height: 16),
             Flexible(
@@ -282,12 +443,12 @@ class _PlanPickerSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (plans.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
                         child: Text(
-                          'No plans are available right now. Please check back later or contact support.',
+                          t('No plans are available right now. Please check back later or contact support.'),
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: MangalamTheme.muted),
+                          style: const TextStyle(color: MangalamTheme.muted),
                         ),
                       )
                     else
@@ -298,6 +459,7 @@ class _PlanPickerSheet extends StatelessWidget {
                         final type = p['plan_type']?.toString() ?? 'credits';
                         final credits = (p['credits'] as num?)?.toInt() ?? 0;
                         final days = (p['duration_days'] as num?)?.toInt() ?? 0;
+                        final period = p['billing_period']?.toString() ?? 'monthly';
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: InkWell(
@@ -330,7 +492,7 @@ class _PlanPickerSheet extends StatelessWidget {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          name,
+                                          tCatalog(name),
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 15,
@@ -340,7 +502,7 @@ class _PlanPickerSheet extends StatelessWidget {
                                           Padding(
                                             padding: const EdgeInsets.only(top: 2),
                                             child: Text(
-                                              desc,
+                                              tCatalog(desc),
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 color: MangalamTheme.muted,
@@ -351,9 +513,29 @@ class _PlanPickerSheet extends StatelessWidget {
                                         Wrap(
                                           spacing: 6,
                                           children: [
-                                            _chip(type),
-                                            if (credits > 0) _chip('$credits credits'),
-                                            if (days > 0) _chip('$days days premium'),
+                                            if (type == 'subscription')
+                                              _chip(
+                                                t(
+                                                  period == 'yearly'
+                                                      ? 'Renews yearly'
+                                                      : period == 'quarterly'
+                                                      ? 'Renews every 3 months'
+                                                      : 'Renews monthly',
+                                                ),
+                                              )
+                                            else
+                                              _chip(t(type == 'credits' ? 'One-time add-on' : 'One-time')),
+                                            if (credits > 0)
+                                              _chip(
+                                                tf(
+                                                  type == 'subscription'
+                                                      ? '{n} credits each renewal'
+                                                      : '{n} credits',
+                                                  {'n': '$credits'},
+                                                ),
+                                              ),
+                                            if (days > 0 && type != 'subscription')
+                                              _chip(tf('{n} days premium', {'n': '$days'})),
                                           ],
                                         ),
                                       ],

@@ -10,7 +10,8 @@ export type AdminFeature =
   | "reports"
   | "payments"
   | "settings"
-  | "admins";
+  | "admins"
+  | "support";
 
 export const ADMIN_FEATURES: AdminFeature[] = [
   "overview",
@@ -20,6 +21,7 @@ export const ADMIN_FEATURES: AdminFeature[] = [
   "payments",
   "settings",
   "admins",
+  "support",
 ];
 
 export const ADMIN_FEATURE_LABELS: Record<AdminFeature, string> = {
@@ -30,6 +32,7 @@ export const ADMIN_FEATURE_LABELS: Record<AdminFeature, string> = {
   payments: "Payments ledger",
   settings: "App settings (plans, coupons, legal)",
   admins: "Admin management",
+  support: "Support tickets",
 };
 
 export type AdminSession = {

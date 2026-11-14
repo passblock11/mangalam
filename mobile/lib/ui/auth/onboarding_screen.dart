@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
+import '../../l10n/app_locale.dart';
 import '../../services/api_client.dart';
+import '../../services/razorpay_checkout.dart';
+import 'registration_membership.dart';
+import 'sign_out_flow.dart';
+import '../core/birth_time_field.dart';
 import '../core/city_search_field.dart';
+import '../core/community_dropdown.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_picker_section.dart';
 import 'onboarding_data.dart';
@@ -19,6 +25,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _api = ApiClient();
+  final _checkout = RazorpayCheckout();
   final _controller = PageController();
   static const _totalSteps = 8;
   int _step = 0;
@@ -38,7 +45,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // Step 3: Religion
   String? _religion;
-  final _community = TextEditingController();
+  String? _community;
   String? _motherTongue;
   String? _diet;
 
@@ -56,8 +63,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // Step 2b: Contact (phone + whatsapp)
   final _phone = TextEditingController();
   final _whatsapp = TextEditingController();
-  bool _phoneVisible =
-      false; // owner opt-in to share contact with verified paid members
+  bool _phoneVisible = false;
+  bool _photosVisible = true;
 
   // Step 6: Astrology
   String? _mangalDosh;
@@ -71,17 +78,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _pMotherTongue;
 
   // App language (asked during onboarding, saved to profiles.app_language)
-  String _appLanguage = 'en';
+  String _appLanguage = AppLocale.instance.code;
 
   @override
   void dispose() {
     _name.dispose();
-    _community.dispose();
     _city.dispose();
     _birthTime.dispose();
     _birthPlace.dispose();
     _phone.dispose();
     _whatsapp.dispose();
+    _checkout.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -93,10 +100,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       case 1:
         return _profileFor != null;
       case 2:
+        final digits = _phone.text.replaceAll(RegExp(r'\D'), '');
         return _gender != null &&
             _dob != null &&
             _name.text.trim().isNotEmpty &&
-            _phone.text.trim().isNotEmpty;
+            digits.length >= 10;
       case 3:
         return _religion != null && _motherTongue != null && _diet != null;
       case 4:
@@ -150,7 +158,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'date_of_birth': _dob!.toIso8601String().split('T').first,
         'profile_for': _profileFor,
         'religion': _religion,
-        'community': _community.text.trim(),
+        'community': _community,
         'mother_tongue': _motherTongue,
         'diet': _diet,
         'city': _city.text.trim(),
@@ -165,11 +173,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'birth_time': _birthTime.text.trim(),
         'birth_place': _birthPlace.text.trim(),
         'photo_urls': _photoUrls,
-        'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+        'phone': '+91${_phone.text.replaceAll(RegExp(r'\D'), '')}',
         'whatsapp_number': _whatsapp.text.trim().isEmpty
             ? null
             : _whatsapp.text.trim(),
         'phone_visible': _phoneVisible,
+        'preferences': {
+          'photos_visible': _photosVisible,
+          'membership_pending': true,
+        },
       };
       final pp = <String, dynamic>{};
       if (_pAgeMin != null) pp['age_min'] = _pAgeMin;
@@ -180,9 +192,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body['app_language'] = _appLanguage;
       body.removeWhere((k, v) => v == null || v == '');
       await _api.patch('/v1/me', body);
+      if (!mounted) return;
+      final joined = await offerRegistrationMembership(
+        context: context,
+        api: _api,
+        checkout: _checkout,
+      );
+      if (!mounted) return;
+      if (!joined) {
+        setState(() {
+          _error = 'Choose a membership to finish registration.';
+        });
+        return;
+      }
       widget.onCompleted();
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = userFacingError(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -219,11 +244,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 20, 12),
-              child: OnboardingProgress(
-                current: _step,
-                total: _totalSteps,
-                onBack: _back,
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OnboardingProgress(
+                      current: _step,
+                      total: _totalSteps,
+                      onBack: _back,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _saving ? null : () => confirmAndSignOut(context),
+                    child: Text(t('Sign out')),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -271,7 +306,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  _error!,
+                  t(_error!),
                   style: const TextStyle(
                     color: MangalamTheme.maroon,
                     fontSize: 13,
@@ -293,7 +328,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : Text(_step == _totalSteps - 1 ? 'Finish' : 'Continue'),
+                    : Text(
+                        _step == _totalSteps - 1
+                            ? t('Choose membership')
+                            : 'Continue',
+                      ),
               ),
             ),
           ],
@@ -331,19 +370,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         // Language selection (asked first during onboarding)
         DropdownButtonFormField<String>(
           initialValue: _appLanguage,
-          decoration: const InputDecoration(
-            labelText: 'App language',
+          decoration: InputDecoration(
+            labelText: t('App language'),
             prefixIcon: Icon(Iconsax.global),
           ),
           items: OnboardingData.appLanguages
               .map((l) => DropdownMenuItem(value: l.code, child: Text(l.name)))
               .toList(),
-          onChanged: (v) => setState(() => _appLanguage = v ?? 'en'),
+          onChanged: (v) {
+            final code = v ?? 'en';
+            setState(() => _appLanguage = code);
+            AppLocale.instance.set(code);
+          },
         ),
         const SizedBox(height: 18),
         PhotoPickerSection(
           photoUrls: _photoUrls,
           onChanged: (urls) => setState(() => _photoUrls = urls),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _photosVisible,
+          onChanged: (v) => setState(() => _photosVisible = v),
+          title: Text(
+            t('Share my photos'),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            t('If this is off, other members only see a blurred photo. They can ask you in chat.'),
+            style: const TextStyle(fontSize: 12, color: MangalamTheme.muted, height: 1.35),
+          ),
         ),
       ],
     );
@@ -380,8 +436,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         TextField(
           controller: _name,
           textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            labelText: 'Full name',
+          decoration: InputDecoration(
+            labelText: t('Full name'),
             prefixIcon: Icon(Iconsax.user),
           ),
         ),
@@ -400,7 +456,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: IgnorePointer(
             child: InputDecorator(
               decoration: InputDecoration(
-                labelText: 'Date of birth',
+                labelText: t('Date of birth'),
                 prefixIcon: const Icon(Iconsax.calendar),
                 suffixIcon: _dob != null
                     ? const Icon(
@@ -411,7 +467,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               child: Text(
                 _dob == null
-                    ? 'Select date'
+                    ? t('Select date')
                     : '${_dob!.day.toString().padLeft(2, '0')} / ${_dob!.month.toString().padLeft(2, '0')} / ${_dob!.year}',
                 style: TextStyle(
                   color: _dob == null ? MangalamTheme.muted : MangalamTheme.ink,
@@ -425,19 +481,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         TextField(
           controller: _phone,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            labelText: 'Phone number',
+          decoration: InputDecoration(
+            labelText: t('Phone number *'),
             prefixText: '+91 ',
             prefixIcon: Icon(Iconsax.call),
-            helperText: 'Visible only to verified, paid members if you opt in.',
+            helperText: t('Required. Other members cannot see this number unless you turn sharing on.'),
           ),
         ),
         const SizedBox(height: 14),
         TextField(
           controller: _whatsapp,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            labelText: 'WhatsApp number (optional)',
+          decoration: InputDecoration(
+            labelText: t('WhatsApp number (optional)'),
             prefixText: '+91 ',
             prefixIcon: Icon(Iconsax.message),
           ),
@@ -447,12 +503,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           value: _phoneVisible,
           onChanged: (v) => setState(() => _phoneVisible = v),
           contentPadding: EdgeInsets.zero,
-          title: const Text(
-            'Share my contact with verified, paid members',
+          title: Text(t('Share my phone number'),
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
-          subtitle: const Text(
-            'Only verified & Premium members can see your phone / WhatsApp. Off by default.',
+          subtitle: Text(t('If this is off, other members can only ask for your number in chat.'),
             style: TextStyle(
               fontSize: 12,
               color: MangalamTheme.muted,
@@ -479,12 +533,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           icon: Iconsax.book_1,
         ),
         const SizedBox(height: 14),
-        TextField(
-          controller: _community,
-          decoration: const InputDecoration(
-            labelText: 'Community / Caste (optional)',
-            prefixIcon: Icon(Iconsax.people),
-          ),
+        CommunityDropdown(
+          value: _community,
+          onChanged: (v) => setState(() => _community = v),
         ),
         const SizedBox(height: 14),
         _dropdown(
@@ -600,20 +651,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           icon: Iconsax.flash,
         ),
         const SizedBox(height: 14),
-        TextField(
+        BirthTimeField(
           controller: _birthTime,
-          decoration: const InputDecoration(
-            labelText: 'Birth time (HH:MM, optional)',
-            prefixIcon: Icon(Iconsax.clock),
-          ),
+          label: 'Birth time (optional)',
         ),
         const SizedBox(height: 14),
-        TextField(
-          controller: _birthPlace,
-          decoration: const InputDecoration(
-            labelText: 'Birth place (optional)',
-            prefixIcon: Icon(Iconsax.location),
-          ),
+        CitySearchField(
+          label: 'Birth place (optional)',
+          icon: Iconsax.location,
+          includeStateInValue: true,
+          initialCity: _birthPlace.text,
+          onSelected: (v) => setState(() => _birthPlace.text = v),
         ),
       ],
     );
@@ -632,14 +680,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: DropdownButtonFormField<int>(
                 initialValue: _pAgeMin,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Min age',
+                decoration: InputDecoration(
+                  labelText: t('Min age'),
                   prefixIcon: Icon(Iconsax.arrow_up),
                 ),
                 items: OnboardingData.ageOptions
                     .map(
                       (a) =>
-                          DropdownMenuItem(value: a, child: Text('$a years')),
+                          DropdownMenuItem(
+                            value: a,
+                            child: Text(tf('{n} years', {'n': '$a'})),
+                          ),
                     )
                     .toList(),
                 onChanged: (v) => setState(() => _pAgeMin = v),
@@ -650,15 +701,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: DropdownButtonFormField<int>(
                 initialValue: _pAgeMax,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Max age',
+                decoration: InputDecoration(
+                  labelText: t('Max age'),
                   prefixIcon: Icon(Iconsax.arrow_down),
                 ),
                 items: OnboardingData.ageOptions
                     .where((a) => _pAgeMin == null || a >= _pAgeMin!)
                     .map(
                       (a) =>
-                          DropdownMenuItem(value: a, child: Text('$a years')),
+                          DropdownMenuItem(
+                            value: a,
+                            child: Text(tf('{n} years', {'n': '$a'})),
+                          ),
                     )
                     .toList(),
                 onChanged: (v) => setState(() => _pAgeMax = v),
@@ -699,7 +753,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       isExpanded: true,
       menuMaxHeight: 320,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: t(label),
         prefixIcon: icon != null ? Icon(icon) : null,
       ),
       items: items
@@ -707,7 +761,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             (e) => DropdownMenuItem(
               value: e,
               child: Text(
-                labelFor != null ? labelFor(e) : e,
+                t(labelFor != null ? labelFor(e) : e),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
                 softWrap: false,

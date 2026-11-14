@@ -15,7 +15,7 @@ const patchSchema = z
     height_cm: z.number().int().min(100).max(250).optional(),
     profile_for: z.string().max(80).optional(),
     marital_status: z.string().max(80).optional(),
-    phone: z.string().max(40).optional(),
+    phone: z.string().min(10).max(40).optional(),
     city: z.string().max(120).optional(),
     state: z.string().max(120).optional(),
     country: z.string().max(80).optional(),
@@ -57,7 +57,11 @@ meRouter.get("/", async (c) => {
     .eq("profile_id", uid)
     .maybeSingle();
   if (wErr) return c.json({ error: wErr.message }, 500);
-  return c.json({ profile: profile ?? null, wallet: wallet ?? null });
+  const tokenEmail = (c.get("user") as { email?: string } | undefined)?.email ?? null;
+  return c.json({
+    profile: profile ? { ...profile, email: tokenEmail } : null,
+    wallet: wallet ?? null,
+  });
 });
 
 meRouter.patch("/", async (c) => {
@@ -70,8 +74,25 @@ meRouter.patch("/", async (c) => {
   const sb = getSupabaseAdmin();
 
   let partnerPatch: Record<string, unknown> | undefined;
-  const { partner_preferences: incomingPartner, last_active_at: _skip, ...rest } =
-    parsed.data;
+  let preferencesPatch: Record<string, unknown> | undefined;
+  const {
+    partner_preferences: incomingPartner,
+    preferences: incomingPreferences,
+    last_active_at: _skip,
+    ...rest
+  } = parsed.data;
+  if (incomingPreferences && typeof incomingPreferences === "object") {
+    const { data: existingPrefs } = await sb
+      .from("profiles")
+      .select("preferences")
+      .eq("id", uid)
+      .maybeSingle();
+    const prevPrefs =
+      existingPrefs?.preferences && typeof existingPrefs.preferences === "object"
+        ? (existingPrefs.preferences as Record<string, unknown>)
+        : {};
+    preferencesPatch = { ...prevPrefs, ...incomingPreferences };
+  }
   if (incomingPartner && typeof incomingPartner === "object") {
     const { data: existing } = await sb
       .from("profiles")
@@ -86,17 +107,51 @@ meRouter.patch("/", async (c) => {
     partnerPatch = { ...prev, ...incomingPartner };
   }
 
+  const phone = typeof rest.phone === "string" ? rest.phone.trim() : "";
+  if (phone) {
+    const { data: taken, error: lookupErr } = await sb
+      .from("profiles")
+      .select("id")
+      .eq("phone", phone)
+      .neq("id", uid)
+      .maybeSingle();
+    if (!lookupErr && taken) {
+      return c.json({ error: duplicatePhoneMessage }, 409);
+    }
+  }
+
   const { data, error } = await sb
     .from("profiles")
     .update({
       ...rest,
       ...(partnerPatch !== undefined ? { partner_preferences: partnerPatch } : {}),
+      ...(preferencesPatch !== undefined ? { preferences: preferencesPatch } : {}),
       updated_at: new Date().toISOString(),
       last_active_at: new Date().toISOString(),
     })
     .eq("id", uid)
     .select()
     .single();
-  if (error) return c.json({ error: error.message }, 500);
+  if (error) {
+    const friendly = friendlyProfileError(error);
+    return c.json({ error: friendly.error }, friendly.status);
+  }
   return c.json({ profile: data });
 });
+
+const duplicatePhoneMessage =
+  "This phone number is already registered with another account.";
+
+function friendlyProfileError(error: {
+  code?: string;
+  message: string;
+  details?: string | null;
+}): { status: 409 | 500; error: string } {
+  const blob = `${error.message} ${error.details ?? ""}`.toLowerCase();
+  const duplicatePhone =
+    blob.includes("profiles_phone_key") ||
+    blob.includes("profile_phone_key") ||
+    (error.code === "23505" && (blob.includes("phone_key") || blob.includes("(phone)")));
+  if (duplicatePhone) return { status: 409, error: duplicatePhoneMessage };
+  return { status: 500, error: error.message };
+}

@@ -47,52 +47,72 @@ class PhotoService {
   }
 
   /// Upload a single file and return its public URL.
+  ///
+  /// Each upload gets its own file name. Reusing `{index}.jpg` kept the same
+  /// URL, so the app (and the CDN) kept showing the previous photo until a
+  /// full restart.
   /// Throws on failure.
-  static Future<String> upload(XFile file, int index) async {
+  static Future<String> upload(XFile file, [int index = 0]) async {
     final uid = _uid;
     if (uid.isEmpty) throw StateError('Not signed in');
-    final path = '$uid/$index.jpg';
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final path = '$uid/$stamp-$index.jpg';
     final bytes = await file.readAsBytes();
-    await _sb.storage
-        .from(_bucket)
-        .uploadBinary(
+    await _sb.storage.from(_bucket).uploadBinary(
           path,
           bytes,
           fileOptions: const FileOptions(
             contentType: 'image/jpeg',
-            upsert: true,
+            upsert: false,
+            cacheControl: '31536000',
           ),
         );
-    return _sb.storage.from(_bucket).getPublicUrl(path);
+    final url = _sb.storage.from(_bucket).getPublicUrl(path);
+    return '$url?v=$stamp';
   }
 
-  /// Replace the entire photo set: uploads [files] at indices 0..n-1 and
-  /// returns the list of public URLs. Also removes any higher-index objects.
+  /// Upload [files] as new photos and return their public URLs.
   static Future<List<String>> replaceAll(List<XFile> files) async {
-    final uid = _uid;
-    if (uid.isEmpty) throw StateError('Not signed in');
     final urls = <String>[];
     for (var i = 0; i < files.length; i++) {
       urls.add(await upload(files[i], i));
     }
-    // Best-effort cleanup of stale higher-index photos.
-    for (var i = files.length; i < files.length + 6; i++) {
-      try {
-        await _sb.storage.from(_bucket).remove(['$uid/$i.jpg']);
-      } catch (_) {
-        // ignore — may not exist
-      }
-    }
     return urls;
   }
 
-  /// Delete a single photo by index.
-  static Future<void> deleteAt(int index) async {
-    final uid = _uid;
-    if (uid.isEmpty) return;
+  /// Delete a chat attachment. Profile photos are left alone.
+  static Future<void> deleteChatUrl(String url) async {
+    final path = objectPath(url);
+    if (path == null || !path.contains('/chat/')) return;
     try {
-      await _sb.storage.from(_bucket).remove(['$uid/$index.jpg']);
+      await _sb.storage.from(_chatBucket).remove([path]);
     } catch (_) {}
+  }
+
+  /// Delete the storage object behind a profile photo URL.
+  /// Chat files that share this bucket are left alone.
+  static Future<void> deleteByUrl(String url) async {
+    final path = objectPath(url);
+    if (path == null || path.isEmpty || path.contains('/chat/')) return;
+    try {
+      await _sb.storage.from(_bucket).remove([path]);
+    } catch (_) {}
+  }
+
+  /// `.../profile-photos/{uid}/{file}.jpg` → `{uid}/{file}.jpg`.
+  static String? objectPath(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    const marker = '/profile-photos/';
+    final i = uri.path.indexOf(marker);
+    if (i < 0) return null;
+    final raw = uri.path.substring(i + marker.length);
+    String path = raw;
+    try {
+      path = Uri.decodeComponent(raw);
+    } catch (_) {}
+    if (path.isEmpty || path.contains('..')) return null;
+    return path;
   }
 
   // ---- Verification documents (private bucket) ----
@@ -124,23 +144,38 @@ class PhotoService {
 
   // ---- Chat attachments (public bucket) ----
 
-  static const _chatBucket = 'chat-attachments';
+  // Chat files live in the existing public profile-photos bucket, under
+  // the sender's own folder, so uploads work with the storage rules that
+  // are already in place.
+  static const _chatBucket = 'profile-photos';
 
-  /// Upload a chat attachment (image / video / file) and return its public
-  /// URL. Path layout: {conversationId}/{senderId}/{timestamp}.{ext}.
+  static const maxChatBytes = 5 * 1024 * 1024;
+
+  /// Upload a chat photo or file and return its public URL.
+  /// Path layout: {senderId}/chat/{conversationId}/{timestamp}.{ext}.
   static Future<({String url, String type, String mime, String name, int size})>
       uploadChatAttachment({
     required String conversationId,
     required XFile file,
-    required String type, // image | video | file | audio
+    required String type, // image | file | audio
   }) async {
     final uid = _uid;
     if (uid.isEmpty) throw StateError('Not signed in');
-    final mime = file.mimeType ?? 'application/octet-stream';
+    if (type == 'video') {
+      throw StateError('Video uploads are not available.');
+    }
+    final size = await file.length();
+    if (size > maxChatBytes) {
+      throw StateError('File is larger than 5 MB.');
+    }
+    final mime = _safeMime(file, type);
     final ext = _extFor(mime, file.name);
     final path =
-        '$conversationId/$uid/${DateTime.now().millisecondsSinceEpoch}$ext';
+        '$uid/chat/$conversationId/${DateTime.now().millisecondsSinceEpoch}$ext';
     final bytes = await file.readAsBytes();
+    if (bytes.length > maxChatBytes) {
+      throw StateError('File is larger than 5 MB.');
+    }
     await _sb.storage.from(_chatBucket).uploadBinary(
           path,
           bytes,
@@ -151,9 +186,46 @@ class PhotoService {
       url: url,
       type: type,
       mime: mime,
-      name: file.name,
+      name: file.name.isEmpty ? 'file$ext' : file.name,
       size: bytes.length,
     );
+  }
+
+  /// Storage rejects anything that is not a real type/subtype, including
+  /// Android content:// identifiers that file pickers sometimes return.
+  static String _safeMime(XFile file, String type) {
+    final raw = (file.mimeType ?? '').trim().toLowerCase();
+    final ok = RegExp(r'^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$');
+    if (ok.hasMatch(raw) && !raw.startsWith('content:')) return raw;
+    final name = file.name.toLowerCase();
+    const byExt = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.mp3': 'audio/mpeg',
+      '.m4a': 'audio/mp4',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+    for (final entry in byExt.entries) {
+      if (name.endsWith(entry.key)) return entry.value;
+    }
+    switch (type) {
+      case 'image':
+        return 'image/jpeg';
+      case 'video':
+        return 'video/mp4';
+      case 'audio':
+        return 'audio/mpeg';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   static String _extFor(String mime, String name) {

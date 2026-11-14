@@ -30,13 +30,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.18.3
   http: ^1.6.0
-  intl: ^0.20.3
+  intl: 0.20.2
   url_launcher: ^6.3.3
   webview_flutter: ^4.10.0
   razorpay_flutter: ^1.4.7
@@ -47,6 +49,14 @@ dependencies:
   firebase_core: ^3.6.0
   firebase_messaging: ^15.1.0
   flutter_local_notifications: ^17.2.2
+  google_fonts: ^8.2.1
+  shared_preferences: ^2.5.6
+  pdf: ^3.12.0
+  printing: ^5.14.3
+  cryptography: ^2.7.0
+  safe_device: ^1.2.1
+  image_cropper: ^12.2.1
+  google_mlkit_face_detection: ^0.14.0
 
 dev_dependencies:
   flutter_test:
@@ -61,6 +71,10 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.3
   flutter_native_splash: ^2.4.6
 
+# pdf 3.12 only allows archive <4.1, and that build cannot decode photos.
+dependency_overrides:
+  archive: 4.6.0
+
 # ── flutter_launcher_icons ────────────────────────────────────────────────────
 # Generate with: dart run flutter_launcher_icons
 flutter_launcher_icons:
@@ -69,22 +83,24 @@ flutter_launcher_icons:
   image_path: "assets/icon.png"
   min_sdk_android: 21
   adaptive_icon_background: "#B71C1C"
-  adaptive_icon_foreground: "assets/icon.png"
+  adaptive_icon_foreground: "assets/icon_foreground.png"
+  # The heart and ring already sit inside the safe area.
+  adaptive_icon_foreground_inset: 0
   remove_alpha_ios: true
   web:
     generate: false
 
 # ── flutter_native_splash ────────────────────────────────────────────────────
 # Generate with: dart run flutter_native_splash:create
-# This is the NATIVE splash shown while the Flutter engine loads. After it,
-# the in-app _SplashScreen widget shows the branded splash for 3 seconds.
+# Native launch is a flat maroon colour while the engine loads. The animated
+# in-app splash is the only branded screen.
 flutter_native_splash:
+  # Colour only. The animated in-app splash is the branded screen.
   color: "#B71C1C"
-  image: assets/splash_logo.png
   android_12:
     color: "#B71C1C"
     icon_background_color: "#B71C1C"
-    image: assets/icon.png
+    image: assets/splash_blank.png
   android: true
   ios: true
   web: false

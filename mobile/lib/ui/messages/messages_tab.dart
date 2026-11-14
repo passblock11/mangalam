@@ -8,7 +8,9 @@ import '../../services/api_client.dart';
 import '../../utils/formatting.dart';
 import '../core/mangalam_theme.dart';
 import '../core/notifications_bell.dart';
+import '../profile/profile_widgets.dart';
 import 'chat_screen.dart';
+import '../../l10n/app_locale.dart';
 
 class MessagesTab extends StatefulWidget {
   const MessagesTab({super.key});
@@ -44,7 +46,7 @@ class _MessagesTabState extends State<MessagesTab>
     _channel = Supabase.instance.client.channel('messages_list');
     _channel!
         .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
+          event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'messages',
           callback: (_) {
@@ -84,15 +86,15 @@ class _MessagesTabState extends State<MessagesTab>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Messages'),
+        title: Text(t('Messages')),
         actions: const [NotificationsBell()],
         bottom: TabBar(
           controller: _tab,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Primary'),
-            Tab(text: 'Sent'),
+          tabs: [
+            Tab(text: t('Primary')),
+            Tab(text: t('Sent')),
           ],
         ),
       ),
@@ -112,7 +114,7 @@ class _MessagesTabState extends State<MessagesTab>
               subtitle: snap.error.toString(),
               action: FilledButton(
                 onPressed: () => setState(() => _key++),
-                child: const Text('Retry'),
+                child: Text(t('Retry')),
               ),
             );
           }
@@ -137,20 +139,21 @@ class _MessagesTabState extends State<MessagesTab>
               final row = list[i] as Map<String, dynamic>;
               final id = row['id'] as String;
               final other = row['other_profile'] as Map<String, dynamic>? ?? {};
-              final name = other['display_name']?.toString() ?? 'Member';
+              final name = other['display_name']?.toString() ?? t('Member');
               final last = row['last_message'] as Map<String, dynamic>?;
               final rawBody = last?['body'] as String? ?? '';
               final attachType = last?['attachment_type']?.toString();
-              final body = rawBody.trim().isNotEmpty
-                  ? rawBody
-                  : attachType == 'image'
-                      ? '📷 Photo'
-                      : attachType == 'video'
-                          ? '🎥 Video'
+              final deleted = last?['deleted'] == true;
+              final body = deleted
+                  ? t('This message is deleted')
+                  : rawBody.trim().isNotEmpty
+                      ? rawBody
+                      : attachType == 'image'
+                          ? t('📷 Photo')
                           : attachType == 'audio'
-                              ? '🎤 Voice message'
+                              ? t('🎤 Voice message')
                               : attachType != null
-                                  ? '📎 ${last?['attachment_name'] ?? 'File'}'
+                                  ? '📎 ${last?['attachment_name'] ?? t('File')}'
                                   : '';
               final created = last?['created_at'] as String?;
               final verified = other['is_verified'] == true;
@@ -168,30 +171,34 @@ class _MessagesTabState extends State<MessagesTab>
                   child: SizedBox(
                     width: 52,
                     height: 52,
-                    child: ProfilePhoto(name: name, photoUrls: photoUrls),
+                    child: ProfilePhoto(
+                      name: name,
+                      photoUrls: photoUrls,
+                      locked: other['photos_locked'] == true,
+                    ),
                   ),
                 ),
                 title: Row(
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text(
                         name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 15.5,
                         ),
                       ),
                     ),
-                    if (verified)
-                      const Icon(
-                        Iconsax.verify,
-                        size: 14,
-                        color: MangalamTheme.gold,
-                      ),
+                    if (verified) ...[
+                      const SizedBox(width: 6),
+                      const VerifiedBadge(compact: true),
+                    ],
                   ],
                 ),
                 subtitle: Text(
-                  body.isEmpty ? 'Say hello' : body,
+                  body.isEmpty ? t('Say hello') : body,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -214,6 +221,7 @@ class _MessagesTabState extends State<MessagesTab>
                         otherName: name,
                         otherProfileId: other['id']?.toString(),
                         otherPhotoUrls: photoUrls,
+                        photosLocked: other['photos_locked'] == true,
                       ),
                     ),
                   );

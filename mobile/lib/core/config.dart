@@ -24,6 +24,13 @@ class AppConfig {
     defaultValue: 'https://mangalam-api.vercel.app',
   );
 
+  /// AES-256 key shared with the API (standard base64).
+  /// Empty keeps calls in ordinary JSON.
+  static const payloadKey = String.fromEnvironment(
+    'API_PAYLOAD_KEY',
+    defaultValue: 'Oam7tvj2gmU/mbMR2cqe0+liE3VZzH8cR+N+7KrhfZ8=',
+  );
+
   static bool get hasSupabase =>
       supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
 

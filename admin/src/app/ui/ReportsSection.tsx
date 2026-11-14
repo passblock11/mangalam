@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAdminRevision } from "./admin-live";
 import { Eye, Ban, RefreshCw, ShieldCheck, ShieldX, X, ZoomIn, Flag } from "lucide-react";
 import {
   fetchReportsWithContext,
@@ -27,11 +28,13 @@ type Report = {
   resolution: string | null;
   reported_name: string | null;
   reported_phone: string | null;
+  reported_email: string | null;
   reported_photo: string | null;
   reported_banned: boolean;
   reported_verified: boolean;
   reporter_name: string | null;
   reporter_phone: string | null;
+  reporter_email: string | null;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -54,19 +57,33 @@ export function ReportsSection() {
   const [banFor, setBanFor] = useState<Report | null>(null);
   const [banReason, setBanReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const rev = useAdminRevision("reports");
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     const res = await fetchReportsWithContext();
-    if (!res.ok) setError(res.error);
-    else setItems(res.data);
-    setLoading(false);
+    if (!res.ok) {
+      if (!silent) setError(res.error);
+    } else {
+      setItems(res.data);
+      setDetail((current) =>
+        current ? res.data.find((row) => row.id === current.id) ?? current : current
+      );
+      setError(null);
+    }
+    if (!silent) setLoading(false);
   }
 
   useEffect(() => {
-    void load();
+    void load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (rev === 0) return;
+    void load(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rev]);
 
   async function setStatus(id: string, status: "open" | "reviewing" | "closed" | "actioned") {
     setBusy(id);
@@ -139,7 +156,7 @@ export function ReportsSection() {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
       ) : filtered.length === 0 ? (
         <EmptyState>No {filter === "all" ? "" : filter} reports.</EmptyState>
@@ -165,7 +182,9 @@ export function ReportsSection() {
                       {r.status}
                     </Badge>
                   </div>
-                  <p className="truncate text-xs text-[var(--muted)]">{r.reported_phone ?? "no phone"}</p>
+                  <p className="truncate text-xs text-[var(--muted)]">
+                    {r.reported_phone ?? "no phone"} · {r.reported_email ?? "no email"}
+                  </p>
                   <p className="mt-1 text-xs text-[var(--muted)]">
                     Reported by {r.reporter_name ?? "a member"} · {timeAgo(r.created_at)}
                   </p>
@@ -272,7 +291,9 @@ export function ReportsSection() {
             <Field label="Reported user">
               <div>
                 <p className="font-semibold text-[var(--ink)]">{detail.reported_name ?? "Unnamed"}</p>
-                <p className="text-xs text-[var(--muted)]">{detail.reported_phone ?? "no phone"}</p>
+                <p className="text-xs text-[var(--muted)]">
+                  {detail.reported_phone ?? "no phone"} · {detail.reported_email ?? "no email"}
+                </p>
                 <p className="text-xs text-[var(--muted)]">
                   Status: {detail.reported_banned ? "Banned" : detail.reported_verified ? "Verified" : "Active"}
                 </p>
@@ -281,7 +302,9 @@ export function ReportsSection() {
             <Field label="Reporter">
               <div>
                 <p className="font-semibold text-[var(--ink)]">{detail.reporter_name ?? "Unnamed"}</p>
-                <p className="text-xs text-[var(--muted)]">{detail.reporter_phone ?? "no phone"}</p>
+                <p className="text-xs text-[var(--muted)]">
+                  {detail.reporter_phone ?? "no phone"} · {detail.reporter_email ?? "no email"}
+                </p>
               </div>
             </Field>
             <Field label="Submitted">{fmtDateTime(detail.created_at)}</Field>

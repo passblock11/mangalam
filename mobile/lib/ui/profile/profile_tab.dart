@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-
+import '../../l10n/app_locale.dart';
 import '../../services/api_client.dart';
-import '../../services/razorpay_checkout.dart';
+import '../../services/biodata_pdf.dart';
 import '../auth/sign_out_flow.dart';
 import '../../utils/formatting.dart';
 import '../auth/onboarding_data.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_picker_section.dart';
 import 'edit_profile_screen.dart';
+import 'membership_screen.dart';
 import 'legal_screen.dart';
 import 'profile_preview_screen.dart';
+import 'profile_widgets.dart';
+import 'support_screen.dart';
 import 'verification_screen.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -24,15 +26,15 @@ class ProfileTab extends StatefulWidget {
 
 class _ProfileTabState extends State<ProfileTab> {
   final _api = ApiClient();
-  final _razorpay = RazorpayCheckout();
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _wallet;
+  Map<String, dynamic>? _membership;
   Map<String, dynamic>? _appSettings;
   String? _error;
   bool _loading = true;
   bool _savingPhotos = false;
+  bool _exportingBiodata = false;
 
-  String? get _supportEmail => _appSettings?['support_email'] as String?;
   String? get _supportPhone => _appSettings?['support_phone'] as String?;
   String? get _supportWhatsapp => _appSettings?['support_whatsapp'] as String?;
 
@@ -42,24 +44,21 @@ class _ProfileTabState extends State<ProfileTab> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _razorpay.dispose();
-    super.dispose();
-  }
-
   Future<void> _load() async {
     try {
       final results = await Future.wait([
         _api.get('/v1/me'),
         _api.get('/v1/config').catchError((_) => null),
+        _api.get('/v1/payments/membership').catchError((_) => null),
       ]);
       final json = results[0] as Map<String, dynamic>;
       final cfg = results[1] as Map<String, dynamic>?;
+      final membership = results[2] as Map<String, dynamic>?;
       if (!mounted) return;
       setState(() {
         _profile = json['profile'] as Map<String, dynamic>?;
         _wallet = json['wallet'] as Map<String, dynamic>?;
+        _membership = membership;
         _appSettings = cfg?['settings'] as Map<String, dynamic>?;
         _error = null;
         _loading = false;
@@ -67,84 +66,20 @@ class _ProfileTabState extends State<ProfileTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = userFacingError(e);
         _loading = false;
       });
     }
   }
 
-  Future<void> _signOut(BuildContext context) => confirmAndSignOut(context);
-
-  Future<void> _openSupport() async {
-    final email = _supportEmail;
-    final phone = _supportPhone;
-    final wa = _supportWhatsapp;
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Contact support',
-                style: Theme.of(
-                  ctx,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 12),
-              if (wa != null && wa.isNotEmpty)
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(ctx, 'whatsapp'),
-                  icon: const Icon(Iconsax.message),
-                  label: Text('WhatsApp: $wa'),
-                ),
-              if (email != null && email.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(ctx, 'email'),
-                  icon: const Icon(Iconsax.sms),
-                  label: Text('Email: $email'),
-                ),
-              ],
-              if (phone != null && phone.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(ctx, 'call'),
-                  icon: const Icon(Iconsax.call),
-                  label: Text('Call: $phone'),
-                ),
-              ],
-              if ((email == null || email.isEmpty) &&
-                  (phone == null || phone.isEmpty) &&
-                  (wa == null || wa.isEmpty)) ...[
-                const SizedBox(height: 8),
-                const Text(
-                  'Support contact not configured yet. Please try again later.',
-                  style: TextStyle(color: MangalamTheme.muted, fontSize: 13),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+  Future<void> _openMembership() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const MembershipScreen()),
     );
-    if (choice == null || !mounted) return;
-    final uri = switch (choice) {
-      'whatsapp' => Uri.parse(
-        'https://wa.me/${wa!.replaceAll(RegExp(r'\D'), '')}',
-      ),
-      'email' => Uri.parse('mailto:$email'),
-      'call' => Uri.parse('tel:${phone!.replaceAll(RegExp(r'\s'), '')}'),
-      _ => null,
-    };
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    if (mounted) await _load();
   }
+
+  Future<void> _signOut(BuildContext context) => confirmAndSignOut(context);
 
   Future<void> _changeLanguage() async {
     final langs = OnboardingData.appLanguages;
@@ -162,8 +97,7 @@ class _ProfileTabState extends State<ProfileTab> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                child: Text(
-                  'App language',
+                child: Text(t('App language'),
                   style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -199,12 +133,15 @@ class _ProfileTabState extends State<ProfileTab> {
     if (choice == null || choice == current || !mounted) return;
     try {
       await _api.patch('/v1/me', {'app_language': choice});
+      await AppLocale.instance.set(choice);
       if (!mounted) return;
       setState(() => _profile?['app_language'] = choice);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Language set to ${OnboardingData.appLanguageName(choice)}',
+            tf('Language set to {name}', {
+              'name': OnboardingData.appLanguageName(choice),
+            }),
           ),
         ),
       );
@@ -212,8 +149,74 @@ class _ProfileTabState extends State<ProfileTab> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: Text(tError(e))));
       }
+    }
+  }
+
+  Future<void> _downloadBiodata() async {
+    if (_exportingBiodata) return;
+    final profile = _profile;
+    if (profile == null || !mounted) return;
+    final email = Supabase.instance.client.auth.currentUser?.email ?? '';
+    final box = context.findRenderObject() as RenderBox?;
+    final origin = box == null || !box.hasSize
+        ? null
+        : box.localToGlobal(Offset.zero) & box.size;
+    setState(() => _exportingBiodata = true);
+    final nav = Navigator.of(context, rootNavigator: true);
+    var dialogOpen = false;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: MangalamTheme.maroon,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(child: Text(t('Preparing your biodata…'))),
+            ],
+          ),
+        ),
+      ),
+    );
+    dialogOpen = true;
+    try {
+      await shareOwnBiodata(
+        profile: profile,
+        email: email,
+        shareOrigin: origin,
+        beforeShare: () async {
+          if (!dialogOpen) return;
+          dialogOpen = false;
+          nav.pop();
+          await Future<void>.delayed(const Duration(milliseconds: 280));
+        },
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(t('Could not create the biodata. Please try again.')),
+          ),
+        );
+      }
+    } finally {
+      if (dialogOpen) {
+        dialogOpen = false;
+        nav.pop();
+      }
+      if (mounted) setState(() => _exportingBiodata = false);
     }
   }
 
@@ -226,12 +229,12 @@ class _ProfileTabState extends State<ProfileTab> {
       setState(() => _profile?['photo_urls'] = urls);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Photos updated')));
+      ).showSnackBar(SnackBar(content: Text(t('Photos updated'))));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: Text(tError(e))));
       }
     } finally {
       if (mounted) setState(() => _savingPhotos = false);
@@ -266,12 +269,12 @@ class _ProfileTabState extends State<ProfileTab> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: Text(t('Profile')),
         actions: [
           IconButton(
             onPressed: () => _signOut(context),
             icon: const Icon(Iconsax.logout),
-            tooltip: 'Sign out',
+            tooltip: t('Sign out'),
           ),
         ],
       ),
@@ -287,7 +290,7 @@ class _ProfileTabState extends State<ProfileTab> {
               action: FilledButton.icon(
                 onPressed: _load,
                 icon: const Icon(Iconsax.refresh),
-                label: const Text('Retry'),
+                label: Text(t('Retry')),
               ),
             )
           : RefreshIndicator(
@@ -312,6 +315,9 @@ class _ProfileTabState extends State<ProfileTab> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(66),
                             child: ProfilePhoto(
+                              key: ValueKey(
+                                photoUrls.isEmpty ? name : photoUrls.first,
+                              ),
                               name: name,
                               photoUrls: photoUrls,
                             ),
@@ -338,13 +344,27 @@ class _ProfileTabState extends State<ProfileTab> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Text(
-                    name,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.3,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                        ),
+                      ),
+                      if (verified) ...[
+                        const SizedBox(width: 8),
+                        const VerifiedBadge(),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -355,13 +375,23 @@ class _ProfileTabState extends State<ProfileTab> {
                       fontSize: 13,
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${t('Phone')}: ${(_profile?['phone']?.toString().trim().isNotEmpty ?? false) ? _profile!['phone'] : t('Not added')}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: MangalamTheme.ink,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     alignment: WrapAlignment.center,
                     children: [
-                      if (age != null) _pill(Iconsax.cake, '$age yrs'),
+                      if (age != null) _pill(Iconsax.cake, tf('{n} yrs', {'n': '$age'})),
                       if (community.isNotEmpty)
                         _pill(Iconsax.profile_2user, community),
                       if (lang.isNotEmpty) _pill(Iconsax.translate, lang),
@@ -381,7 +411,7 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '$city, $state',
+                            '$city, ${t(state)}',
                             style: const TextStyle(
                               color: MangalamTheme.muted,
                               fontSize: 13,
@@ -403,7 +433,7 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            occupation,
+                            t(occupation),
                             style: const TextStyle(
                               color: MangalamTheme.muted,
                               fontSize: 13,
@@ -423,7 +453,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       if (ok == true && mounted) await _load();
                     },
                     icon: const Icon(Iconsax.edit),
-                    label: const Text('Edit profile'),
+                    label: Text(t('Edit profile')),
                   ),
                   const SizedBox(height: 12),
                   _VerificationCard(
@@ -454,7 +484,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         _MenuTile(
                           icon: Iconsax.document_text,
                           title: 'Premium biodata',
-                          subtitle: 'Export PDF (coming soon)',
+                          subtitle: 'Download PDF',
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -464,8 +494,7 @@ class _ProfileTabState extends State<ProfileTab> {
                               color: MangalamTheme.gold.withValues(alpha: 0.18),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text(
-                              'FREE',
+                            child: Text(t('FREE'),
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
@@ -473,15 +502,7 @@ class _ProfileTabState extends State<ProfileTab> {
                               ),
                             ),
                           ),
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Biodata PDF export is coming soon',
-                                ),
-                              ),
-                            );
-                          },
+                          onTap: _downloadBiodata,
                         ),
                         const Divider(height: 1, indent: 16),
                         _MenuTile(
@@ -498,11 +519,15 @@ class _ProfileTabState extends State<ProfileTab> {
                         _MenuTile(
                           icon: Iconsax.info_circle,
                           title: 'Get help & support',
-                          subtitle:
-                              _supportEmail ??
-                              _supportPhone ??
-                              'Contact our team',
-                          onTap: _openSupport,
+                          subtitle: supportEmail,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => SupportScreen(
+                                phone: _supportPhone,
+                                whatsapp: _supportWhatsapp,
+                              ),
+                            ),
+                          ),
                         ),
                         const Divider(height: 1, indent: 16),
                         _MenuTile(
@@ -586,102 +611,108 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
                   const SizedBox(height: 16),
 
-                  // ── Premium card ──
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFFFFF8E1), Color(0xFFFFE9B0)],
-                      ),
-                      border: Border.all(
-                        color: MangalamTheme.gold.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Premium',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(
-                                color: MangalamTheme.gold,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Iconsax.crown,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Unlock unlimited contacts, advanced filters & more.',
-                          style: TextStyle(
-                            color: MangalamTheme.muted,
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Icon(
-                              Iconsax.wallet,
-                              size: 18,
-                              color: MangalamTheme.maroon,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Contact balance: ${_wallet?['contact_credits'] ?? '—'}',
-                              style: const TextStyle(
-                                color: MangalamTheme.maroon,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: () async {
-                            final ok = await _razorpay.rechargeContactCredits(
-                              context,
-                            );
-                            if (ok && mounted) await _load();
-                          },
-                          icon: const Icon(Iconsax.flash),
-                          label: const Text('Recharge now'),
-                        ),
-                        if (_wallet?['premium_until'] != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Valid till ${formatDate(_wallet!['premium_until'])}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: MangalamTheme.muted,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                  _membershipEntry(),
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _membershipEntry() {
+    final until = DateTime.tryParse(_wallet?['premium_until']?.toString() ?? '');
+    final purchased = until != null && until.isAfter(DateTime.now());
+    final waived = _membership?['membership_waived'] == true;
+    final active = purchased || waived;
+    final raw = _membership?['subscription'];
+    final sub = raw is Map ? Map<String, dynamic>.from(raw) : null;
+    final name = (sub?['plan_name']?.toString().trim().isNotEmpty ?? false)
+        ? tCatalog(sub!['plan_name'].toString())
+        : (waived && !purchased
+            ? t('Included')
+            : (purchased ? t('Premium') : t('No active membership')));
+    final expiry = until == null ? '' : formatDate(until);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: _openMembership,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE7E2DC)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (active)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF18A058),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                t('Active'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          Text(
+                            t('My Membership'),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: MangalamTheme.muted,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Iconsax.arrow_right_3, color: MangalamTheme.muted),
+                  ],
+                ),
+              ),
+              if (expiry.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF3F6FB),
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+                  ),
+                  child: Text(
+                    '${t('Membership expiring on')} $expiry',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF3D4A63),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -698,7 +729,7 @@ class _ProfileTabState extends State<ProfileTab> {
           Icon(icon, size: 13, color: MangalamTheme.maroon),
           const SizedBox(width: 4),
           Text(
-            text,
+            tValue(text),
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -742,12 +773,12 @@ class _MenuTile extends StatelessWidget {
         child: Icon(icon, size: 20, color: MangalamTheme.maroon),
       ),
       title: Text(
-        title,
+        t(title),
         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
       ),
       subtitle: subtitle != null
           ? Text(
-              subtitle!,
+              t(subtitle!),
               style: const TextStyle(
                 fontSize: 12.5,
                 color: MangalamTheme.muted,
@@ -840,7 +871,7 @@ class _VerificationCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    t(title),
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 15,
@@ -849,7 +880,7 @@ class _VerificationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    subtitle,
+                    t(subtitle),
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: MangalamTheme.muted,

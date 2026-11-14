@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
+import '../../l10n/app_locale.dart';
 import '../../services/api_client.dart';
 import '../../services/notification_service.dart';
 import '../../utils/formatting.dart';
@@ -43,7 +44,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = userFacingError(e);
         _loading = false;
       });
     }
@@ -63,6 +64,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Iconsax.eye;
       case 'verification':
         return Iconsax.shield;
+      case 'support':
+        return Iconsax.headphone;
       case 'report':
         return Iconsax.warning_2;
       default:
@@ -87,30 +90,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void _onTap(Map<String, dynamic> item) {
     final type = item['type'] as String? ?? 'system';
     final data = (item['data'] as Map?)?.cast<String, dynamic>() ?? {};
-    final conversationId = data['conversation_id'] as String?;
-    final fromProfileId = data['from_profile_id'] as String?;
-    if (type == 'message' && conversationId != null && conversationId.isNotEmpty) {
-      Navigator.of(context).pushNamed('/chat', arguments: {
-        'conversation_id': conversationId,
-        'other_name': item['title'] as String? ?? 'Member',
-      });
-    } else if ((type == 'like' || type == 'match' || type == 'shortlist') &&
-        fromProfileId != null &&
-        fromProfileId.isNotEmpty) {
-      Navigator.of(context).pushNamed('/profile', arguments: {'id': fromProfileId});
-    }
+    openNotificationTarget(
+      context,
+      type: type,
+      data: data,
+      title: item['title'] as String?,
+      body: item['body'] as String?,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(t('Notifications')),
         actions: [
           IconButton(
             onPressed: _load,
             icon: const Icon(Iconsax.refresh),
-            tooltip: 'Refresh',
+            tooltip: t('Refresh'),
           ),
         ],
       ),
@@ -128,7 +126,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     subtitle: _error!,
                     action: FilledButton(
                       onPressed: _load,
-                      child: const Text('Retry'),
+                      child: Text(t('Retry')),
                     ),
                   )
                 : _items.isEmpty
@@ -179,7 +177,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    title,
+                                    tNotice(title),
                                     style: TextStyle(
                                       fontWeight: unread
                                           ? FontWeight.w800
@@ -205,7 +203,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 : Padding(
                                     padding: const EdgeInsets.only(top: 3),
                                     child: Text(
-                                      body,
+                                      tNotice(body),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(

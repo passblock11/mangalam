@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../l10n/app_locale.dart';
 import '../../services/api_client.dart'
     show ApiClient, ApiException, BannedException;
 import '../core/mangalam_theme.dart';
 import '../home/home_shell.dart';
 import 'login_screen.dart';
 import 'onboarding_screen.dart';
+import 'registration_membership.dart';
 
 /// Routes: login → onboarding (if profile incomplete) → home.
 class AuthGate extends StatefulWidget {
@@ -21,8 +22,7 @@ class _AuthGateState extends State<AuthGate> {
   final _api = ApiClient();
   bool _checking = false;
   bool? _needsOnboarding;
-  String? _banReason;
-  bool _banned = false;
+  bool _needsMembership = false;
 
   @override
   void initState() {
@@ -30,8 +30,7 @@ class _AuthGateState extends State<AuthGate> {
     Supabase.instance.client.auth.onAuthStateChange.listen((_) {
       if (!mounted) return;
       _needsOnboarding = null;
-      _banned = false;
-      _banReason = null;
+      _needsMembership = false;
       _evaluate();
     });
     _evaluate();
@@ -40,7 +39,12 @@ class _AuthGateState extends State<AuthGate> {
   Future<void> _evaluate() async {
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) {
-      if (mounted) setState(() => _needsOnboarding = null);
+      if (mounted) {
+        setState(() {
+          _needsOnboarding = null;
+          _needsMembership = false;
+        });
+      }
       return;
     }
     if (_checking) return;
@@ -48,17 +52,28 @@ class _AuthGateState extends State<AuthGate> {
     try {
       final json = await _api.get('/v1/me') as Map<String, dynamic>;
       final p = json['profile'] as Map<String, dynamic>?;
+      final lang = p?['app_language']?.toString();
+      if (lang != null && lang.isNotEmpty) {
+        await AppLocale.instance.set(lang);
+      }
       final needs = p == null || !_profileReady(p);
-      if (mounted) setState(() => _needsOnboarding = needs);
-    } on BannedException catch (e) {
-      // User is banned — sign them out and show the ban screen.
-      await Supabase.instance.client.auth.signOut();
+      var pending = !needs && membershipIsPending(p);
+      if (!needs && p['gender']?.toString().toLowerCase() == 'female') {
+        final waiver = await femaleMembershipWaiverEnabled(_api);
+        if (waiver == true) {
+          pending = false;
+        } else if (waiver == false) {
+          pending = !await membershipIsActive(_api);
+        }
+      }
       if (mounted) {
         setState(() {
-          _banned = true;
-          _banReason = e.reason;
+          _needsOnboarding = needs;
+          _needsMembership = pending;
         });
       }
+    } on BannedException {
+      // Every API response with a ban already signed this member out.
     } on ApiException catch (e) {
       if (e.statusCode == 401 && mounted) {
         await Supabase.instance.client.auth.signOut();
@@ -110,9 +125,6 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    if (_banned) {
-      return _BannedScreen(reason: _banReason);
-    }
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) {
       return const LoginScreen();
@@ -127,114 +139,9 @@ class _AuthGateState extends State<AuthGate> {
     if (_needsOnboarding == true) {
       return OnboardingScreen(onCompleted: _onOnboardingDone);
     }
+    if (_needsMembership) {
+      return RegistrationMembershipScreen(onFinished: _evaluate);
+    }
     return const HomeShell();
-  }
-}
-
-class _BannedScreen extends StatelessWidget {
-  const _BannedScreen({this.reason});
-  final String? reason;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: MangalamTheme.cream,
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  color: MangalamTheme.maroon.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Iconsax.shield_cross,
-                  size: 42,
-                  color: MangalamTheme.maroon,
-                ),
-              ),
-              const SizedBox(height: 22),
-              const Text(
-                'Account suspended',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: MangalamTheme.maroon,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Your account has been banned by our review team for violating community guidelines.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: MangalamTheme.muted,
-                  height: 1.5,
-                ),
-              ),
-              if (reason != null && reason!.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: MangalamTheme.maroon.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Reason',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: MangalamTheme.maroon,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        reason!,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          color: MangalamTheme.ink,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    await Supabase.instance.client.auth.signOut();
-                  },
-                  icon: const Icon(Iconsax.logout),
-                  label: const Text('Sign out'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Contact support if you believe this is a mistake.',
-                style: TextStyle(fontSize: 12, color: MangalamTheme.muted),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

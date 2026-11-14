@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, BadgeCheck, Crown, RefreshCw, ChevronRight } from "lucide-react";
 import { fetchProfilesEnhanced } from "../actions";
 import { Avatar, Badge, Button, Card, EmptyState, fmtDate, timeAgo } from "./shared";
 import { UserDetailDrawer } from "./UserDetailDrawer";
+import { useAdminRevision } from "./admin-live";
 
 type Profile = {
   id: string;
   display_name: string | null;
   phone: string | null;
+  email: string | null;
   whatsapp_number: string | null;
   city: string | null;
   state: string | null;
@@ -29,19 +31,30 @@ export function UsersSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const rev = useAdminRevision("users");
 
-  const load = useCallback(async (q: string) => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (q: string, silent = false) => {
+    if (!silent) setLoading(true);
     const res = await fetchProfilesEnhanced(q);
-    if (!res.ok) setError(res.error);
-    else setItems(res.data);
-    setLoading(false);
+    if (!res.ok) {
+      if (!silent) setError(res.error);
+    } else {
+      setItems(res.data);
+      setError(null);
+    }
+    if (!silent) setLoading(false);
   }, []);
 
   useEffect(() => {
     void load("");
   }, [load]);
+
+  useEffect(() => {
+    if (rev === 0) return;
+    void load(searchRef.current, true);
+  }, [rev, load]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -85,7 +98,7 @@ export function UsersSection() {
         </div>
       )}
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
       ) : items.length === 0 ? (
         <EmptyState>No profiles found.</EmptyState>

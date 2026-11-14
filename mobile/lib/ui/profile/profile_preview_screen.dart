@@ -5,6 +5,7 @@ import '../../services/api_client.dart';
 import '../core/mangalam_theme.dart';
 import '../core/photo_gallery.dart';
 import 'profile_widgets.dart';
+import '../../l10n/app_locale.dart';
 
 /// Read-only preview of how the signed-in user's profile appears to other
 /// members. No contact bar, no Like/Pass/Shortlist/Message actions — just the
@@ -44,7 +45,7 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = userFacingError(e);
         _loading = false;
       });
     }
@@ -54,12 +55,12 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Preview public profile'),
+        title: Text(t('Preview public profile')),
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
             icon: const Icon(Iconsax.refresh),
-            tooltip: 'Refresh',
+            tooltip: t('Refresh'),
           ),
         ],
       ),
@@ -75,11 +76,11 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
               action: FilledButton.icon(
                 onPressed: _load,
                 icon: const Icon(Iconsax.refresh),
-                label: const Text('Retry'),
+                label: Text(t('Retry')),
               ),
             )
           : _data == null
-          ? const Center(child: Text('No profile yet.'))
+          ? Center(child: Text(t('No profile yet.')))
           : _buildScroll(context),
     );
   }
@@ -96,6 +97,8 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
     final state = p['state']?.toString() ?? '';
     final bio = p['bio'] as String?;
     final verified = p['is_verified'] == true;
+    final prefs = p['preferences'];
+    final photosShared = prefs is! Map || prefs['photos_visible'] != false;
     final photoUrls =
         (p['photo_urls'] as List<dynamic>?)?.cast<String>() ?? const [];
 
@@ -122,6 +125,7 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                 photoUrls: photoUrls,
                 aspectRatio: 0.95,
                 badgeTopInset: MediaQuery.paddingOf(context).top + 44,
+                locked: !photosShared,
               ),
               Positioned(
                 top: 0,
@@ -164,13 +168,12 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                     color: MangalamTheme.gold.withValues(alpha: 0.3),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Iconsax.eye, size: 18, color: MangalamTheme.gold),
                     SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'This is how your profile looks to other members.',
+                      child: Text(t('This is how your profile looks to other members.'),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -181,13 +184,14 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                   ],
                 ),
               ),
-              // Name + verified
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(
+                  Flexible(
                     child: Text(
                       name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(
                             fontWeight: FontWeight.w800,
@@ -195,16 +199,20 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                           ),
                     ),
                   ),
-                  if (verified)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6, top: 4),
-                      child: const Icon(
-                        Iconsax.verify,
-                        color: MangalamTheme.gold,
-                        size: 24,
-                      ),
-                    ),
+                  if (verified) ...[
+                    const SizedBox(width: 8),
+                    const VerifiedBadge(),
+                  ],
                 ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                t('Your email stays private. Your phone number is hidden unless you choose to share it.'),
+                style: const TextStyle(
+                  color: MangalamTheme.muted,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
               ),
               if (bio != null && bio.isNotEmpty) ...[
                 const SizedBox(height: 14),
@@ -220,7 +228,7 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
                           Icon(
                             Iconsax.text_block,
@@ -228,8 +236,7 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                             color: MangalamTheme.maroon,
                           ),
                           SizedBox(width: 6),
-                          Text(
-                            'About',
+                          Text(t('About'),
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               color: MangalamTheme.maroon,
@@ -256,7 +263,9 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text('$city${state.isNotEmpty ? ', $state' : ''}'),
+                    child: Text(
+                      '$city${state.isNotEmpty ? ', ${t(state)}' : ''}',
+                    ),
                   ),
                 ],
               ),
@@ -272,7 +281,7 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                   Text(age != null ? '$age years' : '—'),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               DetailCardGrid(items: gridItems),
               const SizedBox(height: 20),
               SectionCard(
@@ -331,8 +340,7 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
                   children: [
                     DetailPair(
                       label: 'Age limit',
-                      value:
-                          '${partner['age_min']?.toString() ?? '—'} - ${partner['age_max']?.toString() ?? '—'}',
+                      value: partnerAgeRange(partner),
                     ),
                     DetailPair(
                       label: 'Location',
@@ -377,7 +385,7 @@ class _ProfilePreviewScreenState extends State<ProfilePreviewScreen> {
               OutlinedButton.icon(
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Iconsax.arrow_left),
-                label: const Text('Back to my profile'),
+                label: Text(t('Back to my profile')),
               ),
             ]),
           ),

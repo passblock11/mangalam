@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAdminRevision } from "./admin-live";
 import { ShieldCheck, ShieldAlert, Clock, Check, X, ZoomIn, RefreshCw } from "lucide-react";
 import { fetchPendingVerifications, reviewVerification } from "../actions";
 import { Avatar, Badge, Button, Card, EmptyState, fmtDateTime, Modal } from "./shared";
@@ -9,6 +10,7 @@ type Verification = {
   id: string;
   display_name: string | null;
   phone: string | null;
+  email: string | null;
   whatsapp_number: string | null;
   selfie_url: string | null;
   govt_id_url: string | null;
@@ -26,19 +28,30 @@ export function VerificationsSection() {
   const [rejectFor, setRejectFor] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const rev = useAdminRevision("verifications");
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     const res = await fetchPendingVerifications();
-    if (!res.ok) setError(res.error);
-    else setItems(res.data);
-    setLoading(false);
+    if (!res.ok) {
+      if (!silent) setError(res.error);
+    } else {
+      setItems(res.data);
+      setError(null);
+    }
+    if (!silent) setLoading(false);
   }
 
   useEffect(() => {
-    void load();
+    void load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (rev === 0) return;
+    void load(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rev]);
 
   async function approve(id: string) {
     setBusy(id);
@@ -106,7 +119,7 @@ export function VerificationsSection() {
         </div>
       )}
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
       ) : filtered.length === 0 ? (
         <EmptyState>No {filter === "all" ? "" : filter} verifications.</EmptyState>
@@ -122,6 +135,8 @@ export function VerificationsSection() {
                   </p>
                   <p className="truncate text-xs text-[var(--muted)]">
                     {v.phone ?? "no phone"}
+                    {" · "}
+                    {v.email ?? "no email"}
                   </p>
                 </div>
                 <Badge

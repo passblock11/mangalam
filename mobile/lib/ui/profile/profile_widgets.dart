@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:iconsax_flutter/iconsax_flutter.dart';
 
+import '../../l10n/app_locale.dart';
 import '../core/mangalam_theme.dart';
 
 /// Label (muted) + value (maroon) in reference style.
@@ -17,12 +19,12 @@ class DetailPair extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
+            t(label),
             style: const TextStyle(fontSize: 12, color: MangalamTheme.muted),
           ),
           const SizedBox(height: 2),
           Text(
-            value,
+            tValue(value),
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
@@ -46,10 +48,12 @@ class DetailCardGrid extends StatelessWidget {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
+      primary: false,
+      padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
-      childAspectRatio: 1.5,
+      childAspectRatio: 2.15,
       children: items.map((e) {
         return Container(
           padding: const EdgeInsets.all(12),
@@ -65,7 +69,7 @@ class DetailCardGrid extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                e.label,
+                t(e.label),
                 style: const TextStyle(
                   fontSize: 11,
                   color: MangalamTheme.muted,
@@ -73,7 +77,7 @@ class DetailCardGrid extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                e.value,
+                tValue(e.value),
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -133,7 +137,7 @@ class SectionCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                title,
+                t(title),
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -181,9 +185,148 @@ String formatBirthTime(dynamic raw) {
 }
 
 String partnerPref(Map<String, dynamic>? pp, String key) {
-  if (pp == null) return '—';
+  if (pp == null) return 'All Ok';
   final v = pp[key];
-  if (v == null) return '—';
-  if (v is List) return v.join(', ');
+  if (v == null) return 'All Ok';
+  if (v is List) {
+    final text = v
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .join(', ');
+    return text.isEmpty ? 'All Ok' : text;
+  }
+  final text = v.toString().trim();
+  if (text.isEmpty || text == '—' || text == '-') return 'All Ok';
   return v.toString();
+}
+
+String partnerAgeRange(Map<String, dynamic>? pp) {
+  final min = pp?['age_min']?.toString().trim();
+  final max = pp?['age_max']?.toString().trim();
+  final hasMin = min != null && min.isNotEmpty;
+  final hasMax = max != null && max.isNotEmpty;
+  if (hasMin && hasMax) return '$min - $max';
+  if (hasMin) return min;
+  if (hasMax) return max;
+  return 'All Ok';
+}
+
+/// Gold pill shown immediately beside a member's name.
+class VerifiedBadge extends StatelessWidget {
+  const VerifiedBadge({super.key, this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 8,
+        vertical: compact ? 2 : 3,
+      ),
+      decoration: BoxDecoration(
+        color: MangalamTheme.gold.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: MangalamTheme.gold.withValues(alpha: 0.7),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Iconsax.verify,
+            size: compact ? 12 : 14,
+            color: const Color(0xFF8A6B1F),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            t('Verified'),
+            style: TextStyle(
+              fontSize: compact ? 10.5 : 12,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF8A6B1F),
+              height: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Phone and email, always shown on profile detail surfaces.
+class ContactFacts extends StatelessWidget {
+  const ContactFacts({
+    super.key,
+    this.phone,
+    this.email,
+    this.compact = false,
+    this.locked = false,
+  });
+
+  final String? phone;
+  final String? email;
+  final bool compact;
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) {
+    if (locked) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Iconsax.lock,
+            size: compact ? 13 : 15,
+            color: MangalamTheme.maroon,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              t('Verify your identity and upgrade to Premium to view phone and email.'),
+              style: TextStyle(
+                fontSize: compact ? 11.5 : 12.5,
+                color: MangalamTheme.maroon,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    final phoneText = (phone ?? '').trim().isEmpty
+        ? t('Not added')
+        : phone!.trim();
+    final emailText = (email ?? '').trim().isEmpty
+        ? t('Not added')
+        : email!.trim();
+    final style = TextStyle(
+      fontSize: compact ? 12.5 : 14,
+      color: MangalamTheme.ink,
+      fontWeight: FontWeight.w600,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _line(Iconsax.call, 'Phone', phoneText, style),
+        const SizedBox(height: 4),
+        _line(Iconsax.sms, 'Email', emailText, style),
+      ],
+    );
+  }
+
+  Widget _line(IconData icon, String label, String value, TextStyle style) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: MangalamTheme.maroon),
+        const SizedBox(width: 6),
+        Text('${t(label)}: ', style: const TextStyle(fontSize: 12.5, color: MangalamTheme.muted)),
+        Expanded(
+          child: Text(value, style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
+  }
 }

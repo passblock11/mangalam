@@ -4,7 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/api_client.dart';
+import '../../services/image_crop.dart';
 import '../core/mangalam_theme.dart';
+import '../../l10n/app_locale.dart';
 
 /// Full complaint form: title, category, description, and up to 4 screenshots.
 /// Submitted to /v1/reports and reviewed in the admin complaint console.
@@ -54,7 +56,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
     final remaining = 4 - _pickedFiles.length;
     if (remaining <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maximum 4 screenshots allowed.')),
+        SnackBar(content: Text(t('Maximum 4 screenshots allowed.'))),
       );
       return;
     }
@@ -66,11 +68,13 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
         limit: remaining,
       );
       if (files.isEmpty) return;
+      final cropped = await ImageCrop.many(files, ImageCropKind.report);
+      if (cropped.isEmpty || !mounted) return;
       setState(() => _uploading = true);
       final sb = Supabase.instance.client;
       final uid = sb.auth.currentUser?.id ?? '';
       final urls = <String>[];
-      for (final f in files) {
+      for (final f in cropped) {
         final bytes = await f.readAsBytes();
         final path =
             '$uid/reports/${DateTime.now().millisecondsSinceEpoch}_${_pickedFiles.length + urls.length}.jpg';
@@ -88,7 +92,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
       }
       if (!mounted) return;
       setState(() {
-        _pickedFiles.addAll(files);
+        _pickedFiles.addAll(cropped);
         _screenshotPaths.addAll(urls);
         _uploading = false;
       });
@@ -97,7 +101,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
       setState(() => _uploading = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      ).showSnackBar(SnackBar(content: Text(tf('Upload failed: {error}', {'error': tError(e)}))));
     }
   }
 
@@ -136,19 +140,16 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Report submitted. Our team will review it.'),
+        SnackBar(
+          content: Text(t('Report submitted. Our team will review it.')),
         ),
       );
       Navigator.of(context).pop(true);
     } on BannedException {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Your account has been banned.')),
-      );
+      // The API client signs the member out and shows the suspension notice.
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() => _error = userFacingError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -157,7 +158,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Report user')),
+      appBar: AppBar(title: Text(t('Report user'))),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
           20,
@@ -184,8 +185,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Reporting',
+                      Text(t('Reporting'),
                         style: TextStyle(
                           fontSize: 11,
                           color: MangalamTheme.muted,
@@ -209,8 +209,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
           const SizedBox(height: 20),
 
           // Title
-          const Text(
-            'Title',
+          Text(t('Title'),
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -223,7 +222,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
             maxLength: 120,
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
-              hintText: 'e.g. Asked for money / fake photos',
+              hintText: t('e.g. Asked for money / fake photos'),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
@@ -243,8 +242,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
           const SizedBox(height: 18),
 
           // Category
-          const Text(
-            'Category',
+          Text(t('Category'),
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -267,7 +265,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
                       color: selected ? Colors.white : MangalamTheme.maroon,
                     ),
                     const SizedBox(width: 6),
-                    Text(c.label),
+                    Text(t(c.label)),
                   ],
                 ),
                 selected: selected,
@@ -285,8 +283,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
           const SizedBox(height: 18),
 
           // Description
-          const Text(
-            'What happened?',
+          Text(t('What happened?'),
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -300,8 +297,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
             maxLength: 2000,
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
-              hintText:
-                  'Describe the incident in detail. Include dates, what was said, and any evidence you have.',
+              hintText: t('Describe the incident in detail. Include dates, what was said, and any evidence you have.'),
               filled: true,
               fillColor: Colors.white,
               alignLabelWithHint: true,
@@ -324,8 +320,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
           // Screenshots
           Row(
             children: [
-              const Text(
-                'Screenshots',
+              Text(t('Screenshots'),
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
@@ -367,8 +362,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
               ],
             ),
           const SizedBox(height: 8),
-          const Text(
-            'Chat screenshots or evidence photos help our team take action faster.',
+          Text(t('Chat screenshots or evidence photos help our team take action faster.'),
             style: TextStyle(
               fontSize: 11.5,
               color: MangalamTheme.muted,
@@ -394,7 +388,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _error!,
+                      t(_error!),
                       style: const TextStyle(
                         fontSize: 12.5,
                         color: MangalamTheme.maroon,
@@ -419,11 +413,10 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
                     ),
                   )
                 : const Icon(Iconsax.send_2),
-            label: const Text('Submit complaint'),
+            label: Text(t('Submit complaint')),
           ),
           const SizedBox(height: 10),
-          const Text(
-            'False reports may lead to action against your own account. Please report only genuine violations.',
+          Text(t('False reports may lead to action against your own account. Please report only genuine violations.'),
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 11.5,
@@ -451,13 +444,12 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
             style: BorderStyle.solid,
           ),
         ),
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Iconsax.add, color: MangalamTheme.maroon, size: 26),
             SizedBox(height: 4),
-            Text(
-              'Add',
+            Text(t('Add'),
               style: TextStyle(
                 fontSize: 11,
                 color: MangalamTheme.muted,

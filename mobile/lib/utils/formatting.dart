@@ -1,16 +1,22 @@
 import 'package:intl/intl.dart';
 
+import '../l10n/app_locale.dart';
+
 String formatRelativeTime(String? iso) {
   if (iso == null || iso.isEmpty) return '';
-  final t = DateTime.tryParse(iso);
-  if (t == null) return '';
+  final parsed = DateTime.tryParse(iso);
+  if (parsed == null) return '';
   final now = DateTime.now();
-  final diff = now.difference(t);
-  if (diff.inMinutes < 1) return 'Just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
-  return DateFormat.MMMd().format(t);
+  final diff = now.difference(parsed);
+  if (diff.inMinutes < 1) return t('Just now');
+  if (diff.inMinutes < 60) {
+    return tf('{n}m ago', {'n': '${diff.inMinutes}'});
+  }
+  if (diff.inHours < 24) {
+    return tf('{n}h ago', {'n': '${diff.inHours}'});
+  }
+  if (diff.inDays < 7) return tf('{n}d ago', {'n': '${diff.inDays}'});
+  return DateFormat.MMMd(AppLocale.instance.code).format(parsed);
 }
 
 /// Human-readable calendar date, e.g. "Jan 11, 2027". Accepts ISO 8601
@@ -22,5 +28,5 @@ String formatDate(Object? value) {
   if (iso.isEmpty) return '';
   final t = DateTime.tryParse(iso);
   if (t == null) return '';
-  return DateFormat('MMM d, yyyy').format(t.toLocal());
+  return DateFormat('MMM d, yyyy', AppLocale.instance.code).format(t.toLocal());
 }

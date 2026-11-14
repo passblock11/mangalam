@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAdminRevision } from "./admin-live";
 import {
   Users,
   BadgeCheck,
@@ -10,8 +11,8 @@ import {
   IndianRupee,
   UserPlus,
 } from "lucide-react";
-import { fetchStats, fetchRecentActivity } from "../actions";
-import { Card, Badge, fmtDateTime, timeAgo, EmptyState } from "./shared";
+import { fetchStats, fetchRecentActivity, sendMemberUpdate } from "../actions";
+import { Card, Badge, Button, fmtDateTime, timeAgo, EmptyState } from "./shared";
 
 type Stats = {
   totalUsers: number;
@@ -28,7 +29,7 @@ type Stats = {
 export function OverviewSection() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<{
-    signups: { id: string; display_name: string | null; phone: string | null; created_at: string }[];
+    signups: { id: string; display_name: string | null; phone: string | null; email: string | null; created_at: string }[];
     verifications: {
       id: string;
       display_name: string | null;
@@ -45,23 +46,36 @@ export function OverviewSection() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const rev = useAdminRevision("overview");
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     const [s, a] = await Promise.all([fetchStats(), fetchRecentActivity()]);
-    if (!s.ok) setError(s.error);
-    else setStats(s.data);
-    if (!a.ok) setError(a.error);
-    else setActivity(a.data);
-    setLoading(false);
+    if (!s.ok) {
+      if (!silent) setError(s.error);
+    } else {
+      setStats(s.data);
+      setError(null);
+    }
+    if (!a.ok) {
+      if (!silent) setError(a.error);
+    } else setActivity(a.data);
+    if (!silent) setLoading(false);
   }
 
   useEffect(() => {
-    void load();
+    void load(false);
+    // The first snapshot must not depend on the live revision.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading) return <p className="text-sm text-[var(--muted)]">Loading overview…</p>;
+  useEffect(() => {
+    if (rev === 0) return;
+    void load(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rev]);
+
+  if (loading && !stats) return <p className="text-sm text-[var(--muted)]">Loading overview…</p>;
   if (error)
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -121,6 +135,8 @@ export function OverviewSection() {
         <p className="text-sm text-[var(--muted)]">Key metrics across the platform.</p>
       </div>
 
+      <MemberUpdateCard />
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {cards.map((c) => (
           <Card key={c.label} className="p-4">
@@ -151,6 +167,7 @@ export function OverviewSection() {
                       {s.display_name ?? "Unnamed"}
                     </p>
                     <p className="truncate text-xs text-[var(--muted)]">{s.phone ?? "no phone"}</p>
+                    <p className="truncate text-xs text-[var(--muted)]">{s.email ?? "no email"}</p>
                   </div>
                   <span className="shrink-0 text-xs text-[var(--muted)]">
                     {timeAgo(s.created_at)}
@@ -216,6 +233,67 @@ export function OverviewSection() {
         </ActivityCard>
       </div>
     </div>
+  );
+}
+
+function MemberUpdateCard() {
+  const [title, setTitle] = useState("Mangalam");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function send() {
+    setBusy(true);
+    setMessage(null);
+    setFailed(false);
+    const res = await sendMemberUpdate({ title, body });
+    setBusy(false);
+    if (!res.ok) {
+      setFailed(true);
+      setMessage(res.error);
+      return;
+    }
+    setBody("");
+    setMessage(
+      res.data.sent === 1
+        ? "Sent to 1 member. It appears in their notification bar."
+        : `Sent to ${res.data.sent} members. It appears in their notification bar.`
+    );
+  }
+
+  return (
+    <Card className="space-y-3 p-5">
+      <h3 className="text-sm font-bold text-[var(--ink)]">Send an update</h3>
+      <p className="text-xs text-[var(--muted)]">
+        Members see this in the phone notification bar and in the app notification list.
+      </p>
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Title</span>
+        <input
+          value={title}
+          maxLength={80}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)]"
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Message</span>
+        <textarea
+          value={body}
+          maxLength={240}
+          rows={3}
+          onChange={(e) => setBody(e.target.value)}
+          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)]"
+        />
+      </label>
+      {message && (
+        <p className={`text-xs ${failed ? "text-red-700" : "text-emerald-700"}`}>{message}</p>
+      )}
+      <Button onClick={() => void send()} disabled={busy || !title.trim() || !body.trim()}>
+        {busy ? "Sending…" : "Send to all members"}
+      </Button>
+    </Card>
   );
 }
 

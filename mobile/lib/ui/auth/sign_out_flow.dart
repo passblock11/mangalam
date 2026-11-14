@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/oauth_sign_in.dart';
 import '../core/mangalam_theme.dart';
+import '../../l10n/app_locale.dart';
 
 /// Confirm, then sign out. The loading dialog is popped from the root
 /// navigator captured before sign-out, because AuthGate replaces the
@@ -11,18 +12,17 @@ Future<void> confirmAndSignOut(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Log out?'),
-      content: const Text(
-        'You will be signed out of Mangalam on this device.',
+      title: Text(t('Log out?')),
+      content: Text(t('You will be signed out of Mangalam on this device.'),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Cancel'),
+          child: Text(t('Cancel')),
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Log out'),
+          child: Text(t('Log out')),
         ),
       ],
     ),

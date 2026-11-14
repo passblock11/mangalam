@@ -6,6 +6,19 @@ import { getSupabaseAdmin } from "../supabase.js";
 /** Public app config + legal pages + plans + coupon validation. */
 export const configRouter = new Hono();
 
+/** Null until migration 0017 exists, so an older database does not look like "off". */
+async function readFemaleMembershipFree(
+  sb: ReturnType<typeof getSupabaseAdmin>
+): Promise<boolean | null> {
+  const res = await sb
+    .from("app_settings")
+    .select("female_membership_free")
+    .eq("id", 1)
+    .maybeSingle();
+  if (res.error || !res.data || !("female_membership_free" in res.data)) return null;
+  return res.data.female_membership_free === true;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public bootstrap config (no auth) — safe fields only
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,14 +35,18 @@ configRouter.get("/", async (c) => {
     .select("provider,display_name,config,is_active,sort_order")
     .order("sort_order", { ascending: true });
 
-  const { data: plans } = await sb
-    .from("plans")
-    .select("id,code,name,description,plan_type,price_paise,credits,duration_days,sort_order")
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true });
+  const plans = await loadPublicPlans(sb);
+  const branding = await loadPublicBranding(sb);
+  const femaleMembershipFree = await readFemaleMembershipFree(sb);
 
   return c.json({
-    settings: settings ?? null,
+    settings: {
+      ...(settings ?? {}),
+      ...(femaleMembershipFree == null
+        ? {}
+        : { female_membership_free: femaleMembershipFree }),
+    },
+    branding,
     payment_methods: (methods ?? []).map((m) => ({
       provider: m.provider,
       display_name: m.display_name,
@@ -175,15 +192,128 @@ configRouter.get("/legal", async (c) => {
 // Plans list (public)
 // ─────────────────────────────────────────────────────────────────────────────
 configRouter.get("/plans", async (c) => {
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb
+  const plans = await loadPublicPlans(getSupabaseAdmin());
+  return c.json({ plans });
+});
+
+const planColumns =
+  "id,code,name,description,plan_type,price_paise,credits,duration_days,billing_period,total_cycles,sort_order";
+const planColumnsLegacy =
+  "id,code,name,description,plan_type,price_paise,credits,duration_days,sort_order";
+
+/** Public splash/login branding. A missing column must not break /v1/config. */
+async function loadPublicBranding(sb: ReturnType<typeof getSupabaseAdmin>) {
+  try {
+    const { data, error } = await sb
+      .from("app_settings")
+      .select("branding")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error || !data) return { active: "default" as const };
+    return publicBranding(data.branding);
+  } catch {
+    return { active: "default" as const };
+  }
+}
+
+function publicBranding(raw: unknown) {
+  if (!raw || typeof raw !== "object") return { active: "default" as const };
+  const root = raw as Record<string, unknown>;
+  const custom = root.custom;
+  const c = custom && typeof custom === "object" ? (custom as Record<string, unknown>) : {};
+  const appName = clip(c.app_name, 40);
+  const logoUrl = httpsUrl(c.logo_url);
+  if (root.active !== "custom") {
+    return {
+      active: "default" as const,
+      ...(appName ? { app_name: appName } : {}),
+      ...(logoUrl ? { logo_url: logoUrl } : {}),
+    };
+  }
+  const splash = asRecord(c.splash);
+  const login = asRecord(c.login);
+  const images = Array.isArray(login.background_images)
+    ? login.background_images.map(httpsUrl).filter((u): u is string => u != null).slice(0, 5)
+    : [];
+  return {
+    active: "custom" as const,
+    app_name: appName,
+    tagline: clip(c.tagline, 80),
+    logo_url: logoUrl,
+    splash: {
+      animation: allow(splash.animation, ["scale_fade", "fade", "rise"], "scale_fade"),
+      duration_ms: clampInt(splash.duration_ms, 1500, 8000, 3000),
+      background_start: hex(splash.background_start, "#B71C1C"),
+      background_end: hex(splash.background_end, "#7E0F0F"),
+      accent: hex(splash.accent, "#C9A227"),
+      title_color: hex(splash.title_color, "#FFFFFF"),
+      background_image_url: httpsUrl(splash.background_image_url),
+      show_loader: splash.show_loader !== false,
+    },
+    login: {
+      headline: clip(login.headline, 80),
+      subheadline: clip(login.subheadline, 180),
+      welcome_title: clip(login.welcome_title, 40),
+      welcome_subtitle: clip(login.welcome_subtitle, 120),
+      background_images: images,
+      sheet_color: hex(login.sheet_color, "#FFF8F3"),
+      show_mandala: login.show_mandala !== false,
+    },
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function clip(value: unknown, max: number): string {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, max);
+}
+
+function hex(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const s = value.trim();
+  return /^#[0-9A-Fa-f]{6}$/.test(s) ? s.toUpperCase() : fallback;
+}
+
+function httpsUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  if (!s || s.length > 800) return null;
+  try {
+    const url = new URL(s);
+    if (url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function allow(value: unknown, options: string[], fallback: string): string {
+  return typeof value === "string" && options.includes(value) ? value : fallback;
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+async function loadPublicPlans(sb: ReturnType<typeof getSupabaseAdmin>) {
+  const first = await sb
     .from("plans")
-    .select("id,code,name,description,plan_type,price_paise,credits,duration_days,sort_order")
+    .select(planColumns)
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ plans: data ?? [] });
-});
+  if (!first.error) return first.data ?? [];
+  const second = await sb
+    .from("plans")
+    .select(planColumnsLegacy)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+  return second.data ?? [];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Coupon validation (auth required)

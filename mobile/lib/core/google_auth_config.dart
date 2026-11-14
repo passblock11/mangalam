@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../services/payload_crypto.dart';
 import 'config.dart';
 
 /// Google OAuth client IDs for **native** mobile sign-in (Supabase Flutter doc).
@@ -62,9 +63,13 @@ class GoogleAuthConfig {
 
     try {
       final uri = Uri.parse('${AppConfig.apiBaseUrl}/v1/public/mobile-config');
-      final res = await http.get(uri).timeout(const Duration(seconds: 8));
+      final res = await http
+          .get(uri, headers: PayloadCrypto.requestHeaders())
+          .timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return;
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final json =
+          jsonDecode(await PayloadCrypto.openIfSealed(res.bodyBytes))
+              as Map<String, dynamic>;
       final web = (json['google_web_client_id'] as String?)?.trim() ?? '';
       final ios = (json['google_ios_client_id'] as String?)?.trim() ?? '';
       if (needWeb && web.isNotEmpty) _webClientId = web;

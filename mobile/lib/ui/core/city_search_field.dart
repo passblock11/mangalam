@@ -3,6 +3,7 @@ import 'package:iconsax_flutter/iconsax_flutter.dart';
 
 import '../../services/city_search_service.dart';
 import '../core/mangalam_theme.dart';
+import '../../l10n/app_locale.dart';
 
 /// A text field that autocomplete-suggests Indian cities as the user types,
 /// using the free OpenStreetMap Nominatim API (no key required).
@@ -16,6 +17,9 @@ class CitySearchField extends StatefulWidget {
     required this.onSelected,
     this.initialCity,
     this.onStateSelected,
+    this.label = 'City',
+    this.icon = Iconsax.building,
+    this.includeStateInValue = false,
   });
 
   /// Called whenever the city changes (typing or picking a suggestion).
@@ -27,6 +31,15 @@ class CitySearchField extends StatefulWidget {
 
   /// Initial city value (for edit-profile).
   final String? initialCity;
+
+  /// Translation key for the field label. Defaults to the living-city field.
+  final String label;
+
+  final IconData icon;
+
+  /// When true, a picked suggestion is saved as "City, State".
+  /// The living-city field leaves this off and fills State separately.
+  final bool includeStateInValue;
 
   @override
   State<CitySearchField> createState() => _CitySearchFieldState();
@@ -49,7 +62,7 @@ class _CitySearchFieldState extends State<CitySearchField> {
 
   @override
   void dispose() {
-    CitySearchService.cancel();
+    CitySearchService.cancel(this);
     _removeOverlay();
     _ctrl.dispose();
     _focus.removeListener(_onFocusChange);
@@ -81,6 +94,7 @@ class _CitySearchFieldState extends State<CitySearchField> {
     widget.onSelected(value);
     CitySearchService.search(
       value,
+      owner: this,
       onLoading: (l) {
         if (mounted) setState(() => _loading = l);
       },
@@ -97,9 +111,14 @@ class _CitySearchFieldState extends State<CitySearchField> {
   }
 
   void _pick(CityResult r) {
-    _ctrl.text = r.city;
-    widget.onSelected(r.city);
-    if (r.state.isNotEmpty && widget.onStateSelected != null) {
+    final text = widget.includeStateInValue && r.state.isNotEmpty
+        ? '${r.city}, ${r.state}'
+        : r.city;
+    _ctrl.text = text;
+    widget.onSelected(text);
+    if (!widget.includeStateInValue &&
+        r.state.isNotEmpty &&
+        widget.onStateSelected != null) {
       widget.onStateSelected!(r.state);
     }
     _removeOverlay();
@@ -115,8 +134,8 @@ class _CitySearchFieldState extends State<CitySearchField> {
         focusNode: _focus,
         textCapitalization: TextCapitalization.words,
         decoration: InputDecoration(
-          labelText: 'City',
-          prefixIcon: const Icon(Iconsax.building),
+          labelText: t(widget.label),
+          prefixIcon: Icon(widget.icon),
           suffixIcon: _loading
               ? const SizedBox(
                   width: 20,

@@ -10,6 +10,7 @@ import {
   Heart,
   Menu,
   Settings,
+  LifeBuoy,
 } from "lucide-react";
 import { OverviewSection } from "./OverviewSection";
 import { VerificationsSection } from "./VerificationsSection";
@@ -17,9 +18,20 @@ import { UsersSection } from "./UsersSection";
 import { ReportsSection } from "./ReportsSection";
 import { PaymentsSection } from "./PaymentsSection";
 import { SettingsSection } from "./SettingsSection";
+import { SupportSection } from "./SupportSection";
 import { hasPermission, type AdminSession, type AdminFeature } from "@/lib/admin-session";
+import { AdminLiveProvider, useSectionCounts } from "./admin-live";
 
-type Tab = "overview" | "verifications" | "users" | "reports" | "payments" | "settings";
+type Tab = "overview" | "verifications" | "users" | "reports" | "payments" | "support" | "settings";
+
+const COUNT_LABEL: Partial<Record<Tab, string>> = {
+  overview: "Pending verifications and open reports",
+  verifications: "Pending reviews",
+  users: "Members",
+  reports: "Open reports",
+  payments: "Payments and memberships",
+  support: "Tickets that need a reply",
+};
 
 const NAV: { id: Tab; feature: AdminFeature; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { id: "overview", feature: "overview", label: "Overview", icon: LayoutDashboard },
@@ -27,10 +39,19 @@ const NAV: { id: Tab; feature: AdminFeature; label: string; icon: React.Componen
   { id: "users", feature: "users", label: "Users", icon: Users },
   { id: "reports", feature: "reports", label: "Reports", icon: Flag },
   { id: "payments", feature: "payments", label: "Payments", icon: Wallet },
+  { id: "support", feature: "support", label: "Support", icon: LifeBuoy },
   { id: "settings", feature: "settings", label: "Settings", icon: Settings },
 ];
 
 export function AdminDashboard({ session }: { session: AdminSession }) {
+  return (
+    <AdminLiveProvider>
+      <Dashboard session={session} />
+    </AdminLiveProvider>
+  );
+}
+
+function Dashboard({ session }: { session: AdminSession }) {
   const allowed = NAV.filter((n) => hasPermission(session, n.feature));
   const [tab, setTab] = useState<Tab>(allowed[0]?.id ?? "overview");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -100,6 +121,7 @@ export function AdminDashboard({ session }: { session: AdminSession }) {
               {tab === "users" && <UsersSection />}
               {tab === "reports" && <ReportsSection />}
               {tab === "payments" && <PaymentsSection />}
+              {tab === "support" && <SupportSection />}
               {tab === "settings" && <SettingsSection session={session} />}
             </>
           )}
@@ -120,6 +142,7 @@ function Sidebar({
   tab: Tab;
   onTab: (t: Tab) => void;
 }) {
+  const counts = useSectionCounts();
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-[var(--border)] px-5 py-5">
@@ -135,11 +158,13 @@ function Sidebar({
       <nav className="flex-1 space-y-1 p-3">
         {items.map((n) => {
           const active = tab === n.id;
+          const count = n.id === "settings" ? undefined : counts[n.id];
           return (
             <button
               key={n.id}
               type="button"
               onClick={() => onTab(n.id)}
+              title={COUNT_LABEL[n.id]}
               className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
                 active
                   ? "bg-[var(--maroon)] text-white shadow-sm"
@@ -147,7 +172,16 @@ function Sidebar({
               }`}
             >
               <n.icon size={18} />
-              {n.label}
+              <span className="flex-1 text-left">{n.label}</span>
+              {count !== undefined && (
+                <span
+                  className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[11px] font-bold tabular-nums ${
+                    active ? "bg-white/20 text-white" : "bg-rose-50 text-[var(--maroon)]"
+                  }`}
+                >
+                  {count}
+                </span>
+              )}
             </button>
           );
         })}

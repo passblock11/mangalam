@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, CreditCard, Tag, FileText, UserCog, Sliders } from "lucide-react";
+import { Settings, CreditCard, Tag, FileText, UserCog, Sliders, Palette } from "lucide-react";
 import { GeneralSettings } from "./settings/GeneralSettings";
+import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { PaymentSettings } from "./settings/PaymentSettings";
 import { PlansSettings } from "./settings/PlansSettings";
 import { CouponsSettings } from "./settings/CouponsSettings";
@@ -10,10 +11,11 @@ import { LegalSettings } from "./settings/LegalSettings";
 import { AdminsSettings } from "./settings/AdminsSettings";
 import { hasPermission, type AdminSession, type AdminFeature } from "@/lib/admin-session";
 
-type Sub = "general" | "payment" | "plans" | "coupons" | "legal" | "admins";
+type Sub = "general" | "appearance" | "payment" | "plans" | "coupons" | "legal" | "admins";
 
 const TABS: { id: Sub; feature: AdminFeature | null; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { id: "general", feature: null, label: "General", icon: Sliders },
+  { id: "appearance", feature: null, label: "Appearance", icon: Palette },
   { id: "payment", feature: null, label: "Payment", icon: CreditCard },
   { id: "plans", feature: null, label: "Plans", icon: Tag },
   { id: "coupons", feature: null, label: "Coupons", icon: Tag },
@@ -33,7 +35,7 @@ export function SettingsSection({ session }: { session: AdminSession }) {
           <Settings size={20} className="text-[var(--maroon)]" /> Settings
         </h2>
         <p className="text-sm text-[var(--muted)]">
-          Configure payments, plans, coupons, legal content & admins.
+          Configure the splash, login screen, payments, plans, coupons, legal content & admins.
         </p>
       </div>
 
@@ -55,6 +57,7 @@ export function SettingsSection({ session }: { session: AdminSession }) {
       </div>
 
       {sub === "general" && <GeneralSettings />}
+      {sub === "appearance" && <AppearanceSettings />}
       {sub === "payment" && <PaymentSettings />}
       {sub === "plans" && <PlansSettings />}
       {sub === "coupons" && <CouponsSettings />}

@@ -1,6 +1,9 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
+import '../../l10n/app_locale.dart';
 import 'mangalam_theme.dart';
 
 /// A horizontally swipeable photo gallery with page indicators and a
@@ -18,6 +21,7 @@ class PhotoGallery extends StatefulWidget {
     this.showCountBadge = true,
     /// Extra top inset for the count badge (e.g. under a transparent AppBar).
     this.badgeTopInset = 0,
+    this.locked = false,
   });
 
   final String name;
@@ -25,6 +29,7 @@ class PhotoGallery extends StatefulWidget {
   final double aspectRatio;
   final bool showCountBadge;
   final double badgeTopInset;
+  final bool locked;
 
   @override
   State<PhotoGallery> createState() => _PhotoGalleryState();
@@ -56,11 +61,14 @@ class _PhotoGalleryState extends State<PhotoGallery> {
   @override
   Widget build(BuildContext context) {
     final urls = widget.photoUrls;
+    final locked = widget.locked && urls.isNotEmpty;
 
     if (urls.isEmpty) {
       return AspectRatio(
         aspectRatio: widget.aspectRatio,
-        child: _InitialAvatar(name: widget.name),
+        child: widget.locked
+            ? const _PrivatePhotos()
+            : _InitialAvatar(name: widget.name),
       );
     }
 
@@ -73,15 +81,26 @@ class _PhotoGalleryState extends State<PhotoGallery> {
             controller: _pageController,
             itemCount: urls.length,
             onPageChanged: (i) => setState(() => _page = i),
-            itemBuilder: (context, i) => GestureDetector(
-              onTap: () => _openViewer(i),
-              child: _NetworkImage(url: urls[i]),
-            ),
+            itemBuilder: (context, i) {
+              final image = _NetworkImage(url: urls[i], blurred: locked);
+              if (locked) return image;
+              return GestureDetector(
+                onTap: () => _openViewer(i),
+                child: image,
+              );
+            },
           ),
+          if (locked)
+            const Positioned(
+              left: 20,
+              right: 20,
+              bottom: 28,
+              child: _PrivateCaption(),
+            ),
           // Page indicators
           if (urls.length > 1)
             Positioned(
-              bottom: 10,
+              bottom: locked ? 108 : 10,
               left: 0,
               right: 0,
               child: Row(
@@ -139,14 +158,17 @@ class _PhotoGalleryState extends State<PhotoGallery> {
 }
 
 class _NetworkImage extends StatelessWidget {
-  const _NetworkImage({required this.url});
+  const _NetworkImage({required this.url, this.blurred = false});
   final String url;
+  final bool blurred;
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
+    final image = Image.network(
       url,
+      key: ValueKey('${blurred ? 'blur' : 'clear'}-$url'),
       fit: BoxFit.cover,
+      gaplessPlayback: false,
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
         return Container(
@@ -158,11 +180,59 @@ class _NetworkImage extends StatelessWidget {
           ),
         );
       },
-      errorBuilder: (_, __, ___) => Container(
+      errorBuilder: (_, _, _) => Container(
         color: const Color(0xFFF3E9DF),
         alignment: Alignment.center,
         child: const Icon(Iconsax.gallery,
             color: MangalamTheme.muted, size: 32),
+      ),
+    );
+    if (!blurred) return image;
+    return ClipRect(
+      child: ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+        child: Transform.scale(scale: 1.25, child: image),
+      ),
+    );
+  }
+}
+
+class _PrivateCaption extends StatelessWidget {
+  const _PrivateCaption();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Iconsax.lock, color: Colors.white, size: 18),
+          const SizedBox(height: 4),
+          Text(
+            t('Photos are private'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            t('Ask this member for photos in chat.'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 12,
+              height: 1.3,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -188,6 +258,45 @@ class _InitialAvatar extends StatelessWidget {
       child: Text(initial,
           style: const TextStyle(
               color: Colors.white, fontSize: 64, fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
+class _PrivatePhotos extends StatelessWidget {
+  const _PrivatePhotos();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFF3E9DF),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Iconsax.lock, color: MangalamTheme.maroon, size: 36),
+          const SizedBox(height: 10),
+          Text(
+            t('Photos are private'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: MangalamTheme.ink,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            t('Ask this member for photos in chat.'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: MangalamTheme.muted,
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --color-maroon: #b71c1c;
+  --color-maroon-deep: #8e1212;
+  --color-gold: #c9a227;
+  --color-cream: #f5f6f8;
+  --color-ink: #222222;
+  --color-muted: #6b7280;
+  --color-line: #e6e8ee;
+  --font-sans: "Outfit", "Avenir Next", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #ffffff;
+  color: var(--color-ink);
+  font-family: Outfit, "Avenir Next", sans-serif;
+}
+
+::selection {
+  background: #f8d6d6;
+}
+
+.display {
+  font-family: "Cormorant Garamond", Georgia, serif;
+}

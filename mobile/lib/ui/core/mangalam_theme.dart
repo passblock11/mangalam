@@ -1,4 +1,9 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../../l10n/app_locale.dart';
 
 /// Central design system for Mangalam.
 ///
@@ -64,6 +69,31 @@ class MangalamTheme {
     return avatarGradients[code % avatarGradients.length];
   }
 
+  /// Noto Sans for Latin, with a Noto family for each Indian script the
+  /// language picker offers. Flutter uses the fallback only for glyphs the
+  /// primary face does not contain, so English spacing stays the same.
+  static List<String> _scriptFallbacks() {
+    final families = <String?>[
+      GoogleFonts.notoSansDevanagari().fontFamily,
+      GoogleFonts.notoSansTamil().fontFamily,
+      GoogleFonts.notoSansTelugu().fontFamily,
+      GoogleFonts.notoSansKannada().fontFamily,
+      GoogleFonts.notoSansBengali().fontFamily,
+      GoogleFonts.notoSansGujarati().fontFamily,
+      GoogleFonts.notoSansGurmukhi().fontFamily,
+      GoogleFonts.notoSansMalayalam().fontFamily,
+    ];
+    return families.whereType<String>().toList();
+  }
+
+  static TextStyle _face(
+    TextStyle style,
+    String? family,
+    List<String> fallbacks,
+  ) {
+    return style.copyWith(fontFamily: family, fontFamilyFallback: fallbacks);
+  }
+
   // ── Theme construction ─────────────────────────────────────────
   static ThemeData light() {
     final scheme =
@@ -83,25 +113,40 @@ class MangalamTheme {
           outlineVariant: const Color(0xFFE8DDCF),
         );
 
+    final fallbacks = _scriptFallbacks();
+    final family = GoogleFonts.notoSans().fontFamily;
     final base = ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
       scaffoldBackgroundColor: cream,
       splashFactory: InkRipple.splashFactory,
+      fontFamily: family,
+      fontFamilyFallback: fallbacks,
+    );
+
+    final textTheme = _buildText(
+      GoogleFonts.notoSansTextTheme(base.textTheme).apply(
+        bodyColor: ink,
+        displayColor: ink,
+        fontFamilyFallback: fallbacks,
+      ),
     );
 
     return base.copyWith(
-      textTheme: _buildText(base.textTheme),
+      textTheme: textTheme,
+      primaryTextTheme: textTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: cream,
         foregroundColor: ink,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: base.textTheme.titleLarge?.copyWith(
+        titleTextStyle: textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w700,
           color: ink,
           letterSpacing: -0.3,
+          fontFamily: family,
+          fontFamilyFallback: fallbacks,
         ),
       ),
       cardTheme: CardThemeData(
@@ -114,7 +159,7 @@ class MangalamTheme {
         ),
         margin: EdgeInsets.zero,
       ),
-      inputDecorationTheme: _inputDecoration(scheme),
+      inputDecorationTheme: _inputDecoration(scheme, family, fallbacks),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: maroon,
@@ -124,7 +169,11 @@ class MangalamTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          textStyle: _face(
+            const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            family,
+            fallbacks,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -135,29 +184,46 @@ class MangalamTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          textStyle: _face(
+            const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+            family,
+            fallbacks,
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: maroon,
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          textStyle: _face(
+            const TextStyle(fontWeight: FontWeight.w600),
+            family,
+            fallbacks,
+          ),
         ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: const Color(0xFFF3E9DF),
         selectedColor: goldLight,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        labelStyle: _face(
+          const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          family,
+          fallbacks,
+        ),
         side: BorderSide.none,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       tabBarTheme: TabBarThemeData(
         labelColor: maroon,
         unselectedLabelColor: muted,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-        unselectedLabelStyle: const TextStyle(
-          fontWeight: FontWeight.w500,
-          fontSize: 14,
+        labelStyle: _face(
+          const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, height: 1.25),
+          family,
+          fallbacks,
+        ),
+        unselectedLabelStyle: _face(
+          const TextStyle(fontWeight: FontWeight.w500, fontSize: 14, height: 1.25),
+          family,
+          fallbacks,
         ),
         indicatorSize: TabBarIndicatorSize.label,
         indicator: const UnderlineTabIndicator(
@@ -168,7 +234,11 @@ class MangalamTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: ink,
-        contentTextStyle: const TextStyle(color: Colors.white),
+        contentTextStyle: _face(
+          const TextStyle(color: Colors.white),
+          family,
+          fallbacks,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       dividerTheme: DividerThemeData(
@@ -207,15 +277,19 @@ class MangalamTheme {
       ),
       titleMedium: base.titleMedium?.copyWith(fontWeight: FontWeight.w700),
       titleSmall: base.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-      bodyLarge: base.bodyLarge?.copyWith(height: 1.45, color: ink),
-      bodyMedium: base.bodyMedium?.copyWith(height: 1.45, color: ink),
+      bodyLarge: base.bodyLarge?.copyWith(height: 1.5, color: ink),
+      bodyMedium: base.bodyMedium?.copyWith(height: 1.5, color: ink),
       bodySmall: base.bodySmall?.copyWith(color: muted),
       labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.w700),
       labelMedium: base.labelMedium?.copyWith(fontWeight: FontWeight.w600),
     );
   }
 
-  static InputDecorationTheme _inputDecoration(ColorScheme scheme) {
+  static InputDecorationTheme _inputDecoration(
+    ColorScheme scheme,
+    String? family,
+    List<String> fallbacks,
+  ) {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
       borderSide: BorderSide(color: scheme.outline),
@@ -234,11 +308,20 @@ class MangalamTheme {
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: scheme.error),
       ),
-      labelStyle: const TextStyle(color: muted, fontWeight: FontWeight.w500),
-      hintStyle: const TextStyle(color: Color(0xFFA99F92)),
-      floatingLabelStyle: const TextStyle(
-        color: maroon,
-        fontWeight: FontWeight.w600,
+      labelStyle: _face(
+        const TextStyle(color: muted, fontWeight: FontWeight.w500),
+        family,
+        fallbacks,
+      ),
+      hintStyle: _face(
+        const TextStyle(color: Color(0xFFA99F92)),
+        family,
+        fallbacks,
+      ),
+      floatingLabelStyle: _face(
+        const TextStyle(color: maroon, fontWeight: FontWeight.w600),
+        family,
+        fallbacks,
       ),
     );
   }
@@ -371,7 +454,7 @@ class MangalamSectionHeader extends StatelessWidget {
         ],
         Expanded(
           child: Text(
-            title,
+            t(title),
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
               letterSpacing: -0.2,
@@ -459,7 +542,7 @@ class MangalamEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              title,
+              t(title),
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
@@ -468,7 +551,7 @@ class MangalamEmptyState extends StatelessWidget {
             if (subtitle != null) ...[
               const SizedBox(height: 8),
               Text(
-                subtitle!,
+                t(subtitle!),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: MangalamTheme.muted,
@@ -494,6 +577,7 @@ class ProfilePhoto extends StatelessWidget {
     this.index = 0,
     this.fit = BoxFit.cover,
     this.borderRadius,
+    this.locked = false,
   });
 
   final String name;
@@ -501,6 +585,7 @@ class ProfilePhoto extends StatelessWidget {
   final int index;
   final BoxFit fit;
   final double? borderRadius;
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
@@ -508,30 +593,46 @@ class ProfilePhoto extends StatelessWidget {
         ? photoUrls[index]
         : null;
     final r = borderRadius ?? 0;
+    Widget photo = url != null
+        ? Image.network(
+            url,
+            key: ValueKey('${locked ? 'blur' : 'clear'}-$url'),
+            fit: fit,
+            gaplessPlayback: false,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Container(
+                color: const Color(0xFFF3E9DF),
+                alignment: Alignment.center,
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: MangalamTheme.maroon,
+                ),
+              );
+            },
+            errorBuilder: (_, _, _) => _fallback(name, locked: locked),
+          )
+        : _fallback(name, locked: locked);
+    if (locked && url != null) {
+      photo = ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Transform.scale(scale: 1.35, child: photo),
+      );
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(r),
-      child: url != null
-          ? Image.network(
-              url,
-              fit: fit,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return Container(
-                  color: const Color(0xFFF3E9DF),
-                  alignment: Alignment.center,
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: MangalamTheme.maroon,
-                  ),
-                );
-              },
-              errorBuilder: (_, __, ___) => _fallback(name),
-            )
-          : _fallback(name),
+      child: photo,
     );
   }
 
-  Widget _fallback(String name) {
+  Widget _fallback(String name, {required bool locked}) {
+    if (locked) {
+      return Container(
+        color: const Color(0xFFF3E9DF),
+        alignment: Alignment.center,
+        child: const Icon(Icons.lock_outline, color: MangalamTheme.maroon, size: 22),
+      );
+    }
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     return Container(
       decoration: BoxDecoration(
