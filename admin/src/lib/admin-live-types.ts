@@ -7,6 +7,7 @@ export const LIVE_SCOPES = [
   "payments",
   "settings",
   "support",
+  "account_deletion",
 ] as const;
 
 export type LiveScope = (typeof LIVE_SCOPES)[number];

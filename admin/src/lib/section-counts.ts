@@ -51,22 +51,40 @@ export async function readSectionCounts(session: AdminSession): Promise<{
   const can = (feature: AdminFeature) =>
     session.is_super_admin || session.permissions?.[feature] === true;
 
-  const [users, pending, openReports, creditPayments, memberships, openSupport, stamp] = await Promise.all([
-    headCount(sb.from("profiles").select("*", { count: "exact", head: true })),
-    headCount(
-      sb.from("profiles").select("*", { count: "exact", head: true }).eq("verification_status", "pending")
-    ),
-    headCount(sb.from("reports").select("*", { count: "exact", head: true }).eq("status", "open")),
-    headCount(sb.from("razorpay_payment_credits").select("*", { count: "exact", head: true })),
-    headCount(sb.from("member_subscriptions").select("*", { count: "exact", head: true })),
-    headCount(
+  const [users, pending, openReports, creditPayments, memberships, openSupport, deletionTickets, stamp] =
+    await Promise.all([
+      headCount(sb.from("profiles").select("*", { count: "exact", head: true })),
+      headCount(
+        sb.from("profiles").select("*", { count: "exact", head: true }).eq("verification_status", "pending")
+      ),
+      headCount(sb.from("reports").select("*", { count: "exact", head: true }).eq("status", "open")),
+      headCount(sb.from("razorpay_payment_credits").select("*", { count: "exact", head: true })),
+      headCount(sb.from("member_subscriptions").select("*", { count: "exact", head: true })),
+      headCount(
+        sb
+          .from("support_tickets")
+          .select("*", { count: "exact", head: true })
+          .in("status", ["open", "in_progress"])
+      ),
       sb
         .from("support_tickets")
-        .select("*", { count: "exact", head: true })
+        .select("id,subject,category,status")
         .in("status", ["open", "in_progress"])
-    ),
-    settingsStamp(sb),
-  ]);
+        .limit(300),
+      settingsStamp(sb),
+    ]);
+
+  const deletionCount = (deletionTickets.data ?? []).filter((row) => {
+    const subject = String(row.subject ?? "").toLowerCase();
+    const category = String(row.category ?? "");
+    if (!/delete|erase|remove\s+my\s+account|gdpr|close\s+my\s+account/.test(subject)) return false;
+    return (
+      category === "account" ||
+      /delete(\s+my)?\s+(mangalam\s+)?account|account\s+deletion|erase\s+(my\s+)?(data|account)/.test(
+        subject
+      )
+    );
+  }).length;
 
   const counts: SectionCounts = {};
   if (can("overview") && pending != null && openReports != null) {
@@ -79,5 +97,6 @@ export async function readSectionCounts(session: AdminSession): Promise<{
     counts.payments = creditPayments + memberships;
   }
   if (can("support") && openSupport != null) counts.support = openSupport;
+  if (can("support") && !deletionTickets.error) counts.account_deletion = deletionCount;
   return { counts, settingsStamp: stamp };
 }

@@ -10,6 +10,7 @@ import '../core/mangalam_theme.dart';
 import '../core/notifications_bell.dart';
 import '../profile/profile_widgets.dart';
 import 'chat_screen.dart';
+import 'online_badge.dart';
 import '../../l10n/app_locale.dart';
 
 class MessagesTab extends StatefulWidget {
@@ -26,6 +27,7 @@ class _MessagesTabState extends State<MessagesTab>
   int _key = 0;
   RealtimeChannel? _channel;
   Timer? _debounce;
+  Timer? _presencePoll;
 
   @override
   void initState() {
@@ -33,6 +35,9 @@ class _MessagesTabState extends State<MessagesTab>
     _tab = TabController(length: 2, vsync: this);
     _tab.addListener(_onTab);
     _subscribeRealtime();
+    _presencePoll = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() => _key++);
+    });
   }
 
   void _onTab() {
@@ -65,6 +70,7 @@ class _MessagesTabState extends State<MessagesTab>
     _tab.removeListener(_onTab);
     _tab.dispose();
     _debounce?.cancel();
+    _presencePoll?.cancel();
     if (_channel != null) {
       try {
         Supabase.instance.client.removeChannel(_channel!);
@@ -166,15 +172,18 @@ class _MessagesTabState extends State<MessagesTab>
                   horizontal: 12,
                   vertical: 6,
                 ),
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: SizedBox(
-                    width: 52,
-                    height: 52,
-                    child: ProfilePhoto(
-                      name: name,
-                      photoUrls: photoUrls,
-                      locked: other['photos_locked'] == true,
+                leading: OnlineBadge(
+                  online: other['online'] == true,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: ProfilePhoto(
+                        name: name,
+                        photoUrls: photoUrls,
+                        locked: other['photos_locked'] == true,
+                      ),
                     ),
                   ),
                 ),

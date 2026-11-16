@@ -92,6 +92,20 @@
 		</array>
 		<key>FirebaseAppDelegateProxyEnabled</key>
 		<false/>
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>upi</string>
+			<string>tez</string>
+			<string>phonepe</string>
+			<string>paytmmp</string>
+			<string>bhim</string>
+			<string>credpay</string>
+			<string>amazonpay</string>
+			<string>navipay</string>
+			<string>mobikwik</string>
+			<string>myairtel</string>
+			<string>whatsapp</string>
+		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
 	</dict>

@@ -13,17 +13,18 @@ bool _closingBannedSession = false;
 
 /// Signs the member out once. Parallel API calls that all receive a ban
 /// share this so the snackbar and sign-out run a single time.
-Future<void> closeBannedSession() async {
+Future<void> closeBannedSession({String? reason}) async {
   if (_closingBannedSession) return;
   _closingBannedSession = true;
+  final message = (reason ?? '').trim().isNotEmpty
+      ? reason!.trim()
+      : 'Your account is suspended due to malicious activity detected.';
   final messenger = rootMessengerKey.currentState;
   messenger
     ?..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(
-          t('Your account is suspended due to malicious activity detected.'),
-        ),
+        content: Text(t(message)),
       ),
     );
   try {

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { Icon } from "@/components/icons";
+import { PhotoViewer } from "@/components/photo-viewer";
+import { preparePhoto } from "@/lib/prepare-photo";
 import { uploadChatFile } from "@/lib/upload";
 
 type Message = {
@@ -19,7 +22,7 @@ type Message = {
   attachment_name?: string | null;
 };
 type Billing = { next_cost?: number; free_remaining?: number; credits?: number; balance?: number };
-type Peer = { id?: string; display_name?: string | null };
+type Peer = { id?: string; display_name?: string | null; online?: boolean };
 
 export default function ChatPage() {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +33,7 @@ export default function ChatPage() {
   const [error, setError] = useState("");
   const [mine, setMine] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<string | null>(null);
 
   async function load() {
     const data = await api<{ messages?: Message[]; billing?: Billing; other?: Peer }>(`/v1/conversations/${id}/messages`);
@@ -43,10 +47,33 @@ export default function ChatPage() {
     load().catch((err: Error) => setError(err.message));
   }, [id]);
 
+  useEffect(() => {
+    let stop = false;
+    async function refreshOnline() {
+      try {
+        const data = await api<{ online?: boolean }>(`/v1/conversations/${id}/presence`);
+        if (!stop) setOther((prev) => ({ ...(prev ?? {}), online: data.online === true }));
+      } catch {
+        // Keep the last known dot. A presence miss must not clear the thread.
+      }
+    }
+    const timer = window.setInterval(() => void refreshOnline(), 20000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [id]);
+
   async function send(file?: File) {
     setError("");
     try {
-      const attachment = file ? await uploadChatFile(file, id) : null;
+      let attachment = null;
+      if (file) {
+        const image = file.type.startsWith("image/");
+        const prepared = image ? await preparePhoto(file, "chat") : file;
+        if (!prepared) return;
+        attachment = await uploadChatFile(prepared, id);
+      }
       const body = text.trim();
       if (!body && !attachment) return;
       await api(`/v1/conversations/${id}/messages`, {
@@ -72,7 +99,10 @@ export default function ChatPage() {
   return (
     <div className="flex min-h-[70vh] flex-col">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold">{other?.display_name || "Conversation"}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold">
+          {other?.display_name || "Conversation"}
+          {other?.online ? <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#22C55E] ring-2 ring-white" aria-label="Online" /> : null}
+        </h1>
         {other?.id ? <Link className="text-sm text-maroon" href={`/people/${other.id}`}>View profile</Link> : null}
       </div>
       {billing?.next_cost ? <p className="mt-2 text-sm text-muted">This message uses {billing.next_cost} credits. {billing.credits ?? billing.balance ?? ""} left.</p> : null}
@@ -85,8 +115,10 @@ export default function ChatPage() {
               {message.deleted ? <p className="italic opacity-70">This message was deleted.</p> : (
                 <>
                   {message.attachment_url && message.attachment_type === "image" ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={message.attachment_url} alt="" className="mb-2 max-h-64 rounded-2xl" />
+                    <button type="button" onClick={() => setViewer(message.attachment_url || null)}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={message.attachment_url} alt="" className="mb-2 max-h-64 rounded-2xl" />
+                    </button>
                   ) : null}
                   {message.attachment_url && message.attachment_type !== "image" ? (
                     <a className="mb-2 block underline" href={message.attachment_url} target="_blank" rel="noreferrer">{message.attachment_name || "Attachment"}</a>
@@ -125,16 +157,17 @@ export default function ChatPage() {
       {error ? <p className="mt-3 text-sm text-maroon">{error}</p> : null}
       <form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); void send(); }}>
         <input className="flex-1 rounded-full border border-line bg-white px-4 py-3" value={text} onChange={(e) => setText(e.target.value)} placeholder="Write a message" />
-        <label className="grid cursor-pointer place-items-center rounded-full border border-line bg-white px-4 text-sm">
-          Photo
+        <label className="grid h-12 w-12 cursor-pointer place-items-center rounded-full border border-line bg-white text-maroon" aria-label="Add photo or file">
+          <Icon name="gallery" />
           <input className="hidden" type="file" accept="image/*,.pdf,.doc,.docx" onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = "";
             if (file) void send(file);
           }} />
         </label>
-        <button className="rounded-full bg-maroon px-5 text-sm text-white">Send</button>
+        <button className="grid h-12 w-12 place-items-center rounded-full bg-maroon text-white" aria-label="Send"><Icon name="send" className="h-4 w-4" /></button>
       </form>
+      {viewer ? <PhotoViewer urls={[viewer]} index={0} onClose={() => setViewer(null)} /> : null}
     </div>
   );
 }

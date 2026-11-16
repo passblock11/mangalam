@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { readAppRelease } from "../app-release.js";
 import { env } from "../env.js";
 
 /** Unauthenticated endpoints safe for mobile bootstrap. */
@@ -10,3 +11,5 @@ publicRouter.get("/mobile-config", (c) =>
     google_ios_client_id: env("GOOGLE_IOS_CLIENT_ID") ?? "",
   })
 );
+
+publicRouter.get("/app-release", async (c) => c.json(await readAppRelease()));

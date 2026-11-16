@@ -3,22 +3,58 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Icon, type IconName } from "@/components/icons";
+import { CropHost } from "@/components/photo-cropper";
+import { markOffline, PresencePing } from "@/components/presence";
 import { api, ApiError } from "@/lib/api";
+import { setLocale, t, useLocale } from "@/lib/i18n";
 import { profileReady, type Profile } from "@/lib/profile";
 import { supabase } from "@/lib/supabase";
 
-const nav = [
-  ["/discover", "Discover"],
-  ["/connections", "Connections"],
-  ["/chats", "Chats"],
-  ["/profile", "Profile"],
+const nav: [string, string, IconName][] = [
+  ["/discover", "Discover", "search"],
+  ["/connections", "Likes", "heart"],
+  ["/chats", "Chats", "message"],
+  ["/profile", "Profile", "user"],
 ];
+
+function titles(path: string): string {
+  if (path.startsWith("/people/")) return "View profile";
+  if (path.startsWith("/chats/")) return "Chat";
+  if (path.startsWith("/support/")) return "Get help & support";
+  const known: Record<string, string> = {
+    "/discover": "Discover",
+    "/connections": "Connections",
+    "/chats": "Messages",
+    "/profile": "Profile",
+    "/membership": "My Membership",
+    "/edit": "Edit profile",
+    "/verification": "Profile verification",
+    "/notifications": "Notifications",
+    "/support": "Get help & support",
+    "/biodata": "Premium biodata",
+    "/onboarding": "Registration",
+  };
+  return known[path] ?? "Mangalam";
+}
+
+function goBack(path: string, router: { back: () => void; push: (href: string) => void }) {
+  const parent = path.startsWith("/chats/")
+    ? "/chats"
+    : path.startsWith("/people/")
+      ? "/discover"
+      : path.startsWith("/support/")
+        ? "/support"
+        : "/profile";
+  if (typeof window !== "undefined" && window.history.length > 1) router.back();
+  else router.push(parent);
+}
 
 export function MemberShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
+  const language = useLocale();
   const [ready, setReady] = useState(false);
-  const [name, setName] = useState("Mangalam");
 
   useEffect(() => {
     let stop = false;
@@ -32,7 +68,7 @@ export function MemberShell({ children }: { children: React.ReactNode }) {
         const me = await api<{ profile: Profile | null }>("/v1/me");
         if (stop) return;
         const profile = me.profile;
-        setName(profile?.display_name || "Member");
+        setLocale(profile?.app_language);
         const complete = profileReady(profile);
         if (!complete && path !== "/onboarding") {
           router.replace("/onboarding");
@@ -80,43 +116,51 @@ export function MemberShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const section = titles(path);
+  const onTab = nav.some(([href]) => path === href);
   return (
-    <div className="min-h-screen bg-[#f5f6f8] text-ink">
-      <header className="sticky top-0 z-30 border-b border-line bg-white">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <Link href="/discover" className="text-2xl font-semibold text-maroon">Mangalam</Link>
-          <nav className="hidden items-center gap-7 text-sm md:flex">
-            {nav.map(([href, label]) => (
-              <Link key={href} href={href} className={path.startsWith(href) ? "border-b-2 border-maroon py-5 font-semibold text-maroon" : "py-5 text-[#444]"}>
-                {label}
-              </Link>
-            ))}
-          </nav>
-          <div className="flex items-center gap-3 text-sm">
-            <Link href="/notifications" className="text-[#444] hover:text-maroon">Alerts</Link>
-            <span className="hidden max-w-32 truncate text-muted sm:inline">{name}</span>
+    <div key={language} className="member-app min-h-screen text-ink">
+      <header className="sticky top-0 z-30 border-b border-[#e8ddcf] bg-[#fff8f3]/90 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-3xl items-center gap-1 px-2">
+          {onTab ? null : (
+            <button type="button" className="grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 text-ink shadow-none outline-none hover:bg-black/5" aria-label={t("Back")} onClick={() => goBack(path, router)}>
+              <Icon name="arrow-left" className="h-6 w-6" />
+            </button>
+          )}
+          <p className="min-w-0 flex-1 truncate px-1 text-lg font-bold tracking-tight">{t(section)}</p>
+          <div className="flex items-center gap-1">
+            <Link href="/notifications" className="grid h-10 w-10 place-items-center rounded-full text-ink" aria-label={t("Notifications")}>
+              <Icon name="bell" className="h-5 w-5" />
+            </Link>
             <button
-              className="rounded-full border border-line px-3 py-1.5 hover:border-maroon"
+              className="grid h-10 w-10 cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 text-ink shadow-none outline-none hover:bg-black/5"
+              aria-label={t("Log out")}
               onClick={async () => {
+                if (!window.confirm(`${t("Log out?")}\n${t("You will be signed out of Mangalam on this device.")}`)) return;
+                await markOffline();
                 await supabase.auth.signOut();
                 router.replace("/");
               }}
             >
-              Logout
+              <Icon name="logout" className="h-5 w-5" />
             </button>
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 pb-24">{children}</main>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 backdrop-blur md:hidden">
-        <div className="grid grid-cols-4">
-          {nav.map(([href, label]) => (
-            <Link key={href} href={href} className={`py-3 text-center text-xs ${path.startsWith(href) ? "font-semibold text-maroon" : "text-muted"}`}>
-              {label}
+      <PresencePing />
+      <CropHost />
+      <main className={`mx-auto max-w-3xl px-4 py-4 ${onTab ? "pb-32" : "pb-8"}`}>{children}</main>
+      {onTab ? (
+      <nav className="fixed bottom-3 left-1/2 z-40 w-[min(520px,calc(100%-24px))] -translate-x-1/2 rounded-[28px] border border-white/80 bg-white/75 shadow-[0_8px_24px_rgba(183,28,28,0.12)] backdrop-blur-xl">
+        <div className="grid grid-cols-4 px-1 py-2">
+          {nav.map(([href, label, icon]) => (
+            <Link key={href} href={href} className={`grid place-items-center gap-1 py-1 text-[11px] ${path.startsWith(href) ? "font-semibold text-maroon" : "font-medium text-muted"}`}>
+              <Icon name={icon} className="h-[22px] w-[22px]" /> {t(label)}
             </Link>
           ))}
         </div>
       </nav>
+      ) : null}
     </div>
   );
 }

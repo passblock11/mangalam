@@ -4,14 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { hydrateLocale, t, useLocale } from "@/lib/i18n";
 
 export default function LoginPage() {
   const router = useRouter();
+  useLocale();
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    hydrateLocale();
     const stored = sessionStorage.getItem("mangalam_notice");
     if (stored) {
       setNotice(stored);
@@ -67,7 +70,7 @@ export default function LoginPage() {
               }
             }}
           >
-            {busy ? "Opening Google…" : "Continue with Google"}
+            {busy ? t("Please wait…") : t("Continue with Google")}
           </button>
           <p className="mt-4 text-xs leading-5 text-muted">
             By continuing you agree to the <Link className="text-maroon" href="/terms">terms</Link> and <Link className="text-maroon" href="/privacy">privacy policy</Link>.

@@ -12,6 +12,11 @@ import {
   type AdminRow,
   type AdminFeature,
 } from "../admin-auth.js";
+import {
+  pauseMemberSubscriptionsForBan,
+  purgeMemberAccount,
+  resumeMemberSubscriptionsAfterUnban,
+} from "../account-deletion.js";
 import { getSupabaseAdmin } from "../supabase.js";
 import { notify, type NotificationType } from "../notify.js";
 
@@ -368,14 +373,20 @@ adminRouter.post("/notify", requireAdmin(), async (c) => {
   return c.json({ ok: true, sent: ids.length });
 });
 
-adminRouter.post("/users/:id/ban", requireAdmin("users"), async (c) => {
+adminRouter.post("/users/:id/ban", requireAdmin(), async (c) => {
+  const admin = c.get("admin");
+  if (!hasPermission(admin, "users") && !hasPermission(admin, "reports")) {
+    return c.json({ error: "You do not have permission to perform this action" }, 403);
+  }
   const id = c.req.param("id");
   const parsed = banSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const reason = parsed.data.reason?.trim() || null;
 
   const sb = getSupabaseAdmin();
-  // 1) Flag the profile (this is what requireAuth checks on every request)
+  // Pause billable memberships first so charges stop while the account is banned.
+  const paused = await pauseMemberSubscriptionsForBan(id);
+
   const { error: pErr } = await sb
     .from("profiles")
     .update({
@@ -387,18 +398,33 @@ adminRouter.post("/users/:id/ban", requireAdmin("users"), async (c) => {
     .eq("id", id);
   if (pErr) return c.json({ error: pErr.message }, 500);
 
-  // 2) Also ban at the Supabase Auth layer so they can't refresh/re-login
   const { error: aErr } = await sb.auth.admin.updateUserById(id, {
     ban_duration: "87600h", // ~10 years
   });
-  if (aErr) {
-    // Non-fatal: the profile flag is the authoritative check. Log and continue.
-    return c.json({ ok: true, warning: aErr.message });
-  }
-  return c.json({ ok: true });
+
+  await notify({
+    profile_id: id,
+    type: "system",
+    title: "Account suspended",
+    body: reason
+      ? `Your account has been suspended. ${reason}`
+      : "Your account has been suspended.",
+    data: { source: "admin" },
+  });
+
+  return c.json({
+    ok: true,
+    paused_subscriptions: paused.paused,
+    subscription_warnings: paused.failures,
+    warning: aErr?.message,
+  });
 });
 
-adminRouter.post("/users/:id/unban", requireAdmin("users"), async (c) => {
+adminRouter.post("/users/:id/unban", requireAdmin(), async (c) => {
+  const admin = c.get("admin");
+  if (!hasPermission(admin, "users") && !hasPermission(admin, "reports")) {
+    return c.json({ error: "You do not have permission to perform this action" }, 403);
+  }
   const id = c.req.param("id");
   const sb = getSupabaseAdmin();
   const { error: pErr } = await sb
@@ -415,8 +441,71 @@ adminRouter.post("/users/:id/unban", requireAdmin("users"), async (c) => {
   const { error: aErr } = await sb.auth.admin.updateUserById(id, {
     ban_duration: "none",
   });
-  if (aErr) {
-    return c.json({ ok: true, warning: aErr.message });
-  }
-  return c.json({ ok: true });
+
+  const resumed = await resumeMemberSubscriptionsAfterUnban(id);
+
+  await notify({
+    profile_id: id,
+    type: "system",
+    title: "Account restored",
+    body: "Your account is active again.",
+    data: { source: "admin" },
+  });
+
+  return c.json({
+    ok: true,
+    resumed_subscriptions: resumed.resumed,
+    subscription_warnings: resumed.failures,
+    warning: aErr?.message,
+  });
 });
+
+const deleteAccountSchema = z
+  .object({
+    confirm_email: z.string().email().max(200),
+    ticket_id: z.string().uuid().optional(),
+  })
+  .strict();
+
+/** Permanently delete a member after cancelling every open membership. */
+adminRouter.post(
+  "/users/:id/delete-account",
+  requireAdmin("support"),
+  async (c) => {
+    const id = c.req.param("id");
+    const parsed = deleteAccountSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "Confirm the member email to delete this account." }, 400);
+
+    const sb = getSupabaseAdmin();
+    const { data: authUser, error: authErr } = await sb.auth.admin.getUserById(id);
+    if (authErr) return c.json({ error: authErr.message }, 500);
+    if (!authUser?.user) return c.json({ error: "Member not found." }, 404);
+
+    const email = (authUser.user.email ?? "").trim().toLowerCase();
+    const confirm = parsed.data.confirm_email.trim().toLowerCase();
+    if (!email || email !== confirm) {
+      return c.json({ error: "The email does not match this account." }, 400);
+    }
+
+    if (parsed.data.ticket_id) {
+      const { data: ticket } = await sb
+        .from("support_tickets")
+        .select("id,profile_id")
+        .eq("id", parsed.data.ticket_id)
+        .maybeSingle();
+      if (!ticket || ticket.profile_id !== id) {
+        return c.json({ error: "That ticket does not belong to this member." }, 400);
+      }
+    }
+
+    const purged = await purgeMemberAccount(id);
+    if (!purged.ok) return c.json({ error: purged.error }, purged.status);
+
+    // Ticket rows cascade when the profile is deleted. Nothing else to close.
+    return c.json({
+      ok: true,
+      cancelled_subscriptions: purged.cancelled_subscriptions,
+      subscription_warnings: purged.subscription_warnings,
+    });
+  }
+);

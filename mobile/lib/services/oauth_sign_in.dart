@@ -10,8 +10,6 @@ import 'api_client.dart';
 /// Supabase Flutter **mobile** guide (not web OAuth):
 /// https://supabase.com/docs/guides/auth/social-sign-in/auth-google?platform=flutter-mobile
 class OAuthSignIn {
-  static const _googleScopes = ['email', 'profile'];
-
   static bool _googleReady = false;
 
   /// Call once at startup (see `main.dart`).
@@ -53,12 +51,30 @@ class OAuthSignIn {
     try {
       await _nativeGoogleSignIn();
     } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled ||
-          e.code == GoogleSignInExceptionCode.interrupted) {
-        return;
-      }
+      if (_dismissedByUser(e)) return;
       throw OAuthConfigException(_googleSignInMessage(e));
     }
+  }
+
+  /// A real back-press has no setup error in the message. Android reports a
+  /// missing SHA-1 as a cancellation, which used to leave the login screen
+  /// unchanged and with no explanation.
+  static bool _dismissedByUser(GoogleSignInException e) {
+    if (e.code != GoogleSignInExceptionCode.canceled &&
+        e.code != GoogleSignInExceptionCode.interrupted) {
+      return false;
+    }
+    final detail = '${e.description ?? ''} ${e.details ?? ''}'.toLowerCase();
+    const rejected = [
+      'developer',
+      '28444',
+      'reauth',
+      'configuration',
+      'sha',
+      'console',
+      '10:',
+    ];
+    return !rejected.any(detail.contains);
   }
 
   /// Sign out Supabase + Google so the next login can pick any account.
@@ -67,23 +83,20 @@ class OAuthSignIn {
     await Supabase.instance.client.auth.signOut();
   }
 
-  /// Interactive sign-in only (no silent reuse of the device default account).
+  /// Account picker, then Supabase. The ID token from that picker is enough.
+  /// A second Google permission sheet is not part of login: it was closing
+  /// on its own and leaving the member on this screen.
   static Future<void> _nativeGoogleSignIn() async {
     final googleSignIn = GoogleSignIn.instance;
+    try {
+      await googleSignIn.signOut();
+    } catch (_) {}
 
-    await googleSignIn.signOut();
     final GoogleSignInAccount googleUser = await googleSignIn.authenticate();
-
-    final authorization =
-        await googleUser.authorizationClient.authorizationForScopes(
-          _googleScopes,
-        ) ??
-        await googleUser.authorizationClient.authorizeScopes(_googleScopes);
-
     final idToken = googleUser.authentication.idToken;
     if (idToken == null || idToken.isEmpty) {
       throw const OAuthConfigException(
-        'Google did not return an ID token. Check Web + Android/iOS client IDs in Google Cloud and Supabase.',
+        'Google did not finish sign-in. Add this install’s SHA-1 to the Android OAuth client for com.mangalam.matrimony.',
       );
     }
 
@@ -91,7 +104,6 @@ class OAuthSignIn {
       await Supabase.instance.client.auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
-        accessToken: authorization.accessToken,
       );
     } on AuthException catch (e) {
       throw OAuthConfigException(_friendlyAuthMessage(e));
@@ -100,13 +112,18 @@ class OAuthSignIn {
   }
 
   static String _googleSignInMessage(GoogleSignInException e) {
-    final detail = e.description ?? e.toString();
-    if (detail.contains('10') || detail.toLowerCase().contains('developer')) {
-      return '${GoogleAuthConfig.setupInstructions}\n\n'
-          'Android tip: add debug SHA-1 to the Google Cloud **Android** OAuth client '
-          '(run `cd mobile && ./scripts/android_sha1.sh`).';
+    final detail = '${e.description ?? ''} ${e.details ?? ''}';
+    final lower = detail.toLowerCase();
+    if (lower.contains('10') ||
+        lower.contains('developer') ||
+        lower.contains('28444') ||
+        lower.contains('reauth') ||
+        lower.contains('configuration')) {
+      return 'Google rejected this install. In Play Console, copy the App signing SHA-1 and add it to the Android OAuth client for com.mangalam.matrimony, then try again.';
     }
-    return detail;
+    final text = (e.description ?? '').trim();
+    if (text.isEmpty) return 'Google sign-in did not finish. Please try again.';
+    return text;
   }
 
   /// Map a Supabase AuthException (from signInWithIdToken) to a clean,

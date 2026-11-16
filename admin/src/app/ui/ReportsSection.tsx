@@ -55,6 +55,7 @@ export function ReportsSection() {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [detail, setDetail] = useState<Report | null>(null);
   const [banFor, setBanFor] = useState<Report | null>(null);
+  const [unbanFor, setUnbanFor] = useState<Report | null>(null);
   const [banReason, setBanReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const rev = useAdminRevision("reports");
@@ -111,13 +112,16 @@ export function ReportsSection() {
     await load();
   }
 
-  async function unban(report: Report) {
-    if (!confirm("Unban this user? They will be able to log in again.")) return;
+  async function doUnban(report: Report) {
     setBusy(report.id);
     const out = await banUser(report.reported_profile_id, false);
     setBusy(null);
-    if (!out.ok) setError(out.error);
-    else await load();
+    if (!out.ok) {
+      setError(out.error);
+      return;
+    }
+    setUnbanFor(null);
+    await load();
   }
 
   const filtered = items.filter((r) => filter === "all" || r.status === filter);
@@ -248,7 +252,7 @@ export function ReportsSection() {
                         <Ban size={14} /> Ban user
                       </Button>
                     ) : (
-                      <Button variant="ghost" size="sm" disabled={busy === r.id} onClick={() => void unban(r)}>
+                      <Button variant="ghost" size="sm" disabled={busy === r.id} onClick={() => setUnbanFor(r)}>
                         <ShieldX size={14} /> Unban
                       </Button>
                     )}
@@ -332,17 +336,28 @@ export function ReportsSection() {
       </Modal>
 
       {/* Ban modal */}
-      <Modal open={!!banFor} onClose={() => setBanFor(null)} title="Ban user">
+      <Modal open={!!banFor} onClose={() => setBanFor(null)} title="Ban this member?">
         {banFor && (
           <div className="space-y-4">
-            <p className="text-sm text-[var(--muted)]">
-              Banning <span className="font-semibold text-[var(--ink)]">{banFor.reported_name ?? "this user"}</span> will
-              sign them out immediately and prevent login until you revert the ban.
+            <p className="text-sm leading-6 text-[var(--muted)]">
+              Banning <span className="font-semibold text-[var(--ink)]">{banFor.reported_name ?? "this member"}</span> will
+              sign them out, block login, and pause their active memberships so they are not charged while banned. The
+              report will be marked actioned.
             </p>
+            <dl className="space-y-1 rounded-xl bg-[#fff8f3] px-3 py-2 text-sm">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Name</dt>
+                <dd className="font-semibold text-[var(--ink)]">{banFor.reported_name ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Account ID</dt>
+                <dd className="break-all font-mono text-xs text-[var(--ink)]">{banFor.reported_profile_id}</dd>
+              </div>
+            </dl>
             <textarea
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
-              placeholder="Ban reason (shown to the user). e.g. Fake profile — submitted fraudulent photos."
+              placeholder="Ban reason (shown to the member). e.g. Fake profile — submitted fraudulent photos."
               rows={3}
               maxLength={500}
               className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)]"
@@ -353,6 +368,40 @@ export function ReportsSection() {
               </Button>
               <Button variant="danger" size="sm" disabled={busy === banFor.id} onClick={() => void doBan(banFor, banReason)}>
                 <Ban size={14} /> Ban & close report
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!unbanFor} onClose={() => setUnbanFor(null)} title="Unban this member?">
+        {unbanFor && (
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-[var(--muted)]">
+              <span className="font-semibold text-[var(--ink)]">{unbanFor.reported_name ?? "This member"}</span> will be
+              able to sign in again. Memberships paused for the ban will be resumed.
+            </p>
+            <dl className="space-y-1 rounded-xl bg-[#fff8f3] px-3 py-2 text-sm">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Name</dt>
+                <dd className="font-semibold text-[var(--ink)]">{unbanFor.reported_name ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Account ID</dt>
+                <dd className="break-all font-mono text-xs text-[var(--ink)]">{unbanFor.reported_profile_id}</dd>
+              </div>
+            </dl>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setUnbanFor(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy === unbanFor.id}
+                onClick={() => void doUnban(unbanFor)}
+              >
+                <ShieldX size={14} /> Unban member
               </Button>
             </div>
           </div>

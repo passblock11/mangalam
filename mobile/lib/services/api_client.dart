@@ -236,8 +236,9 @@ class ApiClient {
       try {
         final body = jsonDecode(text) as Map<String, dynamic>;
         if (body['banned'] == true) {
-          await closeBannedSession();
-          throw BannedException(reason: body['ban_reason']?.toString());
+          final reason = body['ban_reason']?.toString();
+          await closeBannedSession(reason: reason);
+          throw BannedException(reason: reason);
         }
       } catch (e) {
         if (e is BannedException) rethrow;

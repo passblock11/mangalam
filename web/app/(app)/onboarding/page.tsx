@@ -3,16 +3,18 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { t, tValue, useLocale } from "@/lib/i18n";
 import { communities } from "@/lib/communities";
 import { diets, educationLevels, genders, maritalStatuses, motherTongues, occupations, profileForOptions, religions, salaryRanges, states } from "@/lib/options";
-import { uploadPhoto } from "@/lib/upload";
+import { PhotoPicker } from "@/components/photo-picker";
 
 export default function OnboardingPage() {
+  useLocale();
   const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
-  const [photos, setPhotos] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<string[]>([]);
   const [form, setForm] = useState({
     profile_for: "Self",
     display_name: "",
@@ -53,15 +55,13 @@ export default function OnboardingPage() {
         setBusy(true);
         setError("");
         try {
-          const photo_urls: string[] = [];
-          for (const file of photos.slice(0, 6)) photo_urls.push(await uploadPhoto(file, "profile-photos"));
           await api("/v1/me", {
             method: "PATCH",
             body: {
               ...form,
               height_cm: Number(form.height_cm),
               country: "India",
-              photo_urls,
+              photo_urls: photos,
               preferences: { membership_pending: true },
             },
           });
@@ -95,7 +95,9 @@ export default function OnboardingPage() {
         <Select label="Income" value={form.monthly_salary} options={salaryRanges} onChange={(value) => set("monthly_salary", value)} />
         <Field label="Height in cm" value={form.height_cm} onChange={(value) => set("height_cm", value)} />
         <label className="text-sm">About you<textarea className="mt-1 min-h-28 w-full rounded-2xl border border-line bg-white px-3 py-2" value={form.bio} onChange={(e) => set("bio", e.target.value)} /></label>
-        <label className="text-sm">Photos<input required type="file" accept="image/*" multiple className="mt-1 block w-full" onChange={(e) => setPhotos([...(e.target.files ?? [])])} /></label>
+        <div className="text-sm">Photos
+          <div className="mt-2"><PhotoPicker urls={photos} onChange={setPhotos} /></div>
+        </div>
       </div>
       {error ? <p className="mt-4 text-sm text-maroon">{error}</p> : null}
       <button disabled={busy} className="mt-6 rounded-full bg-maroon px-6 py-3 text-sm text-white disabled:opacity-50">{busy ? "Saving…" : "Save and continue"}</button>
@@ -104,14 +106,14 @@ export default function OnboardingPage() {
 }
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="text-sm">{label}<input required className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2" value={value} onChange={(e) => onChange(e.target.value)} /></label>;
+  return <label className="text-sm">{t(label)}<input required className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2" value={value} onChange={(e) => onChange(e.target.value)} /></label>;
 }
 
 function Select({ label, value, options, onChange }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {
   return (
-    <label className="text-sm">{label}
+    <label className="text-sm">{t(label)}
       <select className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2" value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        {options.map((option) => <option key={option} value={option}>{tValue(option)}</option>)}
       </select>
     </label>
   );

@@ -11,6 +11,7 @@ import {
   Menu,
   Settings,
   LifeBuoy,
+  UserX,
 } from "lucide-react";
 import { OverviewSection } from "./OverviewSection";
 import { VerificationsSection } from "./VerificationsSection";
@@ -19,10 +20,19 @@ import { ReportsSection } from "./ReportsSection";
 import { PaymentsSection } from "./PaymentsSection";
 import { SettingsSection } from "./SettingsSection";
 import { SupportSection } from "./SupportSection";
+import { AccountDeletionSection } from "./AccountDeletionSection";
 import { hasPermission, type AdminSession, type AdminFeature } from "@/lib/admin-session";
 import { AdminLiveProvider, useSectionCounts } from "./admin-live";
 
-type Tab = "overview" | "verifications" | "users" | "reports" | "payments" | "support" | "settings";
+type Tab =
+  | "overview"
+  | "verifications"
+  | "users"
+  | "reports"
+  | "payments"
+  | "support"
+  | "account_deletion"
+  | "settings";
 
 const COUNT_LABEL: Partial<Record<Tab, string>> = {
   overview: "Pending verifications and open reports",
@@ -31,6 +41,7 @@ const COUNT_LABEL: Partial<Record<Tab, string>> = {
   reports: "Open reports",
   payments: "Payments and memberships",
   support: "Tickets that need a reply",
+  account_deletion: "Account deletion requests",
 };
 
 const NAV: { id: Tab; feature: AdminFeature; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
@@ -40,6 +51,7 @@ const NAV: { id: Tab; feature: AdminFeature; label: string; icon: React.Componen
   { id: "reports", feature: "reports", label: "Reports", icon: Flag },
   { id: "payments", feature: "payments", label: "Payments", icon: Wallet },
   { id: "support", feature: "support", label: "Support", icon: LifeBuoy },
+  { id: "account_deletion", feature: "support", label: "Account deletion", icon: UserX },
   { id: "settings", feature: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -122,6 +134,7 @@ function Dashboard({ session }: { session: AdminSession }) {
               {tab === "reports" && <ReportsSection />}
               {tab === "payments" && <PaymentsSection />}
               {tab === "support" && <SupportSection />}
+              {tab === "account_deletion" && <AccountDeletionSection />}
               {tab === "settings" && <SettingsSection session={session} />}
             </>
           )}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { supportEmail } from "@/lib/config";
-import { uploadPhoto } from "@/lib/upload";
+import { PhotoPicker } from "@/components/photo-picker";
 
 type Ticket = { id: string; ticket_number?: number; subject: string; status: string; category: string; updated_at?: string };
 
@@ -13,7 +13,7 @@ export default function SupportPage() {
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState("account");
   const [body, setBody] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<string[]>([]);
   const [error, setError] = useState("");
 
   function load() {
@@ -43,11 +43,9 @@ export default function SupportPage() {
           event.preventDefault();
           setError("");
           try {
-            const attachment_urls: string[] = [];
-            for (const file of files.slice(0, 4)) attachment_urls.push(await uploadPhoto(file, "report-screenshots", "support/"));
             await api("/v1/support/tickets", {
               method: "POST",
-              body: { subject, category, body, ...(attachment_urls.length ? { attachment_urls } : {}) },
+              body: { subject, category, body, ...(files.length ? { attachment_urls: files.slice(0, 4) } : {}) },
             });
             setSubject("");
             setBody("");
@@ -64,7 +62,7 @@ export default function SupportPage() {
           {["account", "verification", "payment", "technical", "other"].map((item) => <option key={item}>{item}</option>)}
         </select>
         <textarea className="mt-3 min-h-32 w-full rounded-2xl border border-line px-3 py-2" placeholder="Describe what happened" value={body} onChange={(e) => setBody(e.target.value)} />
-        <input className="mt-3 block w-full text-sm" type="file" accept="image/*" multiple onChange={(e) => setFiles([...(e.target.files ?? [])])} />
+        <div className="mt-3"><PhotoPicker urls={files} onChange={setFiles} maxPhotos={4} kind="report" bucket="report-screenshots" folder="support/" /></div>
         {error ? <p className="mt-3 text-sm text-maroon">{error}</p> : null}
         <button className="mt-4 rounded-full bg-maroon px-5 py-2.5 text-sm text-white">Send</button>
       </form>

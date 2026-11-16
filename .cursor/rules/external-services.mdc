@@ -1,0 +1,16 @@
+---
+description: Keep payment and other external services on one server-side test or live switch
+alwaysApply: true
+---
+
+# External services
+
+Payment gateways and any later external service with test and live credentials use the single `integrations_live` switch on `app_settings`.
+
+- Off uses the saved test credentials. On uses the saved live credentials.
+- The API chooses the keys and the Cashfree host. The website and the phone use the `environment` the API returns. Do not hardcode sandbox or production in a client.
+- A missing or unknown environment stops checkout. Do not silently open the sandbox with a live payment session.
+- Saving Cashfree keys must not send checkout back to Razorpay.
+- Secrets stay on the server. Clients receive only a payment session or a public key id.
+- Do not apply SQL through the Supabase MCP. Schema changes go in `supabase/migrations` for the behlr project.
+- Do not break existing membership, credit, webhook, or refund-confirmation flows. Confirm a payment with the gateway before granting access.

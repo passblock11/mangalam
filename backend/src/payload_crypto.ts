@@ -16,7 +16,11 @@ let cachedRaw = "";
 let cachedKey: CryptoKey | null = null;
 
 export function payloadExempt(path: string): boolean {
-  return path.endsWith("/html") || path.includes("/razorpay/webhook");
+  return (
+    path.endsWith("/html") ||
+    path.includes("/razorpay/webhook") ||
+    path.includes("/cashfree/webhook")
+  );
 }
 
 export function payloadKeyConfigured(): boolean {

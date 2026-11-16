@@ -16,6 +16,7 @@ import '../core/mangalam_theme.dart';
 import '../profile/membership_screen.dart';
 import '../profile/profile_detail_screen.dart';
 import '../../l10n/app_locale.dart';
+import 'online_badge.dart';
 
 final _apiChat = ApiClient();
 
@@ -103,7 +104,9 @@ class _ChatScreenState extends State<ChatScreen> {
   int? _credits;
   int _freeRemaining = 0;
   Timer? _syncTimer;
+  Timer? _presenceTimer;
   bool _contactLocked = false;
+  bool _otherOnline = false;
   bool _photosLocked = false;
   late String _otherName;
   String? _otherId;
@@ -122,6 +125,22 @@ class _ChatScreenState extends State<ChatScreen> {
     _refresh();
     _subscribeRealtime();
     _loadContact();
+    _presenceTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _refreshOnline(),
+    );
+  }
+
+  Future<void> _refreshOnline() async {
+    if (widget.conversationId.isEmpty) return;
+    try {
+      final json = await _apiChat.get(
+            '/v1/conversations/${widget.conversationId}/presence',
+          )
+          as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() => _otherOnline = json['online'] == true);
+    } catch (_) {}
   }
 
   void _applyOther(Object? raw) {
@@ -139,6 +158,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (raw.containsKey('photos_locked')) {
         _photosLocked = raw['photos_locked'] == true;
       }
+      if (raw.containsKey('online')) _otherOnline = raw['online'] == true;
     });
   }
 
@@ -162,6 +182,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _syncTimer?.cancel();
+    _presenceTimer?.cancel();
     _unsubscribeRealtime();
     _text.dispose();
     _scroll.dispose();
@@ -705,15 +726,19 @@ class _ChatScreenState extends State<ChatScreen> {
           onTap: (_otherId == null || _otherId!.isEmpty) ? null : _openOtherProfile,
           child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: SizedBox(
-                width: 40,
-                height: 40,
-                child: ProfilePhoto(
-                  name: _otherName,
-                  photoUrls: _otherPhotos,
-                  locked: _photosLocked,
+            OnlineBadge(
+              online: _otherOnline,
+              dot: 12,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: ProfilePhoto(
+                    name: _otherName,
+                    photoUrls: _otherPhotos,
+                    locked: _photosLocked,
+                  ),
                 ),
               ),
             ),

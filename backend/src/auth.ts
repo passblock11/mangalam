@@ -77,7 +77,21 @@ export const requireAuth = createMiddleware(async (c, next) => {
       .select("is_banned,ban_reason")
       .eq("id", sub)
       .maybeSingle();
-    if (prof?.is_banned === true) {
+    // Deleted accounts leave a valid JWT until the phone signs out. Treat a
+    // missing profile like a ban so the existing client logout path runs, and
+    // the same Google account can still register again later.
+    if (!prof) {
+      return c.json(
+        {
+          error: "Your account has been deleted.",
+          banned: true,
+          ban_reason:
+            "Your Mangalam account was deleted. You can sign in with Google again to create a new account.",
+        },
+        403,
+      );
+    }
+    if (prof.is_banned === true) {
       return c.json(
         {
           error: "Your account has been banned.",

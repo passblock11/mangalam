@@ -50,7 +50,7 @@ class GoogleAuthConfig {
   }
 
   static const bundleIdIos = 'com.mangalam.mangalamApp';
-  static const packageAndroid = 'com.mangalam.mangalam_app';
+  static const packageAndroid = 'com.mangalam.matrimony';
 
   /// Optional bootstrap from Vercel env when not in dart_defines.
   static Future<void> hydrate() async {

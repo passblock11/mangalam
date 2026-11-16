@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Plus, Trash2, Save, Loader2, CheckCircle2 } from "lucide-react";
 import {
   fetchAppSettings,
@@ -86,14 +86,17 @@ export function PaymentSettings() {
         </div>
       )}
 
+      <ExternalModeSwitch settings={settings} onSaved={() => void load()} />
+
       <Card className="p-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Active method for collection
             </p>
-            <p className="mt-1 text-sm font-bold text-[var(--ink)]">
-              {settings.active_payment_method ?? "—"}
+            <p className="mt-1 text-sm font-bold text-[var(--ink)]">cashfree</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              The website and the phone collect with Cashfree. Production mode chooses its test or live keys.
             </p>
           </div>
           <Badge tone="amber">Only one active at a time</Badge>
@@ -169,8 +172,96 @@ export function PaymentSettings() {
         settings={settings}
         onSaved={() => void load()}
       />
+      <CashfreeCredentials
+        settings={settings}
+        onSaved={() => void load()}
+      />
     </div>
   );
+}
+
+function settingText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function explainSettingsError(error: string): string {
+  if (/column|schema cache/i.test(error)) {
+    return "Run supabase/migrations/0022_external_service_mode.sql in the behlr SQL editor once, then save again.";
+  }
+  return error;
+}
+
+function ExternalModeSwitch({
+  settings,
+  onSaved,
+}: {
+  settings: Record<string, any>;
+  onSaved: () => void;
+}) {
+  const live = settings.integrations_live === true;
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  async function setLive(next: boolean) {
+    if (saving || next === live) return;
+    setSaving(true);
+    setMsg(null);
+    const res = await updateAppSettings({ integrations_live: next });
+    setSaving(false);
+    if (res.ok) {
+      setMsg({
+        kind: "ok",
+        text: next
+          ? "Production mode is on. Cashfree and Razorpay now use their live credentials."
+          : "Production mode is off. Cashfree and Razorpay now use their test credentials.",
+      });
+      onSaved();
+    } else {
+      setMsg({ kind: "err", text: explainSettingsError(res.error) });
+    }
+  }
+
+  return (
+    <Card className={`p-4 ${live ? "border-[var(--maroon)]" : ""}`}>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-[var(--ink)]">Production mode</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            One switch for every payment gateway. Off uses the test credentials below. On uses the live credentials.
+            The website and the phone app ask the server on the next payment, so this applies without another app release.
+          </p>
+          <p className={`mt-2 text-xs font-semibold ${live ? "text-[var(--maroon)]" : "text-[var(--ink)]"}`}>
+            {live ? "Live credentials are in use." : "Test credentials are in use."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={live}
+          aria-label="Production mode"
+          disabled={saving}
+          onClick={() => void setLive(!live)}
+          className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${live ? "bg-[var(--maroon)]" : "bg-zinc-300"}`}
+        >
+          <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${live ? "left-5" : "left-0.5"}`} />
+        </button>
+      </div>
+      {msg && <StatusNote msg={msg} />}
+    </Card>
+  );
+}
+
+function StatusNote({ msg }: { msg: { kind: "ok" | "err"; text: string } }) {
+  return (
+    <div className={`mt-3 rounded-lg border px-3 py-2 text-sm ${msg.kind === "ok" ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+      {msg.text}
+    </div>
+  );
+}
+
+function InUse({ on }: { on: boolean }) {
+  if (!on) return null;
+  return <Badge tone="green">In use</Badge>;
 }
 
 function RazorpayCredentials({
@@ -180,35 +271,62 @@ function RazorpayCredentials({
   settings: Record<string, any>;
   onSaved: () => void;
 }) {
-  const [keyId, setKeyId] = useState("");
-  const [keySecret, setKeySecret] = useState("");
-  const [webhookSecret, setWebhookSecret] = useState("");
-  const [showSecret, setShowSecret] = useState(false);
-  const [showWebhook, setShowWebhook] = useState(false);
+  const legacyId = settingText(settings.razorpay_key_id);
+  const legacyLive = legacyId.startsWith("rzp_live_");
+  const [testId, setTestId] = useState("");
+  const [testSecret, setTestSecret] = useState("");
+  const [testWebhook, setTestWebhook] = useState("");
+  const [liveId, setLiveId] = useState("");
+  const [liveSecret, setLiveSecret] = useState("");
+  const [liveWebhook, setLiveWebhook] = useState("");
+  const [showSecrets, setShowSecrets] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const production = settings.integrations_live === true;
 
-  // Load existing values once when settings arrive.
   useEffect(() => {
-    setKeyId((settings.razorpay_key_id as string) ?? "");
-    setKeySecret((settings.razorpay_key_secret as string) ?? "");
-    setWebhookSecret((settings.razorpay_webhook_secret as string) ?? "");
-  }, [settings.razorpay_key_id, settings.razorpay_key_secret, settings.razorpay_webhook_secret]);
+    setTestId(settingText(settings.razorpay_test_key_id) || (legacyLive ? "" : legacyId));
+    setTestSecret(settingText(settings.razorpay_test_key_secret) || (legacyLive ? "" : settingText(settings.razorpay_key_secret)));
+    setTestWebhook(settingText(settings.razorpay_test_webhook_secret) || (legacyLive ? "" : settingText(settings.razorpay_webhook_secret)));
+    setLiveId(settingText(settings.razorpay_live_key_id) || (legacyLive ? legacyId : ""));
+    setLiveSecret(settingText(settings.razorpay_live_key_secret) || (legacyLive ? settingText(settings.razorpay_key_secret) : ""));
+    setLiveWebhook(settingText(settings.razorpay_live_webhook_secret) || (legacyLive ? settingText(settings.razorpay_webhook_secret) : ""));
+  }, [
+    settings.razorpay_test_key_id,
+    settings.razorpay_test_key_secret,
+    settings.razorpay_test_webhook_secret,
+    settings.razorpay_live_key_id,
+    settings.razorpay_live_key_secret,
+    settings.razorpay_live_webhook_secret,
+    settings.razorpay_key_id,
+    settings.razorpay_key_secret,
+    settings.razorpay_webhook_secret,
+    legacyId,
+    legacyLive,
+  ]);
+
+  const testReady = Boolean(testId.trim() && testSecret.trim());
+  const liveReady = Boolean(liveId.trim() && liveSecret.trim());
+  const testPartial = Boolean(testId.trim() || testSecret.trim()) && !testReady;
+  const livePartial = Boolean(liveId.trim() || liveSecret.trim()) && !liveReady;
 
   async function save() {
     setSaving(true);
     setMsg(null);
     const res = await updateAppSettings({
-      razorpay_key_id: keyId.trim(),
-      razorpay_key_secret: keySecret.trim(),
-      razorpay_webhook_secret: webhookSecret.trim(),
+      razorpay_test_key_id: testId.trim(),
+      razorpay_test_key_secret: testSecret.trim(),
+      razorpay_test_webhook_secret: testWebhook.trim(),
+      razorpay_live_key_id: liveId.trim(),
+      razorpay_live_key_secret: liveSecret.trim(),
+      razorpay_live_webhook_secret: liveWebhook.trim(),
     });
     setSaving(false);
     if (res.ok) {
-      setMsg({ kind: "ok", text: "Razorpay credentials saved." });
+      setMsg({ kind: "ok", text: "Razorpay test and live credentials saved." });
       onSaved();
     } else {
-      setMsg({ kind: "err", text: res.error });
+      setMsg({ kind: "err", text: explainSettingsError(res.error) });
     }
   }
 
@@ -221,92 +339,104 @@ function RazorpayCredentials({
         <div>
           <p className="text-sm font-bold text-[var(--ink)]">Razorpay API credentials</p>
           <p className="text-xs text-[var(--muted)]">
-            Server-side keys used by the backend to create orders &amp; verify payments.
-            The Key Secret is never sent to the mobile app.
+            Keep the test keys and the live keys here. The production switch above chooses which pair collects payments.
+            Secrets stay on the server.
           </p>
         </div>
       </div>
-
-      {msg && (
-        <div
-          className={`mb-3 rounded-lg border px-3 py-2 text-sm ${
-            msg.kind === "ok"
-              ? "border-green-200 bg-green-50 text-green-700"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold uppercase text-[var(--muted)]">
-            Key ID (public)
-          </span>
-          <input
-            type="text"
-            value={keyId}
-            onChange={(e) => setKeyId(e.target.value)}
-            placeholder="rzp_test_… / rzp_live_…"
-            className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[var(--maroon)]"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold uppercase text-[var(--muted)]">
-            Key Secret (secret — stored server-side only)
-          </span>
-          <div className="flex gap-2">
-            <input
-              type={showSecret ? "text" : "password"}
-              value={keySecret}
-              onChange={(e) => setKeySecret(e.target.value)}
-              placeholder="••••••••••••"
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[var(--maroon)]"
-            />
-            <Button
-              size="sm"
-              variant="ghost"
-              type="button"
-              onClick={() => setShowSecret((v) => !v)}
-            >
-              {showSecret ? "Hide" : "Show"}
-            </Button>
-          </div>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold uppercase text-[var(--muted)]">
-            Webhook Secret (optional — for signature verification)
-          </span>
-          <div className="flex gap-2">
-            <input
-              type={showWebhook ? "text" : "password"}
-              value={webhookSecret}
-              onChange={(e) => setWebhookSecret(e.target.value)}
-              placeholder="••••••••••••"
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[var(--maroon)]"
-            />
-            <Button
-              size="sm"
-              variant="ghost"
-              type="button"
-              onClick={() => setShowWebhook((v) => !v)}
-            >
-              {showWebhook ? "Hide" : "Show"}
-            </Button>
-          </div>
-        </label>
+      {msg && <StatusNote msg={msg} />}
+      <div className="mt-3 grid gap-4 lg:grid-cols-2">
+        <CredentialGroup title="Test credentials" inUse={!production}>
+          <TextField label="Key ID" value={testId} onChange={setTestId} placeholder="rzp_test_…" />
+          <SecretField label="Key secret" value={testSecret} onChange={setTestSecret} shown={showSecrets} />
+          <SecretField label="Webhook secret" value={testWebhook} onChange={setTestWebhook} shown={showSecrets} />
+        </CredentialGroup>
+        <CredentialGroup title="Live credentials" inUse={production}>
+          <TextField label="Key ID" value={liveId} onChange={setLiveId} placeholder="rzp_live_…" />
+          <SecretField label="Key secret" value={liveSecret} onChange={setLiveSecret} shown={showSecrets} />
+          <SecretField label="Webhook secret" value={liveWebhook} onChange={setLiveWebhook} shown={showSecrets} />
+        </CredentialGroup>
       </div>
-
-      <div className="mt-4 flex justify-end">
-        <Button size="sm" disabled={saving} onClick={() => void save()}>
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <Button size="sm" variant="ghost" type="button" onClick={() => setShowSecrets((v) => !v)}>
+          {showSecrets ? "Hide secrets" : "Show secrets"}
+        </Button>
+        <Button size="sm" disabled={saving || testPartial || livePartial || (!testReady && !liveReady)} onClick={() => void save()}>
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
           Save credentials
         </Button>
       </div>
     </Card>
+  );
+}
+
+function CredentialGroup({
+  title,
+  inUse,
+  children,
+}: {
+  title: string;
+  inUse: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`space-y-3 rounded-xl border p-3 ${inUse ? "border-[var(--maroon)] bg-rose-50/40" : "border-[var(--border)]"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-[var(--ink)]">{title}</p>
+        <InUse on={inUse} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase text-[var(--muted)]">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[var(--maroon)]"
+      />
+    </label>
+  );
+}
+
+function SecretField({
+  label,
+  value,
+  onChange,
+  shown,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  shown: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase text-[var(--muted)]">{label}</span>
+      <input
+        type={shown ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="••••••••••••"
+        className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[var(--maroon)]"
+      />
+    </label>
   );
 }
 
@@ -419,5 +549,113 @@ function MethodEditor({
         </div>
       </Card>
     </div>
+  );
+}
+
+function CashfreeCredentials({
+  settings,
+  onSaved,
+}: {
+  settings: Record<string, any>;
+  onSaved: () => void;
+}) {
+  const legacyProduction = settings.cashfree_environment === "production";
+  const legacyId = settingText(settings.cashfree_client_id);
+  const legacySecret = settingText(settings.cashfree_client_secret);
+  const [sandboxId, setSandboxId] = useState("");
+  const [sandboxSecret, setSandboxSecret] = useState("");
+  const [liveId, setLiveId] = useState("");
+  const [liveSecret, setLiveSecret] = useState("");
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const production = settings.integrations_live === true;
+  const active = settings.active_payment_method === "cashfree";
+
+  useEffect(() => {
+    setSandboxId(settingText(settings.cashfree_sandbox_client_id) || (legacyProduction ? "" : legacyId));
+    setSandboxSecret(settingText(settings.cashfree_sandbox_client_secret) || (legacyProduction ? "" : legacySecret));
+    setLiveId(settingText(settings.cashfree_live_client_id) || (legacyProduction ? legacyId : ""));
+    setLiveSecret(settingText(settings.cashfree_live_client_secret) || (legacyProduction ? legacySecret : ""));
+  }, [
+    settings.cashfree_sandbox_client_id,
+    settings.cashfree_sandbox_client_secret,
+    settings.cashfree_live_client_id,
+    settings.cashfree_live_client_secret,
+    settings.cashfree_client_id,
+    settings.cashfree_client_secret,
+    settings.cashfree_environment,
+    legacyId,
+    legacySecret,
+    legacyProduction,
+  ]);
+
+  const sandboxReady = Boolean(sandboxId.trim() && sandboxSecret.trim());
+  const liveReady = Boolean(liveId.trim() && liveSecret.trim());
+  const sandboxPartial = Boolean(sandboxId.trim() || sandboxSecret.trim()) && !sandboxReady;
+  const livePartial = Boolean(liveId.trim() || liveSecret.trim()) && !liveReady;
+  const activePairReady = production ? liveReady : sandboxReady;
+
+  async function save(activate: boolean) {
+    setSaving(true);
+    setMsg(null);
+    const res = await updateAppSettings({
+      cashfree_sandbox_client_id: sandboxId.trim(),
+      cashfree_sandbox_client_secret: sandboxSecret.trim(),
+      cashfree_live_client_id: liveId.trim(),
+      cashfree_live_client_secret: liveSecret.trim(),
+      active_payment_method: "cashfree",
+    });
+    setSaving(false);
+    if (res.ok) {
+      setMsg({
+        kind: "ok",
+        text: activate
+          ? "Cashfree credentials saved. The website and the phone collect with the pair selected by production mode."
+          : "Cashfree test and live credentials saved. The website and the phone use the pair selected by production mode.",
+      });
+      onSaved();
+    } else {
+      setMsg({ kind: "err", text: explainSettingsError(res.error) });
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3">
+        <p className="text-sm font-bold text-[var(--ink)]">Cashfree</p>
+        <p className="text-xs text-[var(--muted)]">
+          Save the sandbox App ID and the live App ID separately. The production switch chooses which one is used.
+          Webhook URL for both: https://mangalam-api.vercel.app/v1/payments/cashfree/webhook
+        </p>
+        <p className="mt-1 text-xs font-semibold text-[var(--ink)]">
+          {active ? "Collecting payments with Cashfree." : "Cashfree is saved but not the active gateway."}
+        </p>
+      </div>
+      {msg && <StatusNote msg={msg} />}
+      <div className="mt-3 grid gap-4 lg:grid-cols-2">
+        <CredentialGroup title="Test credentials" inUse={!production}>
+          <TextField label="App ID" value={sandboxId} onChange={setSandboxId} placeholder="Sandbox App ID" />
+          <SecretField label="Secret key" value={sandboxSecret} onChange={setSandboxSecret} shown={showSecrets} />
+        </CredentialGroup>
+        <CredentialGroup title="Live credentials" inUse={production}>
+          <TextField label="App ID" value={liveId} onChange={setLiveId} placeholder="Live App ID" />
+          <SecretField label="Secret key" value={liveSecret} onChange={setLiveSecret} shown={showSecrets} />
+        </CredentialGroup>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <Button size="sm" variant="ghost" type="button" onClick={() => setShowSecrets((v) => !v)}>
+          {showSecrets ? "Hide secrets" : "Show secrets"}
+        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" disabled={saving || sandboxPartial || livePartial || (!sandboxReady && !liveReady)} onClick={() => void save(false)}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save keys
+          </Button>
+          <Button size="sm" disabled={saving || sandboxPartial || livePartial || !activePairReady} onClick={() => void save(true)}>
+            Save and collect with Cashfree
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }

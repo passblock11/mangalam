@@ -13,6 +13,7 @@ import {
   reserveMessageCharge,
 } from "../message-credits.js";
 import { getProfileName, notify } from "../notify.js";
+import { onlineSet } from "../presence.js";
 import { getSupabaseAdmin } from "../supabase.js";
 
 const MAX_CHAT_BYTES = 5 * 1024 * 1024;
@@ -288,12 +289,16 @@ conversationsRouter.get("/", async (c) => {
       }),
     ])
   );
+  const online = await onlineSet(otherIds);
 
   let conversations = preview.map((p) => {
     const other = otherMemberQueries.find((x) => x.conversation_id === p.conversation_id);
+    const presented = other?.other_id ? profileById.get(other.other_id) : null;
     return {
       id: p.conversation_id,
-      other_profile: other?.other_id ? profileById.get(other.other_id) ?? null : null,
+      other_profile: presented
+        ? { ...presented, online: online.has(String(other?.other_id)) }
+        : null,
       last_message: p.last,
     };
   });
@@ -432,14 +437,31 @@ async function conversationPeer(uid: string, conversationId: string) {
       viewerCanSeeContact(uid),
       viewerContactCosts(uid),
     ]);
-    return presentOtherMember(profile as Record<string, unknown>, {
+    const presented = presentOtherMember(profile as Record<string, unknown>, {
       canAttemptContact: canSee,
       costs,
     });
+    const online = await onlineSet([String(otherId)]);
+    return { ...presented, online: online.has(String(otherId)) };
   } catch {
     return null;
   }
 }
+
+conversationsRouter.get("/:id/presence", async (c) => {
+  const uid = c.get("userId");
+  const id = c.req.param("id");
+  const sb = getSupabaseAdmin();
+  const { data: mem } = await sb
+    .from("conversation_members")
+    .select("profile_id")
+    .eq("conversation_id", id)
+    .eq("profile_id", uid)
+    .maybeSingle();
+  if (!mem) return c.json({ error: "Forbidden" }, 403);
+  const peer = await conversationPeer(uid, id);
+  return c.json({ online: peer?.online === true });
+});
 
 conversationsRouter.get("/:id/messages", async (c) => {
   const uid = c.get("userId");

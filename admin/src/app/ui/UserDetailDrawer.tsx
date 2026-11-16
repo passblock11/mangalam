@@ -30,7 +30,7 @@ import {
   banUser,
   sendUserUpdate,
 } from "../actions";
-import { Avatar, Badge, Button, fmtDate, fmtDateTime, timeAgo } from "./shared";
+import { Avatar, Badge, Button, Modal, fmtDate, fmtDateTime, timeAgo } from "./shared";
 import { useAdminRevision } from "./admin-live";
 
 export function UserDetailDrawer({
@@ -47,6 +47,10 @@ export function UserDetailDrawer({
   const [premiumDays, setPremiumDays] = useState("30");
   const [credits, setCredits] = useState("5");
   const [busy, setBusy] = useState<string | null>(null);
+  const [banOpen, setBanOpen] = useState(false);
+  const [unbanOpen, setUnbanOpen] = useState(false);
+  const [banReason, setBanReason] = useState("");
+  const [banWarning, setBanWarning] = useState<string | null>(null);
   const rev = useAdminRevision(["users", "verifications"]);
 
   async function load(silent = false) {
@@ -125,11 +129,15 @@ export function UserDetailDrawer({
     reports_against_count: number | null;
     reports_by_count: number | null;
     banned_until: string | null;
+    is_banned?: boolean | null;
+    ban_reason?: string | null;
   };
   const photoUrls = p.photo_urls ?? [];
   const wallet = p.wallet;
   const isPremium = !!wallet?.premium_until && new Date(wallet.premium_until).getTime() > Date.now();
-  const isBanned = !!p.banned_until && new Date(p.banned_until).getTime() > Date.now();
+  const isBanned =
+    p.is_banned === true ||
+    (!!p.banned_until && new Date(p.banned_until).getTime() > Date.now());
 
   async function act(key: string, fn: () => Promise<{ ok: boolean; error?: string }>) {
     setBusy(key);
@@ -137,6 +145,45 @@ export function UserDetailDrawer({
     setBusy(null);
     if (!out.ok && out.error) setError(out.error);
     else await load();
+  }
+
+  async function confirmBan() {
+    if (!profileId) return;
+    setBusy("ban");
+    setBanWarning(null);
+    setError(null);
+    const out = await banUser(profileId, true, banReason.trim() || undefined);
+    setBusy(null);
+    if (!out.ok) {
+      setError(out.error ?? "Could not ban this member.");
+      return;
+    }
+    const warnings = out.data?.subscription_warnings ?? [];
+    if (warnings.length > 0) {
+      setBanWarning(`Banned. Some memberships could not be paused: ${warnings.join(" ")}`);
+    }
+    setBanOpen(false);
+    setBanReason("");
+    await load(true);
+  }
+
+  async function confirmUnban() {
+    if (!profileId) return;
+    setBusy("ban");
+    setBanWarning(null);
+    setError(null);
+    const out = await banUser(profileId, false);
+    setBusy(null);
+    if (!out.ok) {
+      setError(out.error ?? "Could not unban this member.");
+      return;
+    }
+    const warnings = out.data?.subscription_warnings ?? [];
+    if (warnings.length > 0) {
+      setBanWarning(`Unbanned. Some memberships could not be resumed: ${warnings.join(" ")}`);
+    }
+    setUnbanOpen(false);
+    await load(true);
   }
 
   return (
@@ -388,21 +435,98 @@ export function UserDetailDrawer({
                   variant={isBanned ? "secondary" : "danger"}
                   size="sm"
                   disabled={busy === "ban"}
-                  onClick={() => void act("ban", () => banUser(profileId, !isBanned))}
+                  onClick={() => {
+                    setBanWarning(null);
+                    if (isBanned) setUnbanOpen(true);
+                    else {
+                      setBanReason("");
+                      setBanOpen(true);
+                    }
+                  }}
                 >
                   <Ban size={14} />
                   {isBanned ? "Unban user" : "Ban user"}
                 </Button>
-                {isBanned && p.banned_until && (
+                {isBanned && (
                   <p className="mt-2 text-xs text-[var(--muted)]">
-                    Banned until {fmtDateTime(p.banned_until)}
+                    {p.ban_reason ? `Reason: ${p.ban_reason}. ` : ""}
+                    Memberships are paused while banned.
+                    {p.banned_until ? ` Auth ban until ${fmtDateTime(p.banned_until)}.` : ""}
                   </p>
                 )}
+                {banWarning && <p className="mt-2 text-xs text-amber-700">{banWarning}</p>}
               </Section>
             </div>
           )}
         </div>
       </div>
+
+      <Modal open={banOpen} onClose={() => setBanOpen(false)} title="Ban this member?">
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-[var(--muted)]">
+            <span className="font-semibold text-[var(--ink)]">{p.display_name ?? "This member"}</span>
+            {p.email ? ` (${p.email})` : ""} will be signed out and blocked from Mangalam. Active memberships are
+            paused so they are not charged while banned. You can unban later to restore access and resume those
+            memberships.
+          </p>
+          <dl className="space-y-1 rounded-xl bg-[#fff8f3] px-3 py-2 text-sm">
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Name</dt>
+              <dd className="font-semibold text-[var(--ink)]">{p.display_name ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Account ID</dt>
+              <dd className="break-all font-mono text-xs text-[var(--ink)]">{profileId}</dd>
+            </div>
+          </dl>
+          <textarea
+            value={banReason}
+            onChange={(e) => setBanReason(e.target.value)}
+            placeholder="Ban reason (shown to the member). Optional."
+            rows={3}
+            maxLength={500}
+            className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)]"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setBanOpen(false)} disabled={busy === "ban"}>
+              Cancel
+            </Button>
+            <Button variant="danger" size="sm" disabled={busy === "ban"} onClick={() => void confirmBan()}>
+              <Ban size={14} />
+              {busy === "ban" ? "Banning…" : "Ban member"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={unbanOpen} onClose={() => setUnbanOpen(false)} title="Unban this member?">
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-[var(--muted)]">
+            <span className="font-semibold text-[var(--ink)]">{p.display_name ?? "This member"}</span>
+            {p.email ? ` (${p.email})` : ""} will be able to sign in again. Memberships that were paused for this ban
+            will be resumed.
+          </p>
+          <dl className="space-y-1 rounded-xl bg-[#fff8f3] px-3 py-2 text-sm">
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Name</dt>
+              <dd className="font-semibold text-[var(--ink)]">{p.display_name ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Account ID</dt>
+              <dd className="break-all font-mono text-xs text-[var(--ink)]">{profileId}</dd>
+            </div>
+          </dl>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setUnbanOpen(false)} disabled={busy === "ban"}>
+              Cancel
+            </Button>
+            <Button variant="secondary" size="sm" disabled={busy === "ban"} onClick={() => void confirmUnban()}>
+              <Ban size={14} />
+              {busy === "ban" ? "Unbanning…" : "Unban member"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {lightbox && (
         <div

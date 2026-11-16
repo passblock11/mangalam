@@ -78,8 +78,8 @@ export async function GET(request: Request) {
           ["payment_methods", ["settings"]],
           ["legal_pages", ["settings"]],
           ["admins", ["settings"]],
-          ["support_tickets", ["support"]],
-          ["support_messages", ["support"]],
+          ["support_tickets", ["support", "account_deletion"]],
+          ["support_messages", ["support", "account_deletion"]],
         ] as const
       ).map(([table, scopes]) =>
         sb

@@ -47,8 +47,10 @@ export function SiteFooter() {
     ]],
     ["Policies", [
       ["Privacy policy", "/privacy"],
+      ["Delete account", "/delete-account"],
       ["Terms of service", "/terms"],
       ["Refund and cancellation", "/refund"],
+      ["Child safety standards", "/child-safety"],
       ["Report misuse", "/login"],
     ]],
   ] as const;

@@ -613,7 +613,7 @@ export async function fetchUserDetail(
     const { data, error } = await sb
       .from("profiles")
       .select(
-        "id,display_name,phone,whatsapp_number,phone_visible,date_of_birth,gender,community,mother_tongue,diet,height_cm,profile_for,marital_status,city,state,country,bio,is_verified,is_admin,verification_status,verification_note,verification_submitted_at,verification_reviewed_at,created_at,updated_at,last_active_at,mangal_dosh,birth_time,birth_place,occupation,education_level,monthly_salary,photo_urls"
+        "id,display_name,phone,whatsapp_number,phone_visible,date_of_birth,gender,community,mother_tongue,diet,height_cm,profile_for,marital_status,city,state,country,bio,is_verified,is_admin,is_banned,ban_reason,banned_at,verification_status,verification_note,verification_submitted_at,verification_reviewed_at,created_at,updated_at,last_active_at,mangal_dosh,birth_time,birth_place,occupation,education_level,monthly_salary,photo_urls"
       )
       .eq("id", profileId)
       .maybeSingle();
@@ -733,64 +733,42 @@ export async function banUser(
   profileId: string,
   banned: boolean,
   reason?: string
-): Promise<ActionResult<void>> {
-  const auth = await requireAdmin("users");
-  if (!auth.ok) return auth;
+): Promise<ActionResult<{ subscription_warnings?: string[] }>> {
+  // Reports also ban, so allow either users or reports permission.
+  const users = await requireAdmin("users");
+  const reports = users.ok ? users : await requireAdmin("reports");
+  if (!reports.ok) return reports;
+
   try {
-    const sb = supabaseAdmin();
-    if (banned) {
-      const trimmed = reason?.trim() || null;
-      // 1) Flag the profile — requireAuth checks this on every API call
-      const { error: pErr } = await sb
-        .from("profiles")
-        .update({
-          is_banned: true,
-          banned_at: new Date().toISOString(),
-          ban_reason: trimmed,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profileId);
-      if (pErr) return { ok: false, error: mapDbError(pErr.message) };
-      // 2) Ban at the Supabase Auth layer so they can't refresh / re-login
-      const { error } = await sb.auth.admin.updateUserById(profileId, {
-        ban_duration: "87600h",
-      });
-      if (error) return { ok: false, error: error.message };
-      await notifyMember(sb, {
-        profile_id: profileId,
-        type: "system",
-        title: "Account suspended",
-        body: trimmed
-          ? `Your account has been suspended. ${trimmed}`
-          : "Your account has been suspended.",
-        data: { source: "admin" },
-      });
-    } else {
-      // Unban: clear the profile flag + the Supabase Auth ban
-      const { error: pErr } = await sb
-        .from("profiles")
-        .update({
-          is_banned: false,
-          banned_at: null,
-          ban_reason: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profileId);
-      if (pErr) return { ok: false, error: mapDbError(pErr.message) };
-      const { error } = await sb.auth.admin.updateUserById(profileId, {
-        ban_duration: "none",
-      });
-      if (error) return { ok: false, error: error.message };
-      await notifyMember(sb, {
-        profile_id: profileId,
-        type: "system",
-        title: "Account restored",
-        body: "Your account is active again.",
-        data: { source: "admin" },
-      });
+    const token = await getAdminToken();
+    if (!token) return { ok: false, error: "No admin session" };
+    const path = banned
+      ? `/v1/admin/users/${encodeURIComponent(profileId)}/ban`
+      : `/v1/admin/users/${encodeURIComponent(profileId)}/unban`;
+    const trimmed = reason?.trim();
+    const res = await fetch(`${getBackendUrl()}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: banned
+        ? JSON.stringify(trimmed ? { reason: trimmed } : {})
+        : "{}",
+      cache: "no-store",
+    });
+    const data = (await res.json().catch(() => null)) as {
+      error?: string;
+      subscription_warnings?: string[];
+    } | null;
+    if (!res.ok) {
+      return { ok: false, error: data?.error ?? `Could not ${banned ? "ban" : "unban"} this member.` };
     }
     revalidatePath("/");
-    return { ok: true, data: undefined };
+    return {
+      ok: true,
+      data: { subscription_warnings: data?.subscription_warnings ?? [] },
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: mapDbError(msg) };

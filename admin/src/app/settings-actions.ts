@@ -61,14 +61,61 @@ export async function updateAppSettings(
   if (!auth.ok) return auth;
   const sb = supabaseAdmin();
   const { data: before } = await sb.from("app_settings").select("*").eq("id", 1).maybeSingle();
+  const nextPatch = mirrorActiveCredentials(before ?? {}, patch);
   const { error } = await sb
     .from("app_settings")
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    .update({ ...nextPatch, updated_at: new Date().toISOString() })
     .eq("id", 1);
   if (error) return { ok: false, error: mapErr(error.message) };
   await announceSettingChanges((before ?? {}) as Record<string, unknown>, patch);
   revalidatePath("/");
   return { ok: true, data: undefined };
+}
+
+const CREDENTIAL_KEYS = [
+  "integrations_live",
+  "cashfree_sandbox_client_id",
+  "cashfree_sandbox_client_secret",
+  "cashfree_live_client_id",
+  "cashfree_live_client_secret",
+  "razorpay_test_key_id",
+  "razorpay_test_key_secret",
+  "razorpay_test_webhook_secret",
+  "razorpay_live_key_id",
+  "razorpay_live_key_secret",
+  "razorpay_live_webhook_secret",
+];
+
+function settingText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/** Keep the original single key columns equal to whichever pair the switch currently selects. */
+function mirrorActiveCredentials(
+  before: Record<string, unknown>,
+  patch: Record<string, unknown>
+): Record<string, unknown> {
+  if (!CREDENTIAL_KEYS.some((key) => key in patch)) return patch;
+  const row = { ...before, ...patch };
+  const live = row.integrations_live === true;
+  const mirrored: Record<string, unknown> = { ...patch };
+  const cashfreeId = settingText(live ? row.cashfree_live_client_id : row.cashfree_sandbox_client_id);
+  const cashfreeSecret = settingText(live ? row.cashfree_live_client_secret : row.cashfree_sandbox_client_secret);
+  if (cashfreeId && cashfreeSecret) {
+    mirrored.cashfree_client_id = cashfreeId;
+    mirrored.cashfree_client_secret = cashfreeSecret;
+    mirrored.cashfree_environment = live ? "production" : "sandbox";
+  }
+  const razorpayId = settingText(live ? row.razorpay_live_key_id : row.razorpay_test_key_id);
+  const razorpaySecret = settingText(live ? row.razorpay_live_key_secret : row.razorpay_test_key_secret);
+  if (razorpayId && razorpaySecret) {
+    mirrored.razorpay_key_id = razorpayId;
+    mirrored.razorpay_key_secret = razorpaySecret;
+    mirrored.razorpay_webhook_secret = settingText(
+      live ? row.razorpay_live_webhook_secret : row.razorpay_test_webhook_secret
+    );
+  }
+  return mirrored;
 }
 
 function sameAmount(left: unknown, right: unknown): boolean {
@@ -530,6 +577,95 @@ export async function uploadBrandingImage(
   }
   const { data } = sb.storage.from("app-branding").getPublicUrl(path);
   return { ok: true, data: { url: data.publicUrl } };
+}
+
+const PLAY_STORE_URL =
+  "https://play.google.com/store/apps/details?id=com.mangalam.matrimony";
+
+function playStoreUrlOk(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "play.google.com" &&
+      url.pathname === "/store/apps/details" &&
+      url.searchParams.get("id") === "com.mangalam.matrimony"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function updateAppRelease(input: {
+  force_update_enabled: boolean;
+  android_min_version_code: number;
+  android_latest_version_name: string;
+  force_update_title: string;
+  force_update_message: string;
+  play_store_url: string;
+  confirm_live: boolean;
+}): Promise<ActionResult<void>> {
+  const auth = await requireSettings();
+  if (!auth.ok) return auth;
+
+  const enabled = input.force_update_enabled === true;
+  const versionCode = Math.floor(Number(input.android_min_version_code));
+  const versionName = input.android_latest_version_name.trim();
+  const title = input.force_update_title.trim();
+  const message = input.force_update_message.trim();
+  const storeUrl = input.play_store_url.trim();
+
+  if (!Number.isInteger(versionCode) || versionCode < 0 || versionCode > 2100000000) {
+    return { ok: false, error: "Version code must be a whole number from 0 to 2100000000." };
+  }
+  if (versionName && !/^[0-9]+(\.[0-9]+){0,3}$/.test(versionName)) {
+    return { ok: false, error: "Version name must look like 1.0.0." };
+  }
+  if (title.length < 3 || title.length > 80) {
+    return { ok: false, error: "Title must be 3 to 80 characters." };
+  }
+  if (message.length < 10 || message.length > 400) {
+    return { ok: false, error: "Message must be 10 to 400 characters." };
+  }
+  if (!playStoreUrlOk(storeUrl)) {
+    return { ok: false, error: `Play Store link must be ${PLAY_STORE_URL}` };
+  }
+  if (enabled && versionCode < 1) {
+    return { ok: false, error: "Set the minimum version code to at least 1 before requiring an update." };
+  }
+  if (enabled && input.confirm_live !== true) {
+    return {
+      ok: false,
+      error: "Confirm that this version is already available on Google Play before blocking older builds.",
+    };
+  }
+
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("app_settings")
+    .update({
+      force_update_enabled: enabled,
+      android_min_version_code: versionCode,
+      android_latest_version_name: versionName,
+      force_update_title: title,
+      force_update_message: message,
+      play_store_url: storeUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+  if (error) {
+    const missing = /force_update_|android_min_version_code|android_latest_version_name|play_store_url|schema cache|column/i.test(
+      error.message
+    );
+    return {
+      ok: false,
+      error: missing
+        ? "Run supabase/migrations/0023_app_release_and_presence.sql in the behlr SQL editor, then save again."
+        : error.message,
+    };
+  }
+  revalidatePath("/");
+  return { ok: true, data: undefined };
 }
 
 export async function deleteAdminAccount(id: string): Promise<ActionResult<void>> {

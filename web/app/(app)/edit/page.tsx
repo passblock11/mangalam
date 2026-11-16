@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { setLocale, t, tValue, useLocale } from "@/lib/i18n";
 import { communities } from "@/lib/communities";
 import { diets, educationLevels, genders, languages, mangalDoshOptions, maritalStatuses, motherTongues, occupations, profileForOptions, religions, salaryRanges, states } from "@/lib/options";
+import { PhotoPicker } from "@/components/photo-picker";
 import type { Profile } from "@/lib/profile";
-import { uploadPhoto } from "@/lib/upload";
 
 type Form = {
   display_name: string;
@@ -56,6 +57,7 @@ const empty: Form = {
 };
 
 export default function EditProfilePage() {
+  useLocale();
   const router = useRouter();
   const [form, setForm] = useState<Form>(empty);
   const [photos, setPhotos] = useState<string[]>([]);
@@ -184,6 +186,7 @@ export default function EditProfilePage() {
               partner_preferences: partner,
             },
           });
+          setLocale(form.app_language);
           router.push("/profile");
         } catch (err) {
           setError(err instanceof Error ? err.message : "Could not save.");
@@ -192,8 +195,7 @@ export default function EditProfilePage() {
         }
       }}
     >
-      <h1 className="text-3xl font-semibold">Edit profile</h1>
-      <p className="mt-2 text-sm text-muted">The same details as the phone app. The language setting updates the app. This website stays in English.</p>
+      <p className="text-sm text-muted">The same details as the phone app. The language setting updates the app. This website stays in English.</p>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Field label="Name"><input className={input} value={form.display_name} onChange={(e) => set("display_name", e.target.value)} required /></Field>
         <Field label="Profile for"><Select value={form.profile_for} options={profileForOptions} onChange={(value) => set("profile_for", value)} /></Field>
@@ -234,26 +236,9 @@ export default function EditProfilePage() {
       <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={form.photos_visible} onChange={(e) => set("photos_visible", e.target.checked)} /> Show my photos to other members</label>
       <Field label="About you"><textarea className={`${input} min-h-28`} value={form.bio} onChange={(e) => set("bio", e.target.value)} /></Field>
       <h2 className="mt-8 text-xl font-semibold">Photos</h2>
-      <div className="mt-3 flex flex-wrap gap-3">
-        {photos.map((url) => (
-          <div key={url} className="relative">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="" className="h-28 w-24 rounded-xl object-cover" />
-            <button type="button" className="absolute top-1 right-1 rounded-full bg-white px-2 text-xs" onClick={() => setPhotos(photos.filter((item) => item !== url))}>Remove</button>
-          </div>
-        ))}
+      <div className="mt-3">
+        <PhotoPicker urls={photos} onChange={setPhotos} />
       </div>
-      <input className="mt-3 text-sm" type="file" accept="image/*" onChange={async (event) => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (!file || photos.length >= 6) return;
-        try {
-          const url = await uploadPhoto(file, "profile-photos");
-          setPhotos((current) => [...current, url]);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Could not upload the photo.");
-        }
-      }} />
       <h2 className="mt-8 text-xl font-semibold">Partner preference</h2>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         <Field label="Age from"><input className={input} value={form.age_min} onChange={(e) => set("age_min", e.target.value)} placeholder="All Ok" /></Field>
@@ -269,7 +254,7 @@ export default function EditProfilePage() {
         <Field label="Monthly salary"><Select value={form.partner_salary} options={salaryRanges} allowEmpty onChange={(value) => set("partner_salary", value)} /></Field>
       </div>
       {error ? <p className="mt-4 text-sm text-maroon">{error}</p> : null}
-      <button disabled={busy} className="mt-6 rounded-md bg-maroon px-6 py-3 text-sm font-medium text-white disabled:opacity-60">{busy ? "Saving…" : "Save"}</button>
+      <button disabled={busy} className="mt-6 rounded-md bg-maroon px-6 py-3 text-sm font-medium text-white disabled:opacity-60">{busy ? t("Please wait…") : t("Save")}</button>
     </form>
   );
 }
@@ -277,14 +262,14 @@ export default function EditProfilePage() {
 const input = "mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block text-sm">{label}{children}</label>;
+  return <label className="block text-sm">{t(label)}{children}</label>;
 }
 
 function Select({ value, options, onChange, allowEmpty = false }: { value: string; options: string[]; onChange: (value: string) => void; allowEmpty?: boolean }) {
   return (
     <select className={input} value={value} onChange={(event) => onChange(event.target.value)}>
-      {allowEmpty ? <option value="">All Ok</option> : null}
-      {options.map((option) => <option key={option}>{option}</option>)}
+      {allowEmpty ? <option value="">{t("All Ok")}</option> : null}
+      {options.map((option) => <option key={option} value={option}>{tValue(option)}</option>)}
     </select>
   );
 }

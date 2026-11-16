@@ -11,7 +11,9 @@ import {
   saveSubscription,
   type MembershipPlan,
 } from "../billing.js";
+import { cashfreeRouter, cancelCashfreeSubscription } from "./cashfree.js";
 import { memberAccess } from "../contact-access.js";
+import { razorpayKeySets, razorpayKeys } from "../integrations.js";
 import { env } from "../env.js";
 import { getSupabaseAdmin } from "../supabase.js";
 
@@ -71,50 +73,12 @@ const verifyBodySchema = z
   })
   .strict();
 
-function razorpayConfig():
-  | { keyId: string; keySecret: string; pricePaisePerCredit: number }
-  | { error: string } {
-  const keyId = env("RAZORPAY_KEY_ID");
-  const keySecret = env("RAZORPAY_KEY_SECRET");
-  const rawPrice = env("CONTACT_CREDIT_PRICE_PAISE");
-  const pricePaisePerCredit = rawPrice ? Number.parseInt(rawPrice, 10) : 100;
-  if (!keyId || !keySecret) {
-    return { error: "Razorpay is not configured on the server" };
-  }
-  if (!Number.isFinite(pricePaisePerCredit) || pricePaisePerCredit < 1) {
-    return { error: "CONTACT_CREDIT_PRICE_PAISE is invalid" };
-  }
-  return { keyId, keySecret, pricePaisePerCredit };
-}
-
-/** DB-driven Razorpay config (admin-managed) with env-var fallback. */
+/** Active test or live Razorpay keys, chosen by the shared production switch. */
 async function razorpayConfigAsync(): Promise<
   | { keyId: string; keySecret: string; pricePaisePerCredit: number }
   | { error: string }
 > {
-  try {
-    const sb = getSupabaseAdmin();
-    const { data } = await sb
-      .from("app_settings")
-      .select("razorpay_key_id,razorpay_key_secret,active_payment_method")
-      .eq("id", 1)
-      .maybeSingle();
-    if (data?.razorpay_key_id && data?.razorpay_key_secret) {
-      const rawPrice = env("CONTACT_CREDIT_PRICE_PAISE");
-      const pricePaisePerCredit = rawPrice ? Number.parseInt(rawPrice, 10) : 100;
-      if (!Number.isFinite(pricePaisePerCredit) || pricePaisePerCredit < 1) {
-        return { error: "CONTACT_CREDIT_PRICE_PAISE is invalid" };
-      }
-      return {
-        keyId: data.razorpay_key_id,
-        keySecret: data.razorpay_key_secret,
-        pricePaisePerCredit,
-      };
-    }
-  } catch {
-    // ignore DB errors, fall through to env
-  }
-  return razorpayConfig();
+  return razorpayKeys();
 }
 
 async function hmacSha256Hex(secret: string, message: string): Promise<string> {
@@ -195,9 +159,11 @@ type RazorpayPayment = {
 export const paymentsRouter = new Hono();
 
 paymentsRouter.use("*", async (c, next) => {
-  if (c.req.path.endsWith("/razorpay/webhook")) return next();
+  if (c.req.path.endsWith("/razorpay/webhook") || c.req.path.endsWith("/cashfree/webhook")) return next();
   return requireAuth(c, next);
 });
+
+paymentsRouter.route("/cashfree", cashfreeRouter);
 
 paymentsRouter.post("/razorpay/order", async (c) => {
   const cfg = await razorpayConfigAsync();
@@ -808,8 +774,6 @@ paymentsRouter.post("/razorpay/verify-subscription", async (c) => {
 });
 
 paymentsRouter.post("/razorpay/subscription/cancel", async (c) => {
-  const cfg = await razorpayConfigAsync();
-  if ("error" in cfg) return c.json({ error: cfg.error }, 503);
   const uid = c.get("userId");
   const sb = getSupabaseAdmin();
   const { data, error } = await sb
@@ -829,27 +793,41 @@ paymentsRouter.post("/razorpay/subscription/cancel", async (c) => {
   if (!data?.razorpay_subscription_id) {
     return c.json({ error: "No active membership to cancel" }, 404);
   }
-  const res = await razorpayFetch(
-    `/v1/subscriptions/${encodeURIComponent(data.razorpay_subscription_id)}/cancel`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret),
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ cancel_at_cycle_end: 1 }),
-    }
-  );
-  const read = await readRazorpay(res);
-  if (!res.ok) {
-    return c.json(
-      {
-        error: `Could not cancel the membership: ${razorpayErrorDescription(read.data, read.text, read.status)}`,
-      },
-      502
-    );
+  if (String(data.razorpay_subscription_id).startsWith("cfsub")) {
+    const cancelled = await cancelCashfreeSubscription(data.razorpay_subscription_id);
+    if (!cancelled.ok) return c.json({ error: cancelled.error }, cancelled.status);
+    await sb
+      .from("member_subscriptions")
+      .update({ cancel_at_period_end: true, updated_at: new Date().toISOString() })
+      .eq("razorpay_subscription_id", data.razorpay_subscription_id);
+    return c.json({ ok: true, current_period_end: data.current_period_end });
   }
+  const sets = await razorpayKeySets();
+  if ("error" in sets) return c.json({ error: sets.error }, 503);
+  if (sets.length === 0) return c.json({ error: "Razorpay is not configured on the server" }, 503);
+  let lastError = "Could not cancel the membership.";
+  let cancelled = false;
+  for (const cfg of sets) {
+    const res = await razorpayFetch(
+      `/v1/subscriptions/${encodeURIComponent(data.razorpay_subscription_id)}/cancel`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: basicAuthHeader(cfg.keyId, cfg.keySecret),
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ cancel_at_cycle_end: 1 }),
+      }
+    );
+    const read = await readRazorpay(res);
+    if (res.ok) {
+      cancelled = true;
+      break;
+    }
+    lastError = `Could not cancel the membership: ${razorpayErrorDescription(read.data, read.text, read.status)}`;
+  }
+  if (!cancelled) return c.json({ error: lastError }, 502);
   await sb
     .from("member_subscriptions")
     .update({ cancel_at_period_end: true, updated_at: new Date().toISOString() })
@@ -861,12 +839,23 @@ paymentsRouter.post("/razorpay/subscription/cancel", async (c) => {
 });
 
 paymentsRouter.post("/razorpay/webhook", async (c) => {
-  const secret = await webhookSecret();
-  if (!secret) return c.json({ error: "Webhook secret is not configured" }, 503);
+  const sets = await razorpayKeySets();
+  if ("error" in sets) return c.json({ error: sets.error }, 503);
   const raw = await c.req.text();
   const given = c.req.header("x-razorpay-signature") ?? "";
-  const expected = await hmacSha256Hex(secret, raw);
-  if (!safeEqual(expected, given)) return c.json({ error: "Invalid webhook signature" }, 400);
+  let matched: (typeof sets)[number] | null = null;
+  for (const set of sets) {
+    if (!set.webhookSecret) continue;
+    const expected = await hmacSha256Hex(set.webhookSecret, raw);
+    if (safeEqual(expected, given)) {
+      matched = set;
+      break;
+    }
+  }
+  if (!matched) {
+    if (!sets.some((set) => set.webhookSecret)) return c.json({ error: "Webhook secret is not configured" }, 503);
+    return c.json({ error: "Invalid webhook signature" }, 400);
+  }
   let event: Record<string, unknown>;
   try {
     event = JSON.parse(raw) as Record<string, unknown>;
@@ -890,9 +879,8 @@ paymentsRouter.post("/razorpay/webhook", async (c) => {
     const paymentId = payment?.id ? String(payment.id) : "";
     const paymentStatus = String(payment?.status ?? "");
     if (paymentId && (paymentStatus === "captured" || paymentStatus === "authorized")) {
-      const cfg = await razorpayConfigAsync();
-      if ("error" in cfg) return c.json({ error: cfg.error }, 503);
-      const applied = await fulfillSubscriptionPayment(cfg, {
+      if (!matched) return c.json({ error: "Webhook secret is not configured" }, 503);
+      const applied = await fulfillSubscriptionPayment(matched, {
         paymentId,
         subscriptionId,
         expectedProfileId: profileId,
@@ -929,21 +917,6 @@ function safeEqual(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
-}
-
-async function webhookSecret(): Promise<string | null> {
-  try {
-    const { data } = await getSupabaseAdmin()
-      .from("app_settings")
-      .select("razorpay_webhook_secret")
-      .eq("id", 1)
-      .maybeSingle();
-    const fromDb = (data?.razorpay_webhook_secret as string | undefined)?.trim();
-    if (fromDb) return fromDb;
-  } catch {
-    // fall through
-  }
-  return env("RAZORPAY_WEBHOOK_SECRET")?.trim() || null;
 }
 
 async function fulfillSubscriptionPayment(

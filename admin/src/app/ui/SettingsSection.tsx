@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, CreditCard, Tag, FileText, UserCog, Sliders, Palette } from "lucide-react";
+import { Settings, CreditCard, Tag, FileText, UserCog, Sliders, Palette, Smartphone } from "lucide-react";
 import { GeneralSettings } from "./settings/GeneralSettings";
+import { AppUpdateSettings } from "./settings/AppUpdateSettings";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { PaymentSettings } from "./settings/PaymentSettings";
 import { PlansSettings } from "./settings/PlansSettings";
@@ -11,7 +12,7 @@ import { LegalSettings } from "./settings/LegalSettings";
 import { AdminsSettings } from "./settings/AdminsSettings";
 import { hasPermission, type AdminSession, type AdminFeature } from "@/lib/admin-session";
 
-type Sub = "general" | "appearance" | "payment" | "plans" | "coupons" | "legal" | "admins";
+type Sub = "general" | "appearance" | "payment" | "plans" | "coupons" | "legal" | "release" | "admins";
 
 const TABS: { id: Sub; feature: AdminFeature | null; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { id: "general", feature: null, label: "General", icon: Sliders },
@@ -20,6 +21,7 @@ const TABS: { id: Sub; feature: AdminFeature | null; label: string; icon: React.
   { id: "plans", feature: null, label: "Plans", icon: Tag },
   { id: "coupons", feature: null, label: "Coupons", icon: Tag },
   { id: "legal", feature: null, label: "Legal pages", icon: FileText },
+  { id: "release", feature: null, label: "App update", icon: Smartphone },
   { id: "admins", feature: "admins", label: "Admins", icon: UserCog },
 ];
 
@@ -35,7 +37,7 @@ export function SettingsSection({ session }: { session: AdminSession }) {
           <Settings size={20} className="text-[var(--maroon)]" /> Settings
         </h2>
         <p className="text-sm text-[var(--muted)]">
-          Configure the splash, login screen, payments, plans, coupons, legal content & admins.
+          Configure the splash, login screen, payments, plans, coupons, legal content, the Play update, and admins.
         </p>
       </div>
 
@@ -62,6 +64,7 @@ export function SettingsSection({ session }: { session: AdminSession }) {
       {sub === "plans" && <PlansSettings />}
       {sub === "coupons" && <CouponsSettings />}
       {sub === "legal" && <LegalSettings />}
+      {sub === "release" && <AppUpdateSettings />}
       {sub === "admins" && <AdminsSettings session={session} />}
     </div>
   );

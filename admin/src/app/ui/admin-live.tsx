@@ -11,6 +11,7 @@ const EMPTY_REV: Record<LiveScope, number> = {
   payments: 0,
   settings: 0,
   support: 0,
+  account_deletion: 0,
 };
 
 const LiveContext = createContext<{

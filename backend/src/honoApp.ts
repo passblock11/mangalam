@@ -14,6 +14,7 @@ import { blocksRouter } from "./routes/blocks.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { authRouter } from "./routes/auth.js";
 import { publicRouter } from "./routes/public.js";
+import { presenceRouter } from "./routes/presence.js";
 import { verificationRouter } from "./routes/verification.js";
 import { configRouter } from "./routes/config.js";
 import { adminRouter } from "./routes/admin.js";
@@ -117,6 +118,7 @@ const v1 = new Hono()
   .route("/interactions", interactionsRouter)
   .route("/likes", likesRouter)
   .route("/conversations", conversationsRouter)
+  .route("/presence", presenceRouter)
   .route("/reports", reportsRouter)
   .route("/views", viewsRouter)
   .route("/profiles", profilesRouter)

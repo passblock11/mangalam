@@ -11,7 +11,7 @@ The app uses **native** `google_sign_in` → `supabase.auth.signInWithIdToken` (
 | Client | Settings |
 |--------|----------|
 | **Web** | Used as Supabase Google provider secret + Flutter `GOOGLE_WEB_CLIENT_ID` (`serverClientId`) |
-| **Android** | Package `com.mangalam.mangalam_app` + **SHA-1** (debug + release). `cd mobile && ./scripts/android_sha1.sh` for debug. |
+| **Android** | Package `com.mangalam.matrimony` + **SHA-1** (debug + release). `cd mobile && ./scripts/android_sha1.sh` for debug. |
 | **iOS** | Bundle ID `com.mangalam.mangalamApp` → `GOOGLE_IOS_CLIENT_ID` |
 
 ## 2. Supabase (behlrsqilhzhniglhgqh)

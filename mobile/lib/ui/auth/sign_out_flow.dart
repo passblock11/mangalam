@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/oauth_sign_in.dart';
+import '../../services/presence_service.dart';
 import '../core/mangalam_theme.dart';
 import '../../l10n/app_locale.dart';
 
@@ -39,6 +40,7 @@ Future<void> confirmAndSignOut(BuildContext context) async {
   );
   nav.push(route);
   try {
+    await PresenceService.instance.goOffline();
     await OAuthSignIn.signOutCompletely();
   } finally {
     if (route.isActive) {

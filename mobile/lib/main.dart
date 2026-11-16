@@ -16,6 +16,8 @@ import 'services/ban_session.dart';
 import 'services/device_integrity.dart';
 import 'services/notification_service.dart';
 import 'services/oauth_sign_in.dart';
+import 'services/presence_service.dart';
+import 'ui/core/force_update_gate.dart';
 import 'ui/auth/auth_gate.dart';
 import 'ui/core/branded_splash.dart';
 import 'ui/core/compromised_device_screen.dart';
@@ -82,6 +84,7 @@ Future<void> _openServices() async {
     ),
   );
   await OAuthSignIn.ensureGoogleInitialized();
+  PresenceService.instance.start();
   await NotificationService.instance.init();
 }
 
@@ -157,7 +160,7 @@ class _Root extends StatelessWidget {
           return const ColoredBox(color: MangalamTheme.cream);
         }
         if (snapshot.data == true) return const CompromisedDeviceScreen();
-        return const AuthGate();
+        return const ForceUpdateGate(child: AuthGate());
       },
     );
   }

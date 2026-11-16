@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../l10n/app_locale.dart';
 import 'app_branding.dart';
 import 'api_client.dart';
+import 'cashfree_checkout.dart';
 import '../ui/core/mangalam_theme.dart';
 
 /// Server-driven Razorpay flow using admin-managed plans:
@@ -66,6 +67,15 @@ class RazorpayCheckout {
     final planName = selected['name']?.toString() ?? 'Mangalam plan';
     final amountPaise = selected['price_paise'];
     if (planCode == null || amountPaise == null) return false;
+    final gateway = await _api.get('/v1/payments/cashfree/gateway') as Map<String, dynamic>;
+    if (gateway['provider'] == 'cashfree') {
+      if (!context.mounted) return false;
+      return CashfreeCheckout(_api).buyPlan(
+        context,
+        planCode,
+        subscription: selected['plan_type']?.toString() == 'subscription',
+      );
+    }
     if (selected['plan_type']?.toString() == 'subscription') {
       return _startSubscription(context, planCode, planName);
     }
