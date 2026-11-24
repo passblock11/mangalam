@@ -13,6 +13,45 @@ export const educationLevels = ["Below 10th", "10th pass", "12th pass", "Diploma
 export const occupations = ["Software / IT", "Doctor", "Engineer (non-IT)", "Teacher / Professor", "Government job", "Banking / Finance", "Business", "Self-employed", "Civil Services", "Defence", "Sales / Marketing", "HR", "Designer / Creative", "Lawyer", "Accountant / CA", "Agriculture", "Student", "Not working", "Other"];
 export const salaryRanges = ["Below ₹10,000", "₹10,000 – ₹25,000", "₹25,000 – ₹50,000", "₹50,000 – ₹1,00,000", "₹1,00,000 – ₹2,00,000", "₹2,00,000 – ₹5,00,000", "₹5,00,000 – ₹10,00,000", "Above ₹10,00,000", "Prefer not to say"];
 export const mangalDoshOptions = ["Yes", "No", "Don't know"];
+
+/** Same height steps as the Mangalam mobile app. */
+export const heightOptionsCm = [
+  "140", "142", "145", "147", "150", "152", "155", "157", "160", "162", "165", "167",
+  "170", "172", "175", "177", "180", "182", "185", "187", "190", "192", "195", "197", "200",
+];
+
+export function heightLabel(cm: string): string {
+  const h = Number(cm);
+  if (!Number.isFinite(h)) return cm;
+  const ft = Math.floor(h / 30.48);
+  const inch = Math.round((h / 2.54) % 12);
+  return `${cm} cm  ·  ${ft}'${inch}"`;
+}
+
+/** Minimum age to create or keep a profile (web matches product rule). */
+export const MIN_PROFILE_AGE = 20;
+
+/** Partner preference age dropdown values (min profile age .. 50). */
+export const ageOptions = Array.from({ length: 50 - MIN_PROFILE_AGE + 1 }, (_, i) => String(MIN_PROFILE_AGE + i));
+
+/** Latest allowed date of birth for someone who is at least `minAge` today. */
+export function maxDateOfBirth(minAge = MIN_PROFILE_AGE): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - minAge);
+  return d.toISOString().slice(0, 10);
+}
+
+export function minDateOfBirth(maxAge = 80): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - maxAge);
+  return d.toISOString().slice(0, 10);
+}
+
+export function isAtLeastAge(dob: string, minAge = MIN_PROFILE_AGE): boolean {
+  if (!dob) return false;
+  return dob <= maxDateOfBirth(minAge);
+}
+
 export const languages = [
   ["en", "English"],
   ["hi", "हिन्दी · Hindi"],

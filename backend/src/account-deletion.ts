@@ -8,8 +8,15 @@ import { razorpayKeySets } from "./integrations.js";
 import { notify } from "./notify.js";
 import { getSupabaseAdmin } from "./supabase.js";
 
-const ACTIVE_SUB_STATUSES = ["active", "authenticated", "pending", "created"] as const;
 const PAUSEABLE_SUB_STATUSES = ["active", "authenticated"] as const;
+/** Every gateway membership that must be stopped before the account is wiped. */
+const CANCEL_ON_DELETE_STATUSES = [
+  "active",
+  "authenticated",
+  "pending",
+  "created",
+  "paused",
+] as const;
 
 const STORAGE_BUCKETS = [
   "profile-photos",
@@ -202,7 +209,7 @@ export async function cancelAllMemberSubscriptions(profileId: string): Promise<{
     .from("member_subscriptions")
     .select("id,razorpay_subscription_id,status")
     .eq("profile_id", profileId)
-    .in("status", [...ACTIVE_SUB_STATUSES]);
+    .in("status", [...CANCEL_ON_DELETE_STATUSES]);
   if (error) {
     return { cancelled: [], failures: [error.message] };
   }
@@ -213,7 +220,17 @@ export async function cancelAllMemberSubscriptions(profileId: string): Promise<{
 
   for (const row of data ?? []) {
     const gatewayId = String(row.razorpay_subscription_id ?? "").trim();
-    if (!gatewayId) continue;
+    if (!gatewayId) {
+      await sb
+        .from("member_subscriptions")
+        .update({
+          status: "cancelled",
+          cancel_at_period_end: false,
+          updated_at: now,
+        })
+        .eq("id", row.id);
+      continue;
+    }
     let ok = false;
     let detail = "";
     if (gatewayId.startsWith("cfsub")) {
@@ -242,19 +259,129 @@ export async function cancelAllMemberSubscriptions(profileId: string): Promise<{
   return { cancelled, failures };
 }
 
-async function clearStorageFolder(bucket: string, profileId: string): Promise<void> {
+function storagePathFromUrl(url: string, bucket: string): string | null {
+  const marker = `/${bucket}/`;
+  const i = url.indexOf(marker);
+  if (i < 0) return null;
+  let path = url.slice(i + marker.length).split("?")[0] ?? "";
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // Keep the raw path.
+  }
+  if (!path || path.includes("..")) return null;
+  return path;
+}
+
+/** Recursively remove every object under a member folder in a storage bucket. */
+async function clearStoragePrefix(bucket: string, prefix: string): Promise<void> {
   const sb = getSupabaseAdmin();
   try {
-    const { data } = await sb.storage.from(bucket).list(profileId, { limit: 100 });
-    const paths = (data ?? [])
-      .map((item) => item.name)
-      .filter(Boolean)
-      .map((name) => `${profileId}/${name}`);
-    if (paths.length === 0) return;
-    await sb.storage.from(bucket).remove(paths);
+    const { data } = await sb.storage.from(bucket).list(prefix, { limit: 1000 });
+    if (!data || data.length === 0) return;
+    const files: string[] = [];
+    for (const item of data) {
+      if (!item.name) continue;
+      const path = prefix ? `${prefix}/${item.name}` : item.name;
+      // Folders come back with a null id from the Storage API.
+      if (item.id == null) {
+        await clearStoragePrefix(bucket, path);
+      } else {
+        files.push(path);
+      }
+    }
+    if (files.length > 0) await sb.storage.from(bucket).remove(files);
   } catch {
-    // Storage cleanup is best-effort. Auth delete still removes the account.
+    // Storage cleanup is best-effort. Row wipe still removes the account data.
   }
+}
+
+async function clearMemberStorage(
+  profileId: string,
+  profile: {
+    photo_urls?: unknown;
+    selfie_url?: string | null;
+    govt_id_url?: string | null;
+  }
+): Promise<void> {
+  const sb = getSupabaseAdmin();
+  const profilePhotoPaths: string[] = [];
+  const verificationPaths: string[] = [];
+
+  const photos = Array.isArray(profile.photo_urls) ? profile.photo_urls : [];
+  for (const url of photos) {
+    if (typeof url !== "string") continue;
+    const path = storagePathFromUrl(url, "profile-photos");
+    if (path) profilePhotoPaths.push(path);
+  }
+  for (const raw of [profile.selfie_url, profile.govt_id_url]) {
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    const fromUrl =
+      storagePathFromUrl(raw, "verification-docs") ??
+      storagePathFromUrl(raw, "profile-photos");
+    if (fromUrl) verificationPaths.push(fromUrl);
+    else if (!raw.startsWith("http")) verificationPaths.push(raw.replace(/^\//, ""));
+  }
+
+  try {
+    if (profilePhotoPaths.length > 0) {
+      await sb.storage.from("profile-photos").remove(profilePhotoPaths);
+    }
+  } catch {
+    // Best-effort.
+  }
+  try {
+    if (verificationPaths.length > 0) {
+      await sb.storage.from("verification-docs").remove(verificationPaths);
+    }
+  } catch {
+    // Best-effort.
+  }
+
+  for (const bucket of STORAGE_BUCKETS) {
+    await clearStoragePrefix(bucket, profileId);
+  }
+}
+
+/**
+ * Remove every public row owned by this member. Cascade covers most children;
+ * deleting the profile row is still required so registration form fields cannot
+ * linger if auth soft-delete (or a missing FK cascade) leaves them behind.
+ */
+async function wipeMemberRows(profileId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const sb = getSupabaseAdmin();
+
+  // Conversations that only this member belonged to would otherwise linger empty.
+  const { data: memberships } = await sb
+    .from("conversation_members")
+    .select("conversation_id")
+    .eq("profile_id", profileId);
+  const conversationIds = [...new Set((memberships ?? []).map((row) => String(row.conversation_id)))];
+
+  const { error: profileErr } = await sb.from("profiles").delete().eq("id", profileId);
+  if (profileErr) return { ok: false, error: profileErr.message };
+
+  if (conversationIds.length > 0) {
+    for (const conversationId of conversationIds) {
+      const { count } = await sb
+        .from("conversation_members")
+        .select("profile_id", { count: "exact", head: true })
+        .eq("conversation_id", conversationId);
+      if ((count ?? 0) === 0) {
+        await sb.from("conversations").delete().eq("id", conversationId);
+      }
+    }
+  }
+
+  const { data: stillThere } = await sb
+    .from("profiles")
+    .select("id")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (stillThere?.id) {
+    return { ok: false, error: "Could not remove the member profile row." };
+  }
+  return { ok: true };
 }
 
 export async function purgeMemberAccount(profileId: string): Promise<
@@ -264,7 +391,7 @@ export async function purgeMemberAccount(profileId: string): Promise<
   const sb = getSupabaseAdmin();
   const { data: profile, error: profileErr } = await sb
     .from("profiles")
-    .select("id,display_name")
+    .select("id,display_name,photo_urls,selfie_url,govt_id_url")
     .eq("id", profileId)
     .maybeSingle();
   if (profileErr) return { ok: false, error: profileErr.message, status: 500 };
@@ -304,14 +431,23 @@ export async function purgeMemberAccount(profileId: string): Promise<
     .eq("id", profileId);
   await sb.auth.admin.updateUserById(profileId, { ban_duration: "87600h" }).catch(() => null);
 
-  for (const bucket of STORAGE_BUCKETS) {
-    await clearStorageFolder(bucket, profileId);
-  }
+  await clearMemberStorage(profileId, profile);
+
+  // Explicit profile wipe removes registration form fields and cascaded rows
+  // (wallet, likes, tickets, subscriptions, etc.). Do not rely only on auth
+  // cascade — soft-deleted auth users can leave profiles behind.
+  const wiped = await wipeMemberRows(profileId);
+  if (!wiped.ok) return { ok: false, error: wiped.error, status: 500 };
 
   // Hard delete so the same Google email can register a fresh account later.
-  const { error: deleteErr } = await sb.auth.admin.deleteUser(profileId);
+  const { error: deleteErr } = await sb.auth.admin.deleteUser(profileId, false);
   if (deleteErr) {
-    return { ok: false, error: deleteErr.message, status: 500 };
+    // Profile rows are already gone. Auth may already be absent after a retry.
+    const missing =
+      /not found|user not found|does not exist/i.test(deleteErr.message);
+    if (!missing) {
+      return { ok: false, error: deleteErr.message, status: 500 };
+    }
   }
 
   return {

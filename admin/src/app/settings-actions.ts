@@ -67,6 +67,27 @@ export async function updateAppSettings(
     .update({ ...nextPatch, updated_at: new Date().toISOString() })
     .eq("id", 1);
   if (error) return { ok: false, error: mapErr(error.message) };
+  // Keep the legacy payment_methods list badge in sync with the real collector.
+  if (typeof patch.active_payment_method === "string" && patch.active_payment_method.trim()) {
+    const provider = patch.active_payment_method.trim().toLowerCase();
+    await sb.from("payment_methods").update({ is_active: false }).neq("provider", provider);
+    const { data: existing } = await sb
+      .from("payment_methods")
+      .select("id")
+      .eq("provider", provider)
+      .maybeSingle();
+    if (existing?.id) {
+      await sb.from("payment_methods").update({ is_active: true }).eq("id", existing.id);
+    } else {
+      await sb.from("payment_methods").insert({
+        provider,
+        display_name: provider === "phonepe" ? "PhonePe" : provider,
+        config: {},
+        is_active: true,
+        sort_order: 0,
+      });
+    }
+  }
   await announceSettingChanges((before ?? {}) as Record<string, unknown>, patch);
   revalidatePath("/");
   return { ok: true, data: undefined };
@@ -84,6 +105,21 @@ const CREDENTIAL_KEYS = [
   "razorpay_live_key_id",
   "razorpay_live_key_secret",
   "razorpay_live_webhook_secret",
+  "phonepe_sandbox_merchant_id",
+  "phonepe_sandbox_client_id",
+  "phonepe_sandbox_client_version",
+  "phonepe_sandbox_client_secret",
+  "phonepe_sandbox_webhook_username",
+  "phonepe_sandbox_webhook_password",
+  "phonepe_sandbox_webhook_secret",
+  "phonepe_live_merchant_id",
+  "phonepe_live_client_id",
+  "phonepe_live_client_version",
+  "phonepe_live_client_secret",
+  "phonepe_live_webhook_username",
+  "phonepe_live_webhook_password",
+  "phonepe_live_webhook_secret",
+  "active_payment_method",
 ];
 
 function settingText(value: unknown): string {

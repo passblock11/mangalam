@@ -10,4 +10,7 @@ export const publicConfig = {
 };
 
 export const supportEmail = "passblock.securities@gmail.com";
+/** Merchant legal name shown on the public site footer (payment gateway verification). */
+export const merchantLegalName = "Tejas Vasant Borate";
+export const merchantContactEmail = supportEmail;
 export const siteName = "Mangalam";

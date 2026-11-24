@@ -97,6 +97,10 @@
 			<string>upi</string>
 			<string>tez</string>
 			<string>phonepe</string>
+			<string>ppemerchantsdkv1</string>
+			<string>ppemerchantsdkv2</string>
+			<string>ppemerchantsdkv3</string>
+			<string>gpay</string>
 			<string>paytmmp</string>
 			<string>bhim</string>
 			<string>credpay</string>

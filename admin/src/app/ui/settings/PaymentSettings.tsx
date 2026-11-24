@@ -14,7 +14,7 @@ import { useAdminLiveReload } from "../admin-live";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const PROVIDERS = ["razorpay", "upi", "manual", "stripe", "cashfree"];
+const PROVIDERS = ["razorpay", "upi", "manual", "stripe", "cashfree", "phonepe"];
 
 type Method = {
   id: string;
@@ -94,9 +94,11 @@ export function PaymentSettings() {
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Active method for collection
             </p>
-            <p className="mt-1 text-sm font-bold text-[var(--ink)]">cashfree</p>
+            <p className="mt-1 text-sm font-bold text-[var(--ink)]">
+              {String(settings.active_payment_method || "cashfree")}
+            </p>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              The website and the phone collect with Cashfree. Production mode chooses its test or live keys.
+              The website and the phone collect with the gateway marked active below. Production mode chooses its test or live keys.
             </p>
           </div>
           <Badge tone="amber">Only one active at a time</Badge>
@@ -176,6 +178,10 @@ export function PaymentSettings() {
         settings={settings}
         onSaved={() => void load()}
       />
+      <PhonePeCredentials
+        settings={settings}
+        onSaved={() => void load()}
+      />
     </div>
   );
 }
@@ -185,6 +191,12 @@ function settingText(value: unknown): string {
 }
 
 function explainSettingsError(error: string): string {
+  if (/phonepe_.*webhook_secret/i.test(error) && /column|schema cache/i.test(error)) {
+    return "Run supabase/migrations/0025_phonepe_webhook_hmac.sql in the behlr SQL editor once, then save again.";
+  }
+  if (/phonepe_/i.test(error) && /column|schema cache/i.test(error)) {
+    return "Run supabase/migrations/0024_phonepe.sql in the behlr SQL editor once, then save again.";
+  }
   if (/column|schema cache/i.test(error)) {
     return "Run supabase/migrations/0022_external_service_mode.sql in the behlr SQL editor once, then save again.";
   }
@@ -212,8 +224,8 @@ function ExternalModeSwitch({
       setMsg({
         kind: "ok",
         text: next
-          ? "Production mode is on. Cashfree and Razorpay now use their live credentials."
-          : "Production mode is off. Cashfree and Razorpay now use their test credentials.",
+          ? "Production mode is on. Cashfree, PhonePe, and Razorpay now use their live credentials."
+          : "Production mode is off. Cashfree, PhonePe, and Razorpay now use their test credentials.",
       });
       onSaved();
     } else {
@@ -227,7 +239,7 @@ function ExternalModeSwitch({
         <div>
           <p className="text-sm font-bold text-[var(--ink)]">Production mode</p>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            One switch for every payment gateway. Off uses the test credentials below. On uses the live credentials.
+            One switch for every payment gateway (Cashfree, PhonePe, Razorpay). Off uses the test credentials below. On uses the live credentials.
             The website and the phone app ask the server on the next payment, so this applies without another app release.
           </p>
           <p className={`mt-2 text-xs font-semibold ${live ? "text-[var(--maroon)]" : "text-[var(--ink)]"}`}>
@@ -604,7 +616,7 @@ function CashfreeCredentials({
       cashfree_sandbox_client_secret: sandboxSecret.trim(),
       cashfree_live_client_id: liveId.trim(),
       cashfree_live_client_secret: liveSecret.trim(),
-      active_payment_method: "cashfree",
+      ...(activate ? { active_payment_method: "cashfree" } : {}),
     });
     setSaving(false);
     if (res.ok) {
@@ -612,7 +624,7 @@ function CashfreeCredentials({
         kind: "ok",
         text: activate
           ? "Cashfree credentials saved. The website and the phone collect with the pair selected by production mode."
-          : "Cashfree test and live credentials saved. The website and the phone use the pair selected by production mode.",
+          : "Cashfree test and live credentials saved. Use “Save and collect with Cashfree” when you want it active.",
       });
       onSaved();
     } else {
@@ -653,6 +665,185 @@ function CashfreeCredentials({
           </Button>
           <Button size="sm" disabled={saving || sandboxPartial || livePartial || !activePairReady} onClick={() => void save(true)}>
             Save and collect with Cashfree
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function PhonePeCredentials({
+  settings,
+  onSaved,
+}: {
+  settings: Record<string, any>;
+  onSaved: () => void;
+}) {
+  const [sandboxMerchant, setSandboxMerchant] = useState("");
+  const [sandboxClientId, setSandboxClientId] = useState("");
+  const [sandboxVersion, setSandboxVersion] = useState("1");
+  const [sandboxSecret, setSandboxSecret] = useState("");
+  const [sandboxWebhookUser, setSandboxWebhookUser] = useState("");
+  const [sandboxWebhookPass, setSandboxWebhookPass] = useState("");
+  const [sandboxWebhookHmac, setSandboxWebhookHmac] = useState("");
+  const [liveMerchant, setLiveMerchant] = useState("");
+  const [liveClientId, setLiveClientId] = useState("");
+  const [liveVersion, setLiveVersion] = useState("1");
+  const [liveSecret, setLiveSecret] = useState("");
+  const [liveWebhookUser, setLiveWebhookUser] = useState("");
+  const [liveWebhookPass, setLiveWebhookPass] = useState("");
+  const [liveWebhookHmac, setLiveWebhookHmac] = useState("");
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const production = settings.integrations_live === true;
+  const active = settings.active_payment_method === "phonepe";
+
+  useEffect(() => {
+    setSandboxMerchant(settingText(settings.phonepe_sandbox_merchant_id));
+    setSandboxClientId(settingText(settings.phonepe_sandbox_client_id));
+    setSandboxVersion(settingText(settings.phonepe_sandbox_client_version) || "1");
+    setSandboxSecret(settingText(settings.phonepe_sandbox_client_secret));
+    setSandboxWebhookUser(settingText(settings.phonepe_sandbox_webhook_username));
+    setSandboxWebhookPass(settingText(settings.phonepe_sandbox_webhook_password));
+    setSandboxWebhookHmac(settingText(settings.phonepe_sandbox_webhook_secret));
+    setLiveMerchant(settingText(settings.phonepe_live_merchant_id));
+    setLiveClientId(settingText(settings.phonepe_live_client_id));
+    setLiveVersion(settingText(settings.phonepe_live_client_version) || "1");
+    setLiveSecret(settingText(settings.phonepe_live_client_secret));
+    setLiveWebhookUser(settingText(settings.phonepe_live_webhook_username));
+    setLiveWebhookPass(settingText(settings.phonepe_live_webhook_password));
+    setLiveWebhookHmac(settingText(settings.phonepe_live_webhook_secret));
+  }, [
+    settings.phonepe_sandbox_merchant_id,
+    settings.phonepe_sandbox_client_id,
+    settings.phonepe_sandbox_client_version,
+    settings.phonepe_sandbox_client_secret,
+    settings.phonepe_sandbox_webhook_username,
+    settings.phonepe_sandbox_webhook_password,
+    settings.phonepe_sandbox_webhook_secret,
+    settings.phonepe_live_merchant_id,
+    settings.phonepe_live_client_id,
+    settings.phonepe_live_client_version,
+    settings.phonepe_live_client_secret,
+    settings.phonepe_live_webhook_username,
+    settings.phonepe_live_webhook_password,
+    settings.phonepe_live_webhook_secret,
+  ]);
+
+  const sandboxReady = Boolean(sandboxMerchant.trim() && sandboxClientId.trim() && sandboxSecret.trim());
+  const liveReady = Boolean(liveMerchant.trim() && liveClientId.trim() && liveSecret.trim());
+  const sandboxPartial =
+    Boolean(sandboxMerchant.trim() || sandboxClientId.trim() || sandboxSecret.trim()) && !sandboxReady;
+  const livePartial = Boolean(liveMerchant.trim() || liveClientId.trim() || liveSecret.trim()) && !liveReady;
+  const activePairReady = production ? liveReady : sandboxReady;
+
+  async function save(activate: boolean) {
+    setSaving(true);
+    setMsg(null);
+    const res = await updateAppSettings({
+      phonepe_sandbox_merchant_id: sandboxMerchant.trim(),
+      phonepe_sandbox_client_id: sandboxClientId.trim(),
+      phonepe_sandbox_client_version: sandboxVersion.trim() || "1",
+      phonepe_sandbox_client_secret: sandboxSecret.trim(),
+      phonepe_sandbox_webhook_username: sandboxWebhookUser.trim(),
+      phonepe_sandbox_webhook_password: sandboxWebhookPass.trim(),
+      phonepe_sandbox_webhook_secret: sandboxWebhookHmac.trim(),
+      phonepe_live_merchant_id: liveMerchant.trim(),
+      phonepe_live_client_id: liveClientId.trim(),
+      phonepe_live_client_version: liveVersion.trim() || "1",
+      phonepe_live_client_secret: liveSecret.trim(),
+      phonepe_live_webhook_username: liveWebhookUser.trim(),
+      phonepe_live_webhook_password: liveWebhookPass.trim(),
+      phonepe_live_webhook_secret: liveWebhookHmac.trim(),
+      ...(activate ? { active_payment_method: "phonepe" } : {}),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setMsg({
+        kind: "ok",
+        text: activate
+          ? "PhonePe credentials saved. The website and the phone now collect with PhonePe."
+          : "PhonePe test and live credentials saved. Use “Save and collect with PhonePe” when you want it active.",
+      });
+      onSaved();
+    } else {
+      setMsg({ kind: "err", text: explainSettingsError(res.error) });
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3">
+        <p className="text-sm font-bold text-[var(--ink)]">PhonePe</p>
+        <p className="text-xs text-[var(--muted)]">
+          From PhonePe Business → Developer Settings: Merchant ID is under your business name in the left sidebar (not on the API Keys table).
+          Client ID / secret / version are on the API Keys tab. Webhook ID + HMAC secret are on the Webhooks tab.
+          Production mode chooses which pair is used. Webhook URL: https://mangalam-api.vercel.app/v1/payments/phonepe/webhook
+        </p>
+        <p className="mt-1 text-xs font-semibold text-[var(--ink)]">
+          {active ? "Collecting payments with PhonePe." : "PhonePe is saved but not the active gateway."}
+        </p>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Webhook auth: HMAC uses Webhook ID + HMAC secret from PhonePe. SHA uses username + password. Enable Autopay events (setup, redemption, subscription state) on the webhook. Recurring plans use UPI Autopay; one-time/credits still use standard checkout.
+        </p>
+      </div>
+      {msg && <StatusNote msg={msg} />}
+      <div className="mt-3 grid gap-4 lg:grid-cols-2">
+        <CredentialGroup title="Test credentials" inUse={!production}>
+          <TextField
+            label="Merchant ID"
+            value={sandboxMerchant}
+            onChange={setSandboxMerchant}
+            placeholder="e.g. M23… (sidebar under business name)"
+          />
+          <TextField label="Client ID" value={sandboxClientId} onChange={setSandboxClientId} placeholder="From API Keys tab" />
+          <TextField label="Client version" value={sandboxVersion} onChange={setSandboxVersion} placeholder="1" />
+          <SecretField label="Client secret" value={sandboxSecret} onChange={setSandboxSecret} shown={showSecrets} />
+          <TextField
+            label="Webhook ID / SHA username"
+            value={sandboxWebhookUser}
+            onChange={setSandboxWebhookUser}
+            placeholder="From Webhooks tab"
+          />
+          <SecretField label="Webhook password (SHA)" value={sandboxWebhookPass} onChange={setSandboxWebhookPass} shown={showSecrets} />
+          <SecretField label="Webhook HMAC secret" value={sandboxWebhookHmac} onChange={setSandboxWebhookHmac} shown={showSecrets} />
+        </CredentialGroup>
+        <CredentialGroup title="Live credentials" inUse={production}>
+          <TextField
+            label="Merchant ID"
+            value={liveMerchant}
+            onChange={setLiveMerchant}
+            placeholder="e.g. M23… (sidebar under business name)"
+          />
+          <TextField label="Client ID" value={liveClientId} onChange={setLiveClientId} placeholder="From API Keys tab" />
+          <TextField label="Client version" value={liveVersion} onChange={setLiveVersion} placeholder="1" />
+          <SecretField label="Client secret" value={liveSecret} onChange={setLiveSecret} shown={showSecrets} />
+          <TextField
+            label="Webhook ID / SHA username"
+            value={liveWebhookUser}
+            onChange={setLiveWebhookUser}
+            placeholder="From Webhooks tab"
+          />
+          <SecretField label="Webhook password (SHA)" value={liveWebhookPass} onChange={setLiveWebhookPass} shown={showSecrets} />
+          <SecretField label="Webhook HMAC secret" value={liveWebhookHmac} onChange={setLiveWebhookHmac} shown={showSecrets} />
+        </CredentialGroup>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <Button size="sm" variant="ghost" type="button" onClick={() => setShowSecrets((v) => !v)}>
+          {showSecrets ? "Hide secrets" : "Show secrets"}
+        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={saving || sandboxPartial || livePartial || (!sandboxReady && !liveReady)}
+            onClick={() => void save(false)}
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save keys
+          </Button>
+          <Button size="sm" disabled={saving || sandboxPartial || livePartial || !activePairReady} onClick={() => void save(true)}>
+            Save and collect with PhonePe
           </Button>
         </div>
       </div>

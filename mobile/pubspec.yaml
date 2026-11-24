@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+4
+version: 1.0.0+10
 
 environment:
   sdk: ^3.11.3
@@ -44,6 +44,7 @@ dependencies:
   webview_flutter: ^4.10.0
   razorpay_flutter: ^1.4.7
   flutter_cashfree_pg_sdk: 2.5.0+53
+  phonepe_payment_sdk: ^3.0.0
   google_sign_in: ^7.2.0
   iconsax_flutter: ^1.0.1
   image_picker: ^1.2.4
@@ -59,6 +60,9 @@ dependencies:
   safe_device: ^1.2.1
   image_cropper: ^12.2.1
   google_mlkit_face_detection: ^0.14.0
+  # Runtime Android/iOS plugin keeps the splash until Flutter draws. Must not
+  # stay only under dev_dependencies or release builds fail to compile.
+  flutter_native_splash: ^2.4.6
 
 dev_dependencies:
   flutter_test:
@@ -71,7 +75,6 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.3
-  flutter_native_splash: ^2.4.6
 
 # pdf 3.12 only allows archive <4.1, and that build cannot decode photos.
 dependency_overrides:

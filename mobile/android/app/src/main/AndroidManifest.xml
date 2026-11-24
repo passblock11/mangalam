@@ -46,6 +46,11 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/ic_launcher_background" />
+        <!-- Required so Cashfree subscription checkout returns a Flutter callback after UPI/redirect. -->
+        <meta-data
+            android:name="cashfree_subscription_flow_enable"
+            android:value="true"
+            tools:replace="android:value" />
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
@@ -76,6 +81,23 @@
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https" android:host="play.google.com"/>
+        </intent>
+        <!-- PhonePe Standard Checkout / UPI app visibility (Android 11+) -->
+        <package android:name="com.phonepe.app" />
+        <package android:name="com.phonepe.app.preprod" />
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="net.one97.paytm" />
+        <package android:name="in.org.npci.upiapp" />
+        <package android:name="com.dreamplug.androidapp" />
+        <package android:name="com.amazon.mobile.shopping" />
+        <package android:name="com.csam.icici.bank.imobile" />
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="phonepe"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="ppe"/>
         </intent>
     </queries>
 </manifest>

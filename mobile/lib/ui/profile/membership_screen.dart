@@ -78,6 +78,23 @@ class _MembershipScreenState extends State<MembershipScreen> {
 
   bool get _addonsAllowed => _data?['addons_allowed'] == true;
 
+  bool get _canPurchaseMembership {
+    final fromApi = _data?['can_purchase_membership'];
+    if (fromApi is bool) return fromApi;
+    if (_waived) return false;
+    if (!_addonsAllowed) return true;
+    return _subscription?['cancel_at_period_end'] == true;
+  }
+
+  bool get _needsMembershipForCredits {
+    final fromApi = _data?['membership_required_for_credits'];
+    if (fromApi is bool) return fromApi;
+    return !_waived && !_addonsAllowed;
+  }
+
+  bool get _renewingAfterCancel =>
+      _subscription?['cancel_at_period_end'] == true && (_active || _data?['benefits_active'] == true);
+
   bool get _canCancel {
     final sub = _subscription;
     if (sub == null || sub['cancel_at_period_end'] == true) return false;
@@ -144,10 +161,17 @@ class _MembershipScreenState extends State<MembershipScreen> {
     );
     if (ok != true || !mounted) return;
     try {
-      await _api.post('/v1/payments/razorpay/subscription/cancel', {});
+      final res = await _api.post('/v1/payments/razorpay/subscription/cancel', {}) as Map<String, dynamic>?;
       if (!mounted) return;
+      final notice = res?['notice']?.toString().trim();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(t('Membership will end after the current period.'))),
+        SnackBar(
+          content: Text(
+            notice != null && notice.isNotEmpty
+                ? t(notice)
+                : t('Membership will end after the current period.'),
+          ),
+        ),
       );
       await _load();
     } catch (e) {
@@ -202,14 +226,20 @@ class _MembershipScreenState extends State<MembershipScreen> {
                     _emptyPayments(),
                   ],
                   const SizedBox(height: 22),
-                  if (!_benefits)
+                  if (_needsMembershipForCredits) ...[
+                    _membershipRequiredInfo(),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_canPurchaseMembership)
                     FilledButton.icon(
                       onPressed: _buyMembership,
                       icon: const Icon(Iconsax.crown),
-                      label: Text(t('Choose a membership')),
+                      label: Text(
+                        t(_renewingAfterCancel ? 'Renew membership' : 'Choose a membership'),
+                      ),
                     ),
                   if (_addonsAllowed) ...[
-                    if (!_benefits) const SizedBox(height: 8),
+                    if (_canPurchaseMembership) const SizedBox(height: 8),
                     OutlinedButton.icon(
                       onPressed: _buyCredits,
                       icon: const Icon(Iconsax.flash),
@@ -226,6 +256,32 @@ class _MembershipScreenState extends State<MembershipScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _membershipRequiredInfo() {
+    final message = t('Your membership has ended. Choose a plan to buy contact credits again.');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3E8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF0D4C4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Iconsax.info_circle, size: 20, color: MangalamTheme.maroon),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 13.5, height: 1.35, color: MangalamTheme.ink),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

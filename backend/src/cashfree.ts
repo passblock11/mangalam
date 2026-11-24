@@ -25,16 +25,21 @@ function savedText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export async function activePaymentProvider(): Promise<"cashfree" | "razorpay"> {
+export async function activePaymentProvider(): Promise<"phonepe" | "cashfree" | "razorpay"> {
   const envReady = Boolean(env("CASHFREE_CLIENT_ID")?.trim() && env("CASHFREE_CLIENT_SECRET")?.trim());
   try {
     const { data, error } = await getSupabaseAdmin()
       .from("app_settings")
-      .select("active_payment_method,cashfree_client_id,cashfree_sandbox_client_id,cashfree_live_client_id")
+      .select(
+        "active_payment_method,cashfree_client_id,cashfree_sandbox_client_id,cashfree_live_client_id,phonepe_sandbox_client_id,phonepe_live_client_id,phonepe_sandbox_merchant_id,phonepe_live_merchant_id"
+      )
       .eq("id", 1)
       .maybeSingle();
     if (error) return envReady ? "cashfree" : "razorpay";
+    // Admin choice wins. Explicit PhonePe/Cashfree must not fall through to another gateway.
+    if (data?.active_payment_method === "phonepe") return "phonepe";
     if (data?.active_payment_method === "cashfree") return "cashfree";
+    if (data?.active_payment_method === "razorpay") return "razorpay";
     const cashfreeSaved = [data?.cashfree_client_id, data?.cashfree_sandbox_client_id, data?.cashfree_live_client_id]
       .some((value) => savedText(value).length > 0);
     // Saved or server Cashfree keys collect through Cashfree. Filling in the App ID

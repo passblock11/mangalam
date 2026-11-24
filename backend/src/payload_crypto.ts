@@ -19,7 +19,8 @@ export function payloadExempt(path: string): boolean {
   return (
     path.endsWith("/html") ||
     path.includes("/razorpay/webhook") ||
-    path.includes("/cashfree/webhook")
+    path.includes("/cashfree/webhook") ||
+    path.includes("/phonepe/webhook")
   );
 }
 

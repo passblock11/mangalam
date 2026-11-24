@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
 import { api } from "@/lib/api";
-import { openCashfreeCheckout, openCheckout } from "@/lib/checkout";
+import { openCashfreeCheckout, openCheckout, openPhonePeCheckout } from "@/lib/checkout";
 import { t, tCatalog, tf, useLocale } from "@/lib/i18n";
 import { inr } from "@/lib/profile";
 
@@ -44,6 +44,8 @@ type Membership = {
   membership_waived?: boolean;
   benefits_active?: boolean;
   addons_allowed?: boolean;
+  can_purchase_membership?: boolean;
+  membership_required_for_credits?: boolean;
   message_credit_cost?: number | null;
   message_free_per_chat?: number;
   subscription?: Subscription | null;
@@ -59,7 +61,16 @@ async function verifyCashfreePaid(path: string, body: Record<string, string>) {
     } catch (error) {
       last = error;
       const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-      if (!message.includes("not confirmed") || attempt === 4) throw error;
+      const permanent =
+        message.includes("not a phonepe subscription") ||
+        message.includes("does not belong") ||
+        message.includes("missing mangalam");
+      if (permanent || attempt === 4) throw error;
+      const pending =
+        message.includes("not confirmed") ||
+        message.includes("not active yet") ||
+        message.includes("not confirmed yet");
+      if (!pending) throw error;
       await new Promise((resolve) => setTimeout(resolve, 1000 + attempt * 1000));
     }
   }
@@ -123,6 +134,42 @@ export default function MembershipPage() {
           await openCashfreeCheckout({ environment: order.environment, paymentSessionId: order.payment_session_id });
           await verifyCashfreePaid("/v1/payments/cashfree/verify", { order_id: order.order_id });
         }
+      } else if (gateway.provider === "phonepe") {
+        if (plan.plan_type === "subscription") {
+          const started = await api<{
+            redirect_url: string;
+            checkout_script: string;
+            merchant_order_id: string;
+            merchant_subscription_id: string;
+          }>("/v1/payments/phonepe/subscribe", {
+            method: "POST",
+            body: { plan_code: plan.code, channel: "web" },
+          });
+          await openPhonePeCheckout({
+            redirectUrl: started.redirect_url,
+            checkoutScript: started.checkout_script,
+          });
+          await verifyCashfreePaid("/v1/payments/phonepe/verify-subscription", {
+            merchant_order_id: started.merchant_order_id,
+            merchant_subscription_id: started.merchant_subscription_id,
+          });
+        } else {
+          const order = await api<{
+            redirect_url: string;
+            checkout_script: string;
+            merchant_order_id: string;
+          }>("/v1/payments/phonepe/order", {
+            method: "POST",
+            body: { plan_code: plan.code, channel: "web" },
+          });
+          await openPhonePeCheckout({
+            redirectUrl: order.redirect_url,
+            checkoutScript: order.checkout_script,
+          });
+          await verifyCashfreePaid("/v1/payments/phonepe/verify", {
+            merchant_order_id: order.merchant_order_id,
+          });
+        }
       } else if (plan.plan_type === "subscription") {
         const started = await api<{ key_id: string; subscription_id: string }>("/v1/payments/razorpay/subscribe", {
           method: "POST",
@@ -180,6 +227,12 @@ export default function MembershipPage() {
   const active = Boolean(membership?.benefits_active);
   const waived = Boolean(membership?.membership_waived);
   const benefits = waived || active;
+  const canPurchase =
+    membership?.can_purchase_membership ??
+    (!waived && (!active || Boolean(sub?.cancel_at_period_end)));
+  const needsMembershipForCredits =
+    membership?.membership_required_for_credits ?? (!waived && !membership?.addons_allowed);
+  const renewAfterCancel = Boolean(sub?.cancel_at_period_end && (active || membership?.benefits_active));
   const credits = membership?.contact_credits ?? 0;
   const allowance = sub?.plan_credits ?? 0;
   const contactValue = allowance > credits && allowance > 0 ? `${credits}/${allowance}` : String(credits);
@@ -286,9 +339,14 @@ export default function MembershipPage() {
 
       {error ? <p className="mt-4 text-sm text-maroon">{error}</p> : null}
       <div className="mt-6 space-y-2">
-        {!benefits ? (
+        {needsMembershipForCredits ? (
+          <p className="rounded-xl border border-[#f0d4c4] bg-[#fff3e8] px-3.5 py-3 text-[13px] leading-5 text-ink">
+            {t("Your membership has ended. Choose a plan to buy contact credits again.")}
+          </p>
+        ) : null}
+        {canPurchase ? (
           <button className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-maroon text-sm font-semibold text-white" onClick={() => setSheet("membership")}>
-            <Icon name="crown" className="h-4 w-4" /> {t("Choose a membership")}
+            <Icon name="crown" className="h-4 w-4" /> {t(renewAfterCancel ? "Renew membership" : "Choose a membership")}
           </button>
         ) : null}
         {membership?.addons_allowed ? (

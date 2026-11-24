@@ -4,7 +4,9 @@ import { requireAuth } from "../auth.js";
 import {
   accessDays,
   applyCharge,
+  assertCanPurchaseMembership,
   billingCycle,
+  canPurchaseMembershipUi,
   isMissingColumn,
   periodEndIso,
   planKey,
@@ -12,6 +14,7 @@ import {
   type MembershipPlan,
 } from "../billing.js";
 import { cashfreeRouter, cancelCashfreeSubscription } from "./cashfree.js";
+import { phonepeRouter } from "./phonepe.js";
 import { memberAccess } from "../contact-access.js";
 import { razorpayKeySets, razorpayKeys } from "../integrations.js";
 import { env } from "../env.js";
@@ -159,11 +162,18 @@ type RazorpayPayment = {
 export const paymentsRouter = new Hono();
 
 paymentsRouter.use("*", async (c, next) => {
-  if (c.req.path.endsWith("/razorpay/webhook") || c.req.path.endsWith("/cashfree/webhook")) return next();
+  if (
+    c.req.path.endsWith("/razorpay/webhook") ||
+    c.req.path.endsWith("/cashfree/webhook") ||
+    c.req.path.endsWith("/phonepe/webhook")
+  ) {
+    return next();
+  }
   return requireAuth(c, next);
 });
 
 paymentsRouter.route("/cashfree", cashfreeRouter);
+paymentsRouter.route("/phonepe", phonepeRouter);
 
 paymentsRouter.post("/razorpay/order", async (c) => {
   const cfg = await razorpayConfigAsync();
@@ -626,6 +636,8 @@ paymentsRouter.get("/membership", async (c) => {
     membership_waived: access.waived,
     benefits_active: access.benefits,
     addons_allowed: access.addonsAllowed,
+    can_purchase_membership: canPurchaseMembershipUi(access, data ?? null),
+    membership_required_for_credits: !access.waived && !access.addonsAllowed,
     message_credit_cost: messageCreditCost,
     message_free_per_chat: messageFreePerChat,
     subscription: data
@@ -668,23 +680,8 @@ paymentsRouter.post("/razorpay/subscribe", async (c) => {
     return c.json({ error: "This membership has an invalid price. Edit it in admin." }, 400);
   }
 
-  const sb = getSupabaseAdmin();
-  const { data: current, error: curErr } = await sb
-    .from("member_subscriptions")
-    .select("status,cancel_at_period_end")
-    .eq("profile_id", uid)
-    .in("status", ["active", "authenticated", "pending"])
-    .limit(1)
-    .maybeSingle();
-  if (curErr && !isMissingColumn(curErr.message)) {
-    return c.json({ error: curErr.message }, 500);
-  }
-  if (current && current.cancel_at_period_end !== true) {
-    return c.json(
-      { error: "You already have a membership. Cancel it before starting another." },
-      409
-    );
-  }
+  const purchase = await assertCanPurchaseMembership(uid);
+  if (!purchase.ok) return c.json({ error: purchase.error }, purchase.status);
 
   const rpPlan = await ensureRazorpayPlan(cfg, plan);
   if ("error" in rpPlan) return c.json({ error: rpPlan.error }, 502);
@@ -773,29 +770,88 @@ paymentsRouter.post("/razorpay/verify-subscription", async (c) => {
   return c.json({ ok: true, already_applied: applied.already, wallet: wallet ?? null });
 });
 
+function pickSubscriptionRowForCancel(
+  rows: Array<{
+    razorpay_subscription_id?: string | null;
+    razorpay_plan_id?: string | null;
+    status?: string | null;
+    current_period_end?: string | null;
+  }>
+) {
+  const rank = (row: (typeof rows)[number]) => {
+    const status = String(row.status ?? "");
+    const gatewayId = String(row.razorpay_subscription_id ?? "").trim();
+    let score = 0;
+    if (status === "active") score += 40;
+    else if (status === "authenticated") score += 35;
+    else if (status === "pending") score += 10;
+    else if (status === "created") score += 5;
+    if (gatewayId.startsWith("ppsub_") && gatewayId.length > 12) score += 30;
+    else if (gatewayId.startsWith("cfsub")) score += 28;
+    else if (gatewayId.startsWith("sub_")) score += 20;
+    else if (gatewayId.length > 8) score += 12;
+    return score;
+  };
+  const sorted = [...rows].sort((a, b) => rank(b) - rank(a));
+  return sorted[0] ?? null;
+}
+
 paymentsRouter.post("/razorpay/subscription/cancel", async (c) => {
   const uid = c.get("userId");
   const sb = getSupabaseAdmin();
-  const { data, error } = await sb
+  const { data: rows, error } = await sb
     .from("member_subscriptions")
-    .select("razorpay_subscription_id,status,current_period_end")
+    .select("razorpay_subscription_id,razorpay_plan_id,status,current_period_end")
     .eq("profile_id", uid)
     .in("status", ["active", "authenticated", "pending", "created"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("updated_at", { ascending: false })
+    .limit(10);
   if (error) {
     if (isMissingColumn(error.message)) {
       return c.json({ error: "Membership billing is not set up yet." }, 503);
     }
     return c.json({ error: error.message }, 500);
   }
+  const data = pickSubscriptionRowForCancel(rows ?? []);
   if (!data?.razorpay_subscription_id) {
     return c.json({ error: "No active membership to cancel" }, 404);
   }
   if (String(data.razorpay_subscription_id).startsWith("cfsub")) {
     const cancelled = await cancelCashfreeSubscription(data.razorpay_subscription_id);
     if (!cancelled.ok) return c.json({ error: cancelled.error }, cancelled.status);
+    await sb
+      .from("member_subscriptions")
+      .update({ cancel_at_period_end: true, updated_at: new Date().toISOString() })
+      .eq("razorpay_subscription_id", data.razorpay_subscription_id);
+    return c.json({ ok: true, current_period_end: data.current_period_end });
+  }
+  if (String(data.razorpay_subscription_id).startsWith("ppsub_")) {
+    const { cancelPhonePeSubscriptionResolved } = await import("../phonepe.js");
+    const cancelled = await cancelPhonePeSubscriptionResolved(data.razorpay_subscription_id, {
+      gatewaySubscriptionId: data.razorpay_plan_id,
+    });
+    if (!cancelled.ok) {
+      if (cancelled.localPeriodEndOnly === true) {
+        await sb
+          .from("member_subscriptions")
+          .update({ cancel_at_period_end: true, updated_at: new Date().toISOString() })
+          .eq("razorpay_subscription_id", data.razorpay_subscription_id);
+        return c.json({
+          ok: true,
+          current_period_end: data.current_period_end,
+          notice: cancelled.error,
+        });
+      }
+      return c.json({ error: cancelled.error }, cancelled.status);
+    }
+    await sb
+      .from("member_subscriptions")
+      .update({ cancel_at_period_end: true, updated_at: new Date().toISOString() })
+      .eq("razorpay_subscription_id", data.razorpay_subscription_id);
+    return c.json({ ok: true, current_period_end: data.current_period_end });
+  }
+  // Legacy prepaid PhonePe rows (before Autopay).
+  if (String(data.razorpay_subscription_id).startsWith("ppmem_")) {
     await sb
       .from("member_subscriptions")
       .update({ cancel_at_period_end: true, updated_at: new Date().toISOString() })

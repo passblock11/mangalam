@@ -17,6 +17,20 @@ export type RazorpayKeys = {
   pricePaisePerCredit: number;
 };
 
+export type PhonePeKeys = {
+  merchantId: string;
+  clientId: string;
+  clientVersion: string;
+  clientSecret: string;
+  /** SHA auth username, or HMAC webhook / checksum key id. */
+  webhookUsername: string;
+  /** SHA auth password. */
+  webhookPassword: string;
+  /** HMAC auth secret from PhonePe webhook create. */
+  webhookSecret: string;
+  environment: ServiceMode;
+};
+
 const SETTINGS_SELECT = [
   "integrations_live",
   "cashfree_sandbox_client_id",
@@ -35,6 +49,20 @@ const SETTINGS_SELECT = [
   "razorpay_key_id",
   "razorpay_key_secret",
   "razorpay_webhook_secret",
+  "phonepe_sandbox_merchant_id",
+  "phonepe_sandbox_client_id",
+  "phonepe_sandbox_client_version",
+  "phonepe_sandbox_client_secret",
+  "phonepe_sandbox_webhook_username",
+  "phonepe_sandbox_webhook_password",
+  "phonepe_sandbox_webhook_secret",
+  "phonepe_live_merchant_id",
+  "phonepe_live_client_id",
+  "phonepe_live_client_version",
+  "phonepe_live_client_secret",
+  "phonepe_live_webhook_username",
+  "phonepe_live_webhook_password",
+  "phonepe_live_webhook_secret",
 ].join(",");
 
 type SettingsRow = Record<string, unknown>;
@@ -254,6 +282,88 @@ export async function razorpayKeySets(): Promise<RazorpayKeys[] | { error: strin
     const keys = razorpayFromRow(loaded.row, mode);
     if (!keys || sets.some((item) => item.keyId === keys.keyId)) continue;
     sets.push({ ...keys, webhookSecret: webhookFor(keys.webhookSecret, mode), pricePaisePerCredit: price });
+  }
+  return sets;
+}
+
+function phonepeFromRow(row: SettingsRow, mode: ServiceMode): PhonePeKeys | null {
+  const prefix = mode === "production" ? "phonepe_live_" : "phonepe_sandbox_";
+  const merchantId = text(row[`${prefix}merchant_id`]);
+  const clientId = text(row[`${prefix}client_id`]);
+  const clientVersion = text(row[`${prefix}client_version`]) || "1";
+  const clientSecret = text(row[`${prefix}client_secret`]);
+  if (!merchantId || !clientId || !clientSecret) return null;
+  return {
+    merchantId,
+    clientId,
+    clientVersion,
+    clientSecret,
+    webhookUsername: text(row[`${prefix}webhook_username`]),
+    webhookPassword: text(row[`${prefix}webhook_password`]),
+    webhookSecret: text(row[`${prefix}webhook_secret`]),
+    environment: mode,
+  };
+}
+
+function envPhonePe(): PhonePeKeys | null {
+  const merchantId = env("PHONEPE_MERCHANT_ID")?.trim() ?? "";
+  const clientId = env("PHONEPE_CLIENT_ID")?.trim() ?? "";
+  const clientSecret = env("PHONEPE_CLIENT_SECRET")?.trim() ?? "";
+  if (!merchantId || !clientId || !clientSecret) return null;
+  const environment: ServiceMode =
+    env("PHONEPE_ENV")?.trim().toLowerCase() === "production" ? "production" : "sandbox";
+  return {
+    merchantId,
+    clientId,
+    clientVersion: env("PHONEPE_CLIENT_VERSION")?.trim() || "1",
+    clientSecret,
+    webhookUsername: env("PHONEPE_WEBHOOK_USERNAME")?.trim() ?? "",
+    webhookPassword: env("PHONEPE_WEBHOOK_PASSWORD")?.trim() ?? "",
+    webhookSecret: env("PHONEPE_WEBHOOK_SECRET")?.trim() ?? "",
+    environment,
+  };
+}
+
+export async function phonepeKeys(): Promise<PhonePeKeys | { error: string }> {
+  const loaded = await loadSettings();
+  if (!loaded.ready) {
+    const fromEnv = envPhonePe();
+    if (fromEnv) return fromEnv;
+    return { error: "PhonePe is not configured. Add the merchant id and API keys in admin settings." };
+  }
+  const mode: ServiceMode = loaded.live ? "production" : "sandbox";
+  const fromEnv = envPhonePe();
+  const picked = phonepeFromRow(loaded.row, mode) ?? (fromEnv?.environment === mode ? fromEnv : null);
+  if (picked) return picked;
+  return {
+    error: loaded.live
+      ? "Add the live PhonePe merchant id and API keys in admin settings."
+      : "Add the test PhonePe merchant id and API keys in admin settings.",
+  };
+}
+
+/** Active mode first, then the other saved pair (webhooks can arrive after a mode switch). */
+export async function phonepeKeySets(): Promise<PhonePeKeys[]> {
+  const loaded = await loadSettings();
+  if (!loaded.ready) {
+    const fromEnv = envPhonePe();
+    return fromEnv ? [fromEnv] : [];
+  }
+  const sets: PhonePeKeys[] = [];
+  const order: ServiceMode[] = loaded.live ? ["production", "sandbox"] : ["sandbox", "production"];
+  for (const mode of order) {
+    const keys = phonepeFromRow(loaded.row, mode);
+    if (!keys || sets.some((item) => item.clientId === keys.clientId && item.environment === keys.environment)) {
+      continue;
+    }
+    sets.push(keys);
+  }
+  const fromEnv = envPhonePe();
+  if (
+    fromEnv &&
+    !sets.some((item) => item.clientId === fromEnv.clientId && item.environment === fromEnv.environment)
+  ) {
+    sets.push(fromEnv);
   }
   return sets;
 }

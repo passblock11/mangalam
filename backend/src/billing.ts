@@ -1,3 +1,4 @@
+import { memberAccess } from "./contact-access.js";
 import { getSupabaseAdmin } from "./supabase.js";
 
 export type MembershipPlan = {
@@ -151,4 +152,48 @@ export function periodEndIso(currentEnd: unknown, fallbackDays: number): string 
     return new Date(n * 1000).toISOString();
   }
   return new Date(Date.now() + fallbackDays * 24 * 3600 * 1000).toISOString();
+}
+
+/** False when premium is still renewing (not cancelled at period end). */
+export function canPurchaseMembershipUi(
+  access: { active: boolean; waived: boolean },
+  sub: { cancel_at_period_end?: boolean | null } | null | undefined
+): boolean {
+  if (access.waived) return false;
+  if (!access.active) return true;
+  return sub?.cancel_at_period_end === true;
+}
+
+export async function assertCanPurchaseMembership(profileId: string): Promise<
+  | { ok: true }
+  | { ok: false; error: string; status: 409 | 500 }
+> {
+  const access = await memberAccess(profileId);
+  // Expired premium: stale subscription rows must not block a new purchase.
+  if (!access.active) return { ok: true };
+
+  const sb = getSupabaseAdmin();
+  const { data: rows, error } = await sb
+    .from("member_subscriptions")
+    .select("status,cancel_at_period_end")
+    .eq("profile_id", profileId)
+    .in("status", ["active", "authenticated", "pending"])
+    .order("updated_at", { ascending: false })
+    .limit(5);
+  if (error && !isMissingColumn(error.message)) {
+    return { ok: false, error: error.message, status: 500 };
+  }
+  const renewing = (rows ?? []).find(
+    (r) =>
+      r.cancel_at_period_end !== true &&
+      (r.status === "active" || r.status === "authenticated")
+  );
+  if (renewing) {
+    return {
+      ok: false,
+      error: "You already have a membership. Cancel it before starting another.",
+      status: 409,
+    };
+  }
+  return { ok: true };
 }

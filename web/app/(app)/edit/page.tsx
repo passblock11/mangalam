@@ -1,11 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { setLocale, t, tValue, useLocale } from "@/lib/i18n";
-import { communities } from "@/lib/communities";
-import { diets, educationLevels, genders, languages, mangalDoshOptions, maritalStatuses, motherTongues, occupations, profileForOptions, religions, salaryRanges, states } from "@/lib/options";
+import {
+  ageOptions,
+  diets,
+  educationLevels,
+  genders,
+  heightLabel,
+  heightOptionsCm,
+  isAtLeastAge,
+  languages,
+  mangalDoshOptions,
+  maritalStatuses,
+  maxDateOfBirth,
+  minDateOfBirth,
+  MIN_PROFILE_AGE,
+  motherTongues,
+  occupations,
+  profileForOptions,
+  religions,
+  salaryRanges,
+  states,
+} from "@/lib/options";
+import { CommunityField } from "@/components/community-field";
 import { PhotoPicker } from "@/components/photo-picker";
 import type { Profile } from "@/lib/profile";
 
@@ -61,14 +81,8 @@ export default function EditProfilePage() {
   const router = useRouter();
   const [form, setForm] = useState<Form>(empty);
   const [photos, setPhotos] = useState<string[]>([]);
-  const [communityQuery, setCommunityQuery] = useState("");
-  const [communityOpen, setCommunityOpen] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const suggestions = useMemo(
-    () => communities.filter((name) => name.toLowerCase().includes(communityQuery.toLowerCase())).slice(0, 8),
-    [communityQuery],
-  );
 
   useEffect(() => {
     api<{ profile: Profile | null }>("/v1/me").then(({ profile }) => {
@@ -76,7 +90,6 @@ export default function EditProfilePage() {
       const partner = profile.partner_preferences ?? {};
       const phone = (profile.phone ?? "").replace(/^\+91/, "");
       setPhotos(profile.photo_urls ?? []);
-      setCommunityQuery(profile.community ?? "");
       setForm({
         ...empty,
         display_name: profile.display_name ?? "",
@@ -129,12 +142,16 @@ export default function EditProfilePage() {
         event.preventDefault();
         const phone = form.phone.replace(/\D/g, "");
         if (phone.length !== 10) {
-          setError("Enter a 10-digit mobile number.");
+          setError(t("Enter a 10-digit mobile number."));
+          return;
+        }
+        if (!isAtLeastAge(form.date_of_birth)) {
+          setError(t(`You must be at least ${MIN_PROFILE_AGE} years old.`));
           return;
         }
         const height = Number(form.height_cm);
         if (!Number.isInteger(height) || height < 100 || height > 250) {
-          setError("Height must be between 100 and 250 cm.");
+          setError(t("Height must be between 100 and 250 cm."));
           return;
         }
         setBusy(true);
@@ -195,34 +212,46 @@ export default function EditProfilePage() {
         }
       }}
     >
-      <p className="text-sm text-muted">The same details as the phone app. The language setting updates the app. This website stays in English.</p>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <p className="text-sm text-muted">{t("The same details as the phone app. The language setting updates the app. This website stays in English.")}</p>
+      <div className="mt-6 grid gap-3.5 sm:grid-cols-2">
         <Field label="Name"><input className={input} value={form.display_name} onChange={(e) => set("display_name", e.target.value)} required /></Field>
         <Field label="Profile for"><Select value={form.profile_for} options={profileForOptions} onChange={(value) => set("profile_for", value)} /></Field>
         <Field label="Gender"><Select value={form.gender} options={genders.map((item) => item.value)} onChange={(value) => set("gender", value)} /></Field>
-        <Field label="Date of birth"><input className={input} type="date" value={form.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)} required /></Field>
-        <Field label="Mobile number"><input className={input} inputMode="numeric" maxLength={10} value={form.phone} onChange={(e) => set("phone", e.target.value)} /></Field>
+        <Field label="Date of birth">
+          <input
+            className={input}
+            type="date"
+            value={form.date_of_birth}
+            min={minDateOfBirth()}
+            max={maxDateOfBirth()}
+            onChange={(e) => set("date_of_birth", e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Mobile number"><input className={input} inputMode="numeric" maxLength={10} value={form.phone} onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} /></Field>
         <Field label="WhatsApp"><input className={input} value={form.whatsapp_number} onChange={(e) => set("whatsapp_number", e.target.value)} /></Field>
         <Field label="City"><input className={input} value={form.city} onChange={(e) => set("city", e.target.value)} /></Field>
         <Field label="State"><Select value={form.state} options={states} onChange={(value) => set("state", value)} allowEmpty /></Field>
         <Field label="Religion"><Select value={form.religion} options={religions} onChange={(value) => set("religion", value)} /></Field>
-        <Field label="Community">
-          <input className={input} value={communityQuery} onFocus={() => setCommunityOpen(true)} onBlur={() => window.setTimeout(() => setCommunityOpen(false), 150)} onChange={(e) => { setCommunityQuery(e.target.value); set("community", e.target.value); setCommunityOpen(true); }} />
-          {communityOpen && suggestions.length ? (
-            <div className="mt-1 max-h-36 overflow-auto rounded-xl border border-line bg-white">
-              {suggestions.map((name) => (
-                <button type="button" key={name} className="block w-full px-3 py-2 text-left text-sm hover:bg-[#f7f8fa]" onClick={() => { set("community", name); setCommunityQuery(name); }}>{name}</button>
-              ))}
-            </div>
-          ) : null}
-        </Field>
+        <div className="sm:col-span-2">
+          <CommunityField value={form.community} onChange={(value) => set("community", value)} />
+        </div>
         <Field label="Mother tongue"><Select value={form.mother_tongue} options={motherTongues} onChange={(value) => set("mother_tongue", value)} /></Field>
         <Field label="Diet"><Select value={form.diet} options={diets} onChange={(value) => set("diet", value)} /></Field>
         <Field label="Marital status"><Select value={form.marital_status} options={maritalStatuses} onChange={(value) => set("marital_status", value)} /></Field>
         <Field label="Education"><Select value={form.education_level} options={educationLevels} onChange={(value) => set("education_level", value)} allowEmpty /></Field>
         <Field label="Occupation"><Select value={form.occupation} options={occupations} onChange={(value) => set("occupation", value)} allowEmpty /></Field>
         <Field label="Monthly salary"><Select value={form.monthly_salary} options={salaryRanges} onChange={(value) => set("monthly_salary", value)} allowEmpty /></Field>
-        <Field label="Height (cm)"><input className={input} value={form.height_cm} onChange={(e) => set("height_cm", e.target.value)} /></Field>
+        <Field label="Height">
+          <select className={input} value={form.height_cm} onChange={(e) => set("height_cm", e.target.value)}>
+            {!heightOptionsCm.includes(form.height_cm) && form.height_cm ? (
+              <option value={form.height_cm}>{heightLabel(form.height_cm)}</option>
+            ) : null}
+            {heightOptionsCm.map((cm) => (
+              <option key={cm} value={cm}>{heightLabel(cm)}</option>
+            ))}
+          </select>
+        </Field>
         <Field label="Mangal dosh"><Select value={form.mangal_dosh} options={mangalDoshOptions} onChange={(value) => set("mangal_dosh", value)} allowEmpty /></Field>
         <Field label="Birth time"><input className={input} value={form.birth_time} onChange={(e) => set("birth_time", e.target.value)} placeholder="HH:MM" /></Field>
         <Field label="Birth place"><input className={input} value={form.birth_place} onChange={(e) => set("birth_place", e.target.value)} /></Field>
@@ -240,9 +269,9 @@ export default function EditProfilePage() {
         <PhotoPicker urls={photos} onChange={setPhotos} />
       </div>
       <h2 className="mt-8 text-xl font-semibold">Partner preference</h2>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <Field label="Age from"><input className={input} value={form.age_min} onChange={(e) => set("age_min", e.target.value)} placeholder="All Ok" /></Field>
-        <Field label="Age to"><input className={input} value={form.age_max} onChange={(e) => set("age_max", e.target.value)} placeholder="All Ok" /></Field>
+      <div className="mt-3 grid gap-3.5 sm:grid-cols-2">
+        <Field label="Age from"><Select value={form.age_min} options={ageOptions} allowEmpty emptyLabel="All Ok" onChange={(value) => set("age_min", value)} /></Field>
+        <Field label="Age to"><Select value={form.age_max} options={ageOptions} allowEmpty emptyLabel="All Ok" onChange={(value) => set("age_max", value)} /></Field>
         <Field label="Location"><input className={input} value={form.partner_location} onChange={(e) => set("partner_location", e.target.value)} placeholder="All Ok" /></Field>
         <Field label="Height"><input className={input} value={form.partner_height} onChange={(e) => set("partner_height", e.target.value)} placeholder="All Ok" /></Field>
         <Field label="Diet"><Select value={form.partner_diet} options={diets} allowEmpty onChange={(value) => set("partner_diet", value)} /></Field>
@@ -259,16 +288,28 @@ export default function EditProfilePage() {
   );
 }
 
-const input = "mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm";
+const input = "mt-1 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-maroon";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block text-sm">{t(label)}{children}</label>;
+  return <label className="block text-sm font-medium">{t(label)}{children}</label>;
 }
 
-function Select({ value, options, onChange, allowEmpty = false }: { value: string; options: string[]; onChange: (value: string) => void; allowEmpty?: boolean }) {
+function Select({
+  value,
+  options,
+  onChange,
+  allowEmpty = false,
+  emptyLabel = "All Ok",
+}: {
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+  allowEmpty?: boolean;
+  emptyLabel?: string;
+}) {
   return (
     <select className={input} value={value} onChange={(event) => onChange(event.target.value)}>
-      {allowEmpty ? <option value="">{t("All Ok")}</option> : null}
+      {allowEmpty ? <option value="">{t(emptyLabel)}</option> : null}
       {options.map((option) => <option key={option} value={option}>{tValue(option)}</option>)}
     </select>
   );

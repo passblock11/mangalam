@@ -25,29 +25,31 @@ class CashfreeCheckout {
         final started = await _api.post('/v1/payments/cashfree/subscribe', {
           'plan_code': planCode,
         }) as Map<String, dynamic>;
+        final subscriptionId = started['subscription_id']?.toString() ?? '';
         final done = await _openSubscription(
           environment: _requiredEnvironment(started['environment']),
-          subscriptionId: started['subscription_id']?.toString() ?? '',
+          subscriptionId: subscriptionId,
           sessionId: started['subscription_session_id']?.toString() ?? '',
         );
         if (!done) return false;
         await _verifyWithRetry(
           '/v1/payments/cashfree/verify-subscription',
-          {'subscription_id': started['subscription_id']},
+          {'subscription_id': subscriptionId},
         );
       } else {
         final order = await _api.post('/v1/payments/cashfree/order', {
           'plan_code': planCode,
         }) as Map<String, dynamic>;
+        final orderId = order['order_id']?.toString() ?? '';
         final done = await _openOrder(
           environment: _requiredEnvironment(order['environment']),
-          orderId: order['order_id']?.toString() ?? '',
+          orderId: orderId,
           sessionId: order['payment_session_id']?.toString() ?? '',
         );
         if (!done) return false;
         await _verifyWithRetry(
           '/v1/payments/cashfree/verify',
-          {'order_id': order['order_id']},
+          {'order_id': orderId},
         );
       }
       if (context.mounted) {
@@ -100,19 +102,18 @@ class CashfreeCheckout {
     required String orderId,
     required String sessionId,
   }) {
-    final done = Completer<bool>();
-    _gateway.setCallback((_) {
-      if (!done.isCompleted) done.complete(true);
-    }, (CFErrorResponse error, String _) {
-      if (!done.isCompleted) done.completeError(Exception(error.getMessage() ?? 'Payment was closed.'));
-    });
-    final session = CFSessionBuilder()
-        .setEnvironment(_env(environment))
-        .setOrderId(orderId)
-        .setPaymentSessionId(sessionId)
-        .build();
-    _gateway.doPayment(CFWebCheckoutPaymentBuilder().setSession(session).build());
-    return done.future.timeout(const Duration(minutes: 15));
+    return _awaitCheckout(
+      start: () {
+        final session = CFSessionBuilder()
+            .setEnvironment(_env(environment))
+            .setOrderId(orderId)
+            .setPaymentSessionId(sessionId)
+            .build();
+        _gateway.doPayment(CFWebCheckoutPaymentBuilder().setSession(session).build());
+      },
+      verifyPath: '/v1/payments/cashfree/verify',
+      verifyBody: {'order_id': orderId},
+    );
   }
 
   Future<bool> _openSubscription({
@@ -120,18 +121,84 @@ class CashfreeCheckout {
     required String subscriptionId,
     required String sessionId,
   }) {
+    return _awaitCheckout(
+      start: () {
+        final session = CFSubscriptionSessionBuilder()
+            .setEnvironment(_env(environment))
+            .setSubscriptionId(subscriptionId)
+            .setSubscriptionSessionId(sessionId)
+            .build();
+        _gateway.doPayment(CFSubscriptionPaymentBuilder().setSession(session).build());
+      },
+      verifyPath: '/v1/payments/cashfree/verify-subscription',
+      verifyBody: {'subscription_id': subscriptionId},
+    );
+  }
+
+  /// Wait for the Cashfree SDK callback, and also poll the server after the
+  /// user returns from UPI so a missing native callback cannot leave the
+  /// membership screen spinning forever.
+  Future<bool> _awaitCheckout({
+    required void Function() start,
+    required String verifyPath,
+    required Map<String, dynamic> verifyBody,
+  }) async {
     final done = Completer<bool>();
-    _gateway.setCallback((_) {
+    Timer? poll;
+    _ResumeObserver? resume;
+
+    void finishOk() {
       if (!done.isCompleted) done.complete(true);
+    }
+
+    void finishErr(Object error) {
+      if (!done.isCompleted) done.completeError(error);
+    }
+
+    Future<void> tryVerify() async {
+      if (done.isCompleted) return;
+      try {
+        await _api.post(verifyPath, verifyBody);
+        finishOk();
+      } catch (_) {
+        // Still pending at the gateway — keep waiting for callback / next poll.
+      }
+    }
+
+    _gateway.setCallback((_) {
+      finishOk();
     }, (CFErrorResponse error, String _) {
-      if (!done.isCompleted) done.completeError(Exception(error.getMessage() ?? 'Payment was closed.'));
+      finishErr(Exception(error.getMessage() ?? 'Payment was closed.'));
     });
-    final session = CFSubscriptionSessionBuilder()
-        .setEnvironment(_env(environment))
-        .setSubscriptionId(subscriptionId)
-        .setSubscriptionSessionId(sessionId)
-        .build();
-    _gateway.doPayment(CFSubscriptionPaymentBuilder().setSession(session).build());
-    return done.future.timeout(const Duration(minutes: 15));
+
+    start();
+
+    // After UPI redirect, the SDK callback is unreliable. Poll once the app
+    // is likely back, and again every few seconds while we wait.
+    poll = Timer.periodic(const Duration(seconds: 3), (_) {
+      unawaited(tryVerify());
+    });
+    resume = _ResumeObserver(() {
+      unawaited(tryVerify());
+    });
+    WidgetsBinding.instance.addObserver(resume);
+
+    try {
+      return await done.future.timeout(const Duration(minutes: 15));
+    } finally {
+      poll.cancel();
+      WidgetsBinding.instance.removeObserver(resume);
+    }
+  }
+}
+
+class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this.onResume);
+
+  final VoidCallback onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) onResume();
   }
 }

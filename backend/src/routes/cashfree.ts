@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import {
   accessDays,
+  assertCanPurchaseMembership,
   billingCycle,
   isMissingColumn,
   saveSubscription,
@@ -50,6 +51,18 @@ export const cashfreeRouter = new Hono();
 
 cashfreeRouter.get("/gateway", async (c) => {
   const provider = await activePaymentProvider();
+  if (provider === "phonepe") {
+    const { phonepeConfig, phonepeCheckoutScript } = await import("../phonepe.js");
+    const cfg = await phonepeConfig();
+    if ("error" in cfg) return c.json({ provider: "phonepe", ready: false, environment: "sandbox" });
+    return c.json({
+      provider: "phonepe",
+      ready: true,
+      environment: cfg.environment,
+      merchant_id: cfg.merchantId,
+      checkout_script: phonepeCheckoutScript(cfg.environment),
+    });
+  }
   if (provider !== "cashfree") return c.json({ provider: "razorpay" });
   const cfg = await cashfreeConfig();
   if ("error" in cfg) return c.json({ provider: "cashfree", ready: false, environment: "sandbox" });
@@ -179,11 +192,9 @@ cashfreeRouter.post("/subscribe", async (c) => {
     .order("updated_at", { ascending: false })
     .limit(5);
   if (current.error && !isMissingColumn(current.error.message)) return c.json({ error: current.error.message }, 500);
+  const purchase = await assertCanPurchaseMembership(uid);
+  if (!purchase.ok) return c.json({ error: purchase.error }, purchase.status);
   const open = (current.data ?? []).filter((row) => row.cancel_at_period_end !== true);
-  const blocking = open.find((row) => row.status === "active" || row.status === "authenticated");
-  if (blocking) {
-    return c.json({ error: "You already have a membership. Cancel it before starting another." }, 409);
-  }
   // Abandoned checkouts leave status=pending and used to block every retry with 409.
   for (const row of open.filter((item) => item.status === "pending")) {
     const priorId = String(row.razorpay_subscription_id ?? "");

@@ -24,6 +24,8 @@ writeFileSync(
 );
 
 assert.equal(payloadExempt("/v1/payments/razorpay/webhook"), true);
+assert.equal(payloadExempt("/v1/payments/cashfree/webhook"), true);
+assert.equal(payloadExempt("/v1/payments/phonepe/webhook"), true);
 assert.equal(payloadExempt("/api/v1/config/legal/privacy/html"), true);
 assert.equal(payloadExempt("/v1/me"), false);
 

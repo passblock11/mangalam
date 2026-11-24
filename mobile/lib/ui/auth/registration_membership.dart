@@ -23,6 +23,10 @@ Future<bool> offerRegistrationMembership({
   if (!context.mounted) return false;
   final paid = await checkout.buyMembership(context);
   if (!context.mounted) return false;
+  if (!paid) {
+    await waitForMembershipAfterPayment(api);
+  }
+  if (!context.mounted) return false;
   if (paid || await membershipIsActive(api)) {
     await _clearPending(api);
     return true;
@@ -60,6 +64,18 @@ Future<bool?> femaleMembershipWaiverEnabled(ApiClient api) async {
     return settings['female_membership_free'] == true;
   } catch (_) {
     return null;
+  }
+}
+
+/// After PhonePe returns, the wallet can update a few seconds later (webhook / verify).
+Future<void> waitForMembershipAfterPayment(ApiClient api) async {
+  if (await membershipIsActive(api)) return;
+  for (var attempt = 0; attempt < 10; attempt++) {
+    try {
+      await api.post('/v1/payments/phonepe/confirm-pending', {});
+    } catch (_) {}
+    if (await membershipIsActive(api)) return;
+    await Future<void>.delayed(Duration(milliseconds: 900 + attempt * 600));
   }
 }
 

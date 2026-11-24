@@ -9,6 +9,7 @@ import '../l10n/app_locale.dart';
 import 'app_branding.dart';
 import 'api_client.dart';
 import 'cashfree_checkout.dart';
+import 'phonepe_checkout.dart';
 import '../ui/core/mangalam_theme.dart';
 
 /// Server-driven Razorpay flow using admin-managed plans:
@@ -71,6 +72,14 @@ class RazorpayCheckout {
     if (gateway['provider'] == 'cashfree') {
       if (!context.mounted) return false;
       return CashfreeCheckout(_api).buyPlan(
+        context,
+        planCode,
+        subscription: selected['plan_type']?.toString() == 'subscription',
+      );
+    }
+    if (gateway['provider'] == 'phonepe') {
+      if (!context.mounted) return false;
+      return PhonePeCheckout(_api).buyPlan(
         context,
         planCode,
         subscription: selected['plan_type']?.toString() == 'subscription',

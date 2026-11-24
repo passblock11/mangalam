@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SearchLink } from "@/components/search-link";
-import { supportEmail } from "@/lib/config";
+import { merchantContactEmail, merchantLegalName, supportEmail } from "@/lib/config";
 import { motherTongues, religions } from "@/lib/options";
 
 const featured = ["Agarwal", "Brahmin", "Maratha", "Reddy", "Nadar", "Yadav", "Rajput", "Kamma", "Kapu", "Vanniyar"];
@@ -64,7 +64,19 @@ export function SiteFooter() {
             <p className="mt-3 text-sm leading-6 text-muted">
               A matrimonial platform for adults looking for a verified life partner. The same account works on the phone and on this website.
             </p>
-            <a href={`mailto:${supportEmail}`} className="mt-4 block text-sm text-maroon">{supportEmail}</a>
+            <div className="mt-5 rounded-xl border border-[#e7e2dc] bg-[#f7f8fa] px-4 py-3 text-left">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Merchant contact</p>
+              <p className="mt-1.5 text-sm font-semibold text-[#2c313a]">{merchantLegalName}</p>
+              <a
+                href={`mailto:${merchantContactEmail}`}
+                className="mt-1 block text-sm font-medium text-maroon hover:underline"
+              >
+                {merchantContactEmail}
+              </a>
+            </div>
+            <a href={`mailto:${supportEmail}`} className="mt-3 block text-sm text-muted">
+              Customer support: <span className="text-maroon">{supportEmail}</span>
+            </a>
           </div>
           {columns.map(([title, links]) => (
             <div key={title}>
@@ -104,6 +116,27 @@ export function SiteFooter() {
           </div>
         </div>
       </div>
+      <section
+        data-merchant-contact
+        aria-label="Merchant contact"
+        className="border-t border-[#eceff3] bg-[#f7f8fa] px-5 py-5"
+      >
+        <div className="mx-auto max-w-6xl text-center md:text-left">
+          <p className="text-sm font-semibold text-[#2c313a]">Business &amp; payment queries</p>
+          <p className="mt-2 text-sm text-[#2c313a]">
+            <span>{merchantLegalName}</span>
+            <span className="mx-2 text-muted" aria-hidden>
+              ·
+            </span>
+            <a
+              href={`mailto:${merchantContactEmail}`}
+              className="font-medium text-maroon hover:underline"
+            >
+              {merchantContactEmail}
+            </a>
+          </p>
+        </div>
+      </section>
       <div className="border-t border-[#eceff3] px-5 py-4 text-center text-xs text-muted">
         © {new Date().getFullYear()} Mangalam. Photographs on this website are illustrations, not photos of members.
       </div>

@@ -121,7 +121,7 @@ export function MemberShell({ children }: { children: React.ReactNode }) {
   return (
     <div key={language} className="member-app min-h-screen text-ink">
       <header className="sticky top-0 z-30 border-b border-[#e8ddcf] bg-[#fff8f3]/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center gap-1 px-2">
+        <div className="mx-auto flex h-14 max-w-2xl items-center gap-1 px-2 sm:max-w-3xl">
           {onTab ? null : (
             <button type="button" className="grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 text-ink shadow-none outline-none hover:bg-black/5" aria-label={t("Back")} onClick={() => goBack(path, router)}>
               <Icon name="arrow-left" className="h-6 w-6" />
@@ -149,7 +149,7 @@ export function MemberShell({ children }: { children: React.ReactNode }) {
       </header>
       <PresencePing />
       <CropHost />
-      <main className={`mx-auto max-w-3xl px-4 py-4 ${onTab ? "pb-32" : "pb-8"}`}>{children}</main>
+      <main className={`mx-auto max-w-2xl px-3 py-4 sm:max-w-3xl sm:px-4 ${onTab ? "pb-32" : "pb-8"}`}>{children}</main>
       {onTab ? (
       <nav className="fixed bottom-3 left-1/2 z-40 w-[min(520px,calc(100%-24px))] -translate-x-1/2 rounded-[28px] border border-white/80 bg-white/75 shadow-[0_8px_24px_rgba(183,28,28,0.12)] backdrop-blur-xl">
         <div className="grid grid-cols-4 px-1 py-2">
